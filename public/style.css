@@ -228,6 +228,9 @@ body {
 /* extra padding so content doesn't collide with lock */
 .message.assistant.edit-locked { padding-right: 26px; }
 
+/* Do not show lock while the red overlay is visible */
+.message.assistant.overlay-active.edit-locked::after { display: none; }
+
 /* Row wrapper to align assistant and feedback side-by-side */
 .message-row {
     display: grid;

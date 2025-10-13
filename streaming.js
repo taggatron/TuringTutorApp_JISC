@@ -549,7 +549,20 @@ wss.on('connection', (ws, req) => {
                     processor.addUserMessage(userMessage);
                     await processor.processUserMessage(userMessage);
                 } else {
-                    ws.send(JSON.stringify({ type: 'history', data: conversationHistory }));
+                    // Send a richer history payload including feedback and scale levels
+                    const [feedbackData, scaleRows] = await Promise.all([
+                        new Promise((res) => getFeedback(session_id, (e, rows) => res(e ? [] : rows))),
+                        new Promise((res) => getScaleLevels(session_id, (e, rows) => res(e ? [] : rows)))
+                    ]);
+                    const scaleLevels = [...new Set(scaleRows.map(r => r.scale_level))];
+                    ws.send(JSON.stringify({
+                        type: 'history',
+                        data: {
+                            messages: conversationHistory.map(m => ({ ...m, scale_level: m.scale_level || 1, collapsed: m.collapsed || 0 })),
+                            feedbackData,
+                            scale_levels: scaleLevels
+                        }
+                    }));
                 }
             } else {
                 // Handle cases when there's no session_id provided (new session)

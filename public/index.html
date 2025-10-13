@@ -325,7 +325,15 @@
         
                 // Handle chat history messages
                 if (message.type === 'history') {
-                    loadChatHistory(message.data);
+                    // Support both legacy array and new rich object { messages, feedbackData, scale_levels }
+                    if (Array.isArray(message.data)) {
+                        window.__lastFeedbackData = [];
+                        loadChatHistory(message.data);
+                    } else if (message.data && typeof message.data === 'object') {
+                        window.__lastFeedbackData = message.data.feedbackData || [];
+                        loadChatHistory(message.data.messages || []);
+                        if (message.data.scale_levels) updateScale(message.data.scale_levels);
+                    }
         
                 // Handle assistant messages
                 } else if (message.type === 'assistant') {
@@ -368,8 +376,10 @@
                                 overlay.addEventListener('click', function(e) {
                                     // Dismiss overlay on any click inside it and prevent bubbling to edit-mode handler
                                     e.stopPropagation();
+                                    overlay.parentElement?.classList.remove('overlay-active');
                                     overlay.remove();
                                 });
+                                lastAssistant.classList.add('overlay-active');
                                 // Lock this assistant message from entering edit mode permanently
                                 lastAssistant.classList.add('edit-locked');
                                 lastAssistant.appendChild(overlay);
@@ -623,6 +633,7 @@ async function isLastAssistantMessageDB(messageId, sessionId) {
                     // Hide overlay on any click and prevent bubbling to outer handlers
                     e.stopPropagation();
                     overlay.style.display = 'none';
+                    targetAssistant.classList.remove('overlay-active');
                     const contentDiv = targetAssistant.querySelector('.message-content');
                     if (contentDiv) {
                         contentDiv.style.opacity = '1';
@@ -631,6 +642,7 @@ async function isLastAssistantMessageDB(messageId, sessionId) {
                 });
                 // Permanently lock this assistant message from edit mode
                 targetAssistant.classList.add('edit-locked');
+                targetAssistant.classList.add('overlay-active');
             }
             // Persist feedback server-side; include message_id if known
             saveFeedbackToServer(feedback, targetAssistant.dataset.messageId || messageId || null);
@@ -677,11 +689,13 @@ async function loadChatHistory(messages) {
             row.className = 'message-row';
             const messageElement = document.createElement('div');
             messageElement.classList.add('message', 'assistant');
-            if (feedbackByMessageId.has(String(msg.message_id))) {
-                messageElement.classList.add('edit-locked');
-            }
+            // Persist lock based on DB state or feedback history
+            const shouldLock = (Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || feedbackByMessageId.has(String(msg.message_id));
+            if (shouldLock) messageElement.classList.add('edit-locked');
             messageElement.dataset.messageId = msg.message_id;
-            messageElement.innerHTML = `<div class="message-content">${(msg.content||'').replace(/\n/g,'<br>')}</div><div class="message-assistant-overlay" style="display:${feedbackByMessageId.has(String(msg.message_id)) ? 'flex':'none'}"></div>`;
+            const showOverlay = feedbackByMessageId.has(String(msg.message_id));
+            if (showOverlay) messageElement.classList.add('overlay-active');
+            messageElement.innerHTML = `<div class=\"message-content\">${(msg.content||'').replace(/\n/g,'<br>')}</div><div class=\"message-assistant-overlay\" style=\"display:${showOverlay ? 'flex':'none'}\"></div>`;
             row.appendChild(messageElement);
             const fb = feedbackByMessageId.get(String(msg.message_id));
             if (fb) {
@@ -820,13 +834,15 @@ async function loadChatHistory(messages) {
                     } else if (msg.role === 'assistant') {
                         const assistantMessageDiv = document.createElement('div');
                         assistantMessageDiv.className = 'message assistant with-feedback';
-                        if (messagesWithFeedback.has(String(msg.message_id))) {
-                            assistantMessageDiv.classList.add('edit-locked');
-                        }
+                        // Persist lock based on DB state or feedback presence
+                        const shouldLock = (Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id));
+                        if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
                         assistantMessageDiv.dataset.messageId = msg.message_id;
+                        const showOverlay = messagesWithFeedback.has(String(msg.message_id));
+                        if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
                         assistantMessageDiv.innerHTML = `
-                            <div class=\"message-content\" style=\"${messagesWithFeedback.has(String(msg.message_id)) ? 'opacity:0.3;pointer-events:none;' : ''}\">${msg.content.replace(/\n/g, '<br>')}</div>
-                            <div class=\"message-assistant-overlay\" style=\"${messagesWithFeedback.has(String(msg.message_id)) ? 'display:flex;' : 'display:none;'}\">\n                                <span>Copying or directly using this response breaches academic integrity guidelines</span>\n                                <button class=\"close-overlay-btn\" type=\"button\">×</button>\n                            </div>\n                        `;
+                            <div class=\"message-content\">${msg.content.replace(/\n/g, '<br>')}</div>
+                            <div class=\"message-assistant-overlay\" style=\"${showOverlay ? 'display:flex;' : 'display:none;'}\">\n                                <span>Copying or directly using this response breaches academic integrity guidelines</span>\n                                <button class=\"close-overlay-btn\" type=\"button\">×</button>\n                            </div>\n                        `;
                 // Add close button event listener
                 const overlay = assistantMessageDiv.querySelector('.message-assistant-overlay');
                 const closeBtn = assistantMessageDiv.querySelector('.close-overlay-btn');
@@ -836,6 +852,7 @@ async function loadChatHistory(messages) {
                     closeBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
                         overlay.style.display = 'none';
+                        assistantMessageDiv.classList.remove('overlay-active');
                         contentDiv.style.opacity = '1';
                         contentDiv.style.pointerEvents = 'auto';
                     });
@@ -843,6 +860,7 @@ async function loadChatHistory(messages) {
                     overlay.addEventListener('click', function(e){
                         e.stopPropagation();
                         overlay.style.display = 'none';
+                        assistantMessageDiv.classList.remove('overlay-active');
                         contentDiv.style.opacity = '1';
                         contentDiv.style.pointerEvents = 'auto';
                     });
