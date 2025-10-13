@@ -821,7 +821,7 @@ async function loadChatHistory(messages) {
         }
 
         // Update the loadSessionHistory function to use the new functions
-        async function loadSessionHistory(sessionId) {
+    async function loadSessionHistory(sessionId) {
             // Hide and store feedback for the current session
             hideAndStoreFeedback(session_id);
 
@@ -840,6 +840,8 @@ async function loadChatHistory(messages) {
                 // Clear chat messages
                 chatMessages.innerHTML = '';
                 const isTuring = Number(data.is_turing) === 1;
+                // Store global flag for later interactions (e.g., drag to Reference)
+                window.__isTuringFlag = !!isTuring;
                 // Create a lookup map of message IDs with feedback
                 const messagesWithFeedback = new Set();
                 const feedbackByMessageId = new Map();
@@ -1861,14 +1863,27 @@ if (chatgptRefBtn) {
         chatgptRefBtn.addEventListener('dragenter', (e) => { e.preventDefault(); chatgptRefBtn.classList.add('drop-target'); });
         chatgptRefBtn.addEventListener('dragover', (e) => { e.preventDefault(); chatgptRefBtn.classList.add('drop-target'); });
         chatgptRefBtn.addEventListener('dragleave', () => chatgptRefBtn.classList.remove('drop-target'));
-        chatgptRefBtn.addEventListener('drop', (e) => {
+        chatgptRefBtn.addEventListener('drop', async (e) => {
             e.preventDefault();
+            e.stopPropagation();
             chatgptRefBtn.classList.remove('drop-target');
             const txt = e.dataTransfer.getData('text/plain');
-            if (txt) {
-                window.__lastDroppedPromptText = txt;
-                showChatGPTReferencePopup();
+            if (!txt) return;
+            window.__lastDroppedPromptText = txt;
+            // Special behavior for Turing Mode: ensure editor is open and insert into it; never open popup
+            if (window.__isTuringFlag) {
+                try {
+                    const editable = await ensureAssistantEditor();
+                    if (!editable) throw new Error('No assistant editor found');
+                    await turingInsertReferenceAndPromptImage(editable, txt, window.__lastDraggedPromptElement);
+                    return; // done
+                } catch (err) {
+                    console.error('Turing insert failed:', err);
+                    return; // do not show popup in Turing Mode
+                }
             }
+            // Non-Turing fallback: show popup
+            showChatGPTReferencePopup();
         });
 
         // Mobile: long-press pseudo-drag from a user message
@@ -2070,6 +2085,149 @@ if (chatgptRefBtn) {
 
         btn.addEventListener('click', openExportFan);
     })();
+}
+
+// ===== Turing Mode helpers: reference + prompt image insertion =====
+function waitFor(predicate, intervalMs = 80, tries = 25) {
+    return new Promise((resolve, reject) => {
+        let t = 0;
+        const id = setInterval(() => {
+            const val = typeof predicate === 'function' ? predicate() : null;
+            if (val) { clearInterval(id); resolve(val); }
+            else if (++t >= tries) { clearInterval(id); resolve(null); }
+        }, intervalMs);
+    });
+}
+
+async function ensureAssistantEditor() {
+    let el = document.querySelector('.assistant-edit-mode .assistant-editable-content');
+    if (el) return el;
+    const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+    if (firstAssistant && !firstAssistant.classList.contains('edit-locked')) {
+        firstAssistant.click();
+        el = await waitFor(() => document.querySelector('.assistant-edit-mode .assistant-editable-content'));
+    }
+    return el;
+}
+
+function buildChatGPTReferenceTextFromPrompt(promptText) {
+    const now = new Date();
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const formattedDate = `${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    const safePrompt = (promptText || '').trim().replace(/\s+/g,' ').slice(0,2000);
+    const promptLine = safePrompt ? ` Response generated to the prompt: "${safePrompt}".` : '';
+    return `OpenAI (2025) ChatGPT [AI language model].${promptLine} Available at: https://chat.openai.com/ (Accessed: ${formattedDate}).`;
+}
+
+async function turingInsertReferenceAndPromptImage(editableEl, promptText, promptEl) {
+    if (!editableEl) return;
+    // Ensure html2canvas is loaded
+    if (!window.html2canvas) {
+        await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+            s.defer = true;
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Failed to load html2canvas'));
+            document.head.appendChild(s);
+        });
+    }
+    // 1) Ensure References section exists (or Citations/Bibliography), then append reference line
+    const headingSelectors = ['References','Citations','Bibliography'];
+    let refHeading = Array.from(editableEl.querySelectorAll('strong, b, h1, h2, h3, h4, h5, h6, p'))
+        .find(n => headingSelectors.some(h => (n.textContent || '').trim().toLowerCase().startsWith(h.toLowerCase())));
+    if (!refHeading) {
+        const p = document.createElement('p');
+        const strong = document.createElement('strong');
+        strong.textContent = 'References ';
+        p.appendChild(strong);
+        editableEl.appendChild(p);
+        refHeading = p;
+    }
+    const refText = buildChatGPTReferenceTextFromPrompt(promptText);
+    const refP = document.createElement('p');
+    refP.textContent = refText;
+    // Insert after the heading (or at end if heading is last)
+    if (refHeading.nextSibling) {
+        refHeading.parentNode.insertBefore(refP, refHeading.nextSibling);
+    } else {
+        editableEl.appendChild(refP);
+    }
+
+    // 2) Ensure Prompts section exists, then append image of prompt+assistant pair
+    let promptsHeading = Array.from(editableEl.querySelectorAll('strong, b, h1, h2, h3, h4, h5, h6, p'))
+        .find(n => (n.textContent || '').trim().toLowerCase().startsWith('prompts'));
+    if (!promptsHeading) {
+        const p2 = document.createElement('p');
+        const s2 = document.createElement('strong');
+        s2.textContent = 'Prompts';
+        p2.appendChild(s2);
+        editableEl.appendChild(p2);
+        promptsHeading = p2;
+    }
+
+    // Generate an image (PNG) from the dropped prompt + paired assistant
+    const pair = turingFindPairFromPromptEl(promptEl) || turingFindDefaultPair();
+    if (!pair) return;
+    const container = turingBuildCaptureContainer(pair);
+    container.style.position = 'fixed';
+    container.style.left = '-10000px';
+    container.style.top = '0';
+    document.body.appendChild(container);
+    try {
+        await new Promise(r => setTimeout(r, 50));
+        const canvas = await window.html2canvas(container, { backgroundColor: '#ffffff', scale: window.devicePixelRatio || 2 });
+        const dataUrl = canvas.toDataURL('image/png');
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.alt = 'Prompt and AI excerpt';
+        img.style.maxWidth = '100%';
+        img.style.border = '1px solid #e5e7eb';
+        img.style.borderRadius = '8px';
+        // Insert below the Prompts heading
+        if (promptsHeading.nextSibling) {
+            promptsHeading.parentNode.insertBefore(img, promptsHeading.nextSibling);
+        } else {
+            editableEl.appendChild(img);
+        }
+    } finally {
+        container.remove();
+    }
+    // Trigger autosave
+    editableEl.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function turingFindPairFromPromptEl(promptEl) {
+    if (!promptEl) return null;
+    let ai = promptEl.nextElementSibling;
+    while (ai && !(ai.classList && ai.classList.contains('assistant'))) ai = ai.nextElementSibling;
+    if (!ai) ai = document.querySelector('#chat-messages .message.assistant:last-of-type');
+    return ai ? { promptEl, assistantEl: ai } : null;
+}
+function turingFindDefaultPair() {
+    const ai = document.querySelector('#chat-messages .message.assistant:last-of-type');
+    if (!ai) return null;
+    let user = ai.previousElementSibling;
+    while (user && !(user.classList && user.classList.contains('user'))) user = user.previousElementSibling;
+    return user ? { promptEl: user, assistantEl: ai } : null;
+}
+function turingBuildCaptureContainer(pair) {
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, {
+        maxWidth: '760px', padding: '16px', background: '#ffffff', color: '#111827',
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+        border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 6px 18px rgba(0,0,0,0.08)'
+    });
+    const h = document.createElement('div'); h.textContent = 'Chat excerpt'; h.style.fontWeight = '600'; h.style.marginBottom = '12px'; wrap.appendChild(h);
+    const p = pair.promptEl.cloneNode(true); const a = pair.assistantEl.cloneNode(true);
+    p.style.background = '#007bff'; p.style.color = '#ffffff'; p.style.textAlign = 'right'; p.style.marginLeft = 'auto';
+    a.style.background = '#f1f1f1'; a.style.color = '#000000'; a.style.width = '100%';
+    p.style.borderRadius = '15px'; a.style.borderRadius = '15px';
+    p.style.padding = '10px 12px'; a.style.padding = '10px 12px'; p.style.marginBottom = '8px';
+    p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove());
+    a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove());
+    wrap.appendChild(p); wrap.appendChild(a);
+    return wrap;
 }
 
 // Helpers for reference popup image actions (copy/download)
