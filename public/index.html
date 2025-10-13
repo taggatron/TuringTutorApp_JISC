@@ -604,7 +604,7 @@ async function isLastAssistantMessageDB(messageId, sessionId) {
             messageElement.style.marginBottom = `${marginValue}px`;
         }
 
-        function displayFeedback(feedback, messageId = null) {
+    function displayFeedback(feedback, messageId = null) {
             // Prefer explicit messageId to locate the correct assistant row, otherwise fall back to last assistant
             let targetAssistant = null;
             if (messageId) {
@@ -614,6 +614,10 @@ async function isLastAssistantMessageDB(messageId, sessionId) {
                 targetAssistant = Array.from(chatMessages.querySelectorAll('.message.assistant')).pop();
             }
             if (!targetAssistant) return;
+            // If we received a real messageId from server, update DOM id (replace temporary 'streaming')
+            if (messageId) {
+                targetAssistant.dataset.messageId = String(messageId);
+            }
             let row = targetAssistant.closest('.message-row');
             if (!row) {
                 row = document.createElement('div');
@@ -644,8 +648,8 @@ async function isLastAssistantMessageDB(messageId, sessionId) {
                 targetAssistant.classList.add('edit-locked');
                 targetAssistant.classList.add('overlay-active');
             }
-            // Persist feedback server-side; include message_id if known
-            saveFeedbackToServer(feedback, targetAssistant.dataset.messageId || messageId || null);
+            // Persist feedback server-side; prefer server-provided id over any temporary one
+            saveFeedbackToServer(feedback, messageId || targetAssistant.dataset.messageId || null);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
@@ -667,7 +671,11 @@ function showFeedbackForSavedSession(sessionId, feedbackData) {
         const feedbackContainer = createFeedbackContainer(fb.feedbackContent);
         row.appendChild(feedbackContainer);
         const overlay = assistant.querySelector('.message-assistant-overlay');
-        if (overlay) overlay.style.display = 'flex';
+        if (overlay) {
+            overlay.style.display = 'flex';
+            assistant.classList.add('overlay-active');
+        }
+        assistant.classList.add('edit-locked');
     });
 }
 
@@ -901,7 +909,29 @@ async function loadChatHistory(messages) {
         }
         chatMessages.scrollTop = chatMessages.scrollHeight;
     window.__lastFeedbackData = data.feedbackData || [];
-    showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
+    // Server-provided feedback preferred
+    if (window.__lastFeedbackData.length) {
+        showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
+    } else if (sessionFeedback[sessionId] && sessionFeedback[sessionId].length) {
+        // Fallback: restore locally stored feedback to most recent assistant message(s)
+        const assistantMessages = Array.from(chatMessages.querySelectorAll('.message.assistant'));
+        if (assistantMessages.length) {
+            const lastAssistant = assistantMessages[assistantMessages.length - 1];
+            sessionFeedback[sessionId].forEach((fb, idx) => {
+                const row = lastAssistant.closest('.message-row') || lastAssistant.parentElement;
+                if (!row) return;
+                const cont = createFeedbackContainer(fb.content || '');
+                row.appendChild(cont);
+                // Ensure overlay is visible if locked
+                const overlay = lastAssistant.querySelector('.message-assistant-overlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    lastAssistant.classList.add('overlay-active');
+                }
+                lastAssistant.classList.add('edit-locked');
+            });
+        }
+    }
         updateScale(data.scale_levels);
         // Ensure feedback containers do not underlap the chat input area
         // No special visibility enforcement needed in inline layout

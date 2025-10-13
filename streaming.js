@@ -549,8 +549,9 @@ wss.on('connection', (ws, req) => {
                     processor.addUserMessage(userMessage);
                     await processor.processUserMessage(userMessage);
                 } else {
-                    // Send a richer history payload including feedback and scale levels
-                    const [feedbackData, scaleRows] = await Promise.all([
+                    // Send a richer history payload including DB-backed messages, feedback and scale levels
+                    const [messages, feedbackData, scaleRows] = await Promise.all([
+                        new Promise((res) => getMessages(session_id, (e, rows) => res(e ? [] : rows))),
                         new Promise((res) => getFeedback(session_id, (e, rows) => res(e ? [] : rows))),
                         new Promise((res) => getScaleLevels(session_id, (e, rows) => res(e ? [] : rows)))
                     ]);
@@ -558,7 +559,7 @@ wss.on('connection', (ws, req) => {
                     ws.send(JSON.stringify({
                         type: 'history',
                         data: {
-                            messages: conversationHistory.map(m => ({ ...m, scale_level: m.scale_level || 1, collapsed: m.collapsed || 0 })),
+                            messages: messages.map(m => ({ ...m, scale_level: m.scale_level || 1, collapsed: m.collapsed || 0 })),
                             feedbackData,
                             scale_levels: scaleLevels
                         }
