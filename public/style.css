@@ -1,0 +1,1101 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100vh;
+    background-color: #f4f4f4;
+    margin: 0;
+    overflow: hidden; /* Disable main window scroll bar */
+}
+
+/* Restored container & sidebar definitions (accidentally removed during patch) */
+.container {
+    display: flex;
+    width: 95%;
+    flex: 1 1 auto; /* allow to stretch to available height */
+    min-height: 0; /* allow children to shrink and scroll */
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    overflow: hidden;
+    background-color: #fff;
+    margin-bottom: 8px; /* a little more breathing room above scale bar */
+    position: relative;
+}
+
+.sidebar {
+    width: 20%;
+    background-color: #f7f7f7;
+    border-right: 1px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto; /* Enable vertical scrolling */
+    overflow-x: hidden; /* Prevent horizontal scrolling */
+    box-sizing: border-box;
+}
+
+.meta-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    justify-content: flex-start;
+    border: none;
+    border-top: 1px solid #e5e5e7; /* subtle divider */
+    border-radius: 0 0 16px 16px;
+    padding: 10px 16px 14px 16px; /* align with chat-messages horizontal padding */
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    flex-shrink: 0; /* stay at bottom and expand upward */
+    background: linear-gradient(180deg, rgba(255,255,255,0.85), #ffffff 65%);
+}
+.meta-container:focus-within {
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    background-color: #f7f7f7;
+    border-bottom: 1px solid #e0e0e0;
+    z-index: 10;
+}
+
+.sidebar-header h3 {
+    margin: 0;
+    padding: 5px 0;
+    flex: 1; /* Pushes buttons to the right */
+}
+
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+    position: relative;
+    min-height: 0; /* critical for nested scroll areas */
+}
+
+/* Visual chrome now provided by a background image on a surface wrapper */
+.chat-surface {
+    position: relative;
+    flex: 1;
+    display: flex;              /* make child .chat-messages a flex child */
+    flex-direction: column;
+    min-height: 0;              /* allow child to scroll */
+    /* Remove heavy borders/shadows from chat-messages; provide via background instead */
+}
+
+.chat-surface::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    /* Use a subtle SVG-ish background via gradients to emulate rounded card + overlap */
+    background-image:
+        radial-gradient(120% 30% at 50% 110%, rgba(0,0,0,0.18), transparent 60%),
+        linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,252,0.98));
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    pointer-events: none;
+}
+
+/* Hide scrollbar for chat-container */
+.chat-container::-webkit-scrollbar {
+    display: none;
+}
+
+.chat-container {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;     /* Firefox */
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 16px 16px 8px 16px; /* space at bottom for input shadow */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    position: relative;
+    background: transparent; /* visual chrome via chat-surface */
+    min-height: 0;            /* allow shrinking when input grows */
+    -webkit-overflow-scrolling: touch; /* momentum scrolling on iOS */
+}
+
+/* Hide scrollbar for chat-messages */
+.chat-messages::-webkit-scrollbar {
+    display: none;
+}
+
+.chat-messages {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;     /* Firefox */
+}
+
+.chat-input {
+    display: flex;
+    box-sizing: border-box;
+    border: none; /* Remove border */
+    position: relative;
+    width: 100%;
+}
+
+.chat-input textarea {
+    flex: 1;
+    padding: 14px 56px 14px 14px; /* room for send button */
+    font-size: 16px;
+    font-family: Arial, sans-serif;
+    vertical-align: top; /* Align text to the top */
+    resize: none; /* Prevent manual resizing */
+    overflow-y: hidden; /* let height auto expand; JS will toggle scroll if needed */
+    outline: none; /* Remove default outline */
+    border-radius: 14px; /* Rounded edges */
+    border: 1px solid #e0e0e0; /* subtle border */
+    background: #fff;
+    line-height: 1.35;
+    max-height: 35vh; /* cap so messages remain visible */
+    box-sizing: border-box;
+    transition: height 140ms ease-in-out, box-shadow 140ms ease-in-out; /* smooth growth */
+}
+
+/* Shadow hint wrapper when input at max height */
+.meta-container.input-overflow::before {
+    content: '';
+    position: absolute;
+    top: -10px; /* sit above padding */
+    left: 0;
+    right: 0;
+    height: 10px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.18), rgba(0,0,0,0));
+    opacity: 0;
+    animation: fadeHint 220ms forwards; /* fade in */
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+}
+
+@keyframes fadeHint { from { opacity: 0; } to { opacity: 1; } }
+
+.meta-container.input-overflow .chat-input textarea { overflow-y: auto; }
+
+.message {
+    max-width: 100%;
+    padding: 10px;
+    margin: 4px 0;
+    border-radius: 15px;
+    word-wrap: break-word;
+    box-sizing: border-box;
+    position: relative;
+    background-clip: padding-box; /* avoid bleed when dragging */
+}
+
+.message.user {
+    align-self: flex-end;
+    background-color: #007bff;
+    color: #fff;
+    text-align: right;
+    display: inline-block; /* confine bubble width to content */
+}
+
+.message.assistant {
+    align-self: stretch;
+    background-color: #f1f1f1;
+    color: #000;
+    text-align: left;
+    box-sizing: border-box;
+}
+
+/* Row wrapper to align assistant and feedback side-by-side */
+.message-row {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) clamp(240px,26%,280px); /* flexible feedback width */
+    gap: 14px;
+    align-items: start;
+    margin: 8px 0;
+    box-sizing: border-box;
+    background: transparent; /* ensure no white drag artifact */
+}
+
+.message-row.user-row {
+    grid-template-columns: 1fr;
+}
+
+.message-row .message.user {
+    grid-column: 1 / -1; /* span full width for user messages */
+}
+
+.message-row .message.assistant {
+    grid-column: 1; /* left column */
+}
+
+
+.session-button {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 7px;
+    margin-bottom: 5px;
+    text-align: left;
+    background-color: #e2e2e2;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9em;
+    position: relative;
+    /* Add styles for dragging */
+    transition: background-color 0.3s ease;
+}
+
+/* Add margin-top to the highest up session button not in a group */
+#new-chats .session-button:first-child {
+    margin-top: 15px;
+}
+
+.session-button:hover {
+    background-color: #ccc;
+}
+
+.session-button:active {
+    background-color: #ccc;
+}
+
+.session-button:hover .delete-icon {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.delete-icon {
+    margin-left: 10px;
+    color: red;
+    cursor: pointer;
+    font-size: 14px;
+    position: absolute;
+    right: 10px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.new-chat-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    padding: 5px;
+    margin-bottom: 5px;
+    text-align: left;
+    background-color: #e6e6fa;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.2em;
+    color: #4b0082;
+}
+
+.new-chat-button:hover {
+    background-color: #d8bfd8;
+}
+
+/* Add new group button styling */
+.new-group-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    padding: 5px;
+    margin-bottom: 5px;
+    text-align: left;
+    background-color: #66c2ff; /* Blue coloration */
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.2em;
+    color: #fff;
+}
+
+.new-group-button:hover {
+    background-color: #3399ff; /* Darker blue on hover */
+}
+
+.active-session {
+    background-color: limegreen;
+    color: white;
+    border: 2px solid limegreen;
+    font-weight: bold;
+}
+
+#header {
+    position: relative;
+    padding: 10px;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 5px 0;
+}
+
+.group-header h4 {
+    margin: 0;
+    padding: 5px;
+    flex-grow: 1;
+}
+
+/* Hide group delete icon by default */
+.group-header .delete-icon {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+/* Show when hovering over the group header or the icon itself */
+.group-header:hover .delete-icon,
+.group-header .delete-icon:hover {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Optionally, increase clickable area for easier access */
+.group-header .delete-icon {
+    padding: 0 8px;
+    margin-left: 10px;
+    cursor: pointer;
+}
+
+.session-group {
+    position: relative;
+    padding: 5px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* Style the Create button in the new group modal to match app buttons */
+#new-group-modal button {
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 0.8em;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    font-family: inherit;
+}
+
+#new-group-modal button:hover {
+    background-color: #0056b3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+}
+
+#new-group-modal button:active {
+    background-color: #004080;
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+}
+
+#footer {
+    position: relative;
+    margin-top: 5px;
+    bottom: 2px;
+    width: 100%;
+    font-family: monospace;
+    color: darkgray;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#animated-text {
+    display: inline-block;
+    overflow: hidden;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    border-right: 2px solid purple;
+    font-weight: bold;
+    color: darkgray;
+    animation: blink-caret 1s step-end 5;
+}
+
+.code-example {
+    display: none;
+    color: lightgray;
+    margin-left: 10px;
+}
+
+@keyframes blink-caret {
+    from, to {
+        border-color: transparent;
+    }
+    50% {
+        border-color: purple;
+    }
+}
+
+/* AI Assessment Scale */
+.ai-assessment-scale {
+    display: flex;
+    justify-content: space-around;
+    width: 90%;
+    padding: 5px;
+    background-color: #7c16c5; /* Indigo - bold and complementary */
+    border-radius: 10px;
+    margin-top: auto; /* push to bottom */
+    margin-bottom: 4px;
+    filter: saturate(0.7); /* Reduce saturation */
+}
+
+/* For very tall viewports, tighten bottom gap further and expand interior */
+@media (min-height: 900px) {
+    .container { margin-bottom: 12px; }
+    .ai-assessment-scale { margin-bottom: 8px; }
+}
+
+.scale-item {
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.3), inset -2px -2px 5px rgba(255, 255, 255, 0.5); /* Engraved effect */
+}
+
+#scale-1.scale-item {
+    background-color: #c3e6cb; /* Slightly bolder green */
+    color: #333;
+}
+
+#scale-2.scale-item {
+    background-color: #c3e6cb; /* Slightly bolder green */
+    color: #333;
+}
+
+#scale-3.scale-item {
+    background-color: #ffeeba; /* Slightly bolder orange */
+    color: #333;
+}
+
+#scale-4.scale-item {
+    background-color: #f5c6cb; /* Slightly bolder red */
+    color: #333;
+}
+
+#scale-5.scale-item {
+    background-color: #f5c6cb; /* Slightly bolder red */
+    color: #333;
+}
+
+#scale-1.scale-item:hover,
+#scale-1.scale-item.active {
+    background-color: #5cb85c; /* Complementary green */
+    color: #fff;
+}
+
+#scale-2.scale-item:hover,
+#scale-2.scale-item.active {
+    background-color: #5cb85c; /* Complementary green */
+    color: #fff;
+}
+
+#scale-3.scale-item:hover,
+#scale-3.scale-item.active {
+    background-color: #f0ad4e; /* Complementary orange */
+    color: #fff;
+}
+
+#scale-4.scale-item:hover,
+#scale-4.scale-item.active {
+    background-color: #d9534f; /* Complementary red */
+    color: #fff;
+}
+
+#scale-5.scale-item:hover,
+#scale-5.scale-item.active {
+    background-color: #d9534f; /* Complementary red */
+    color: #fff;
+}
+
+@keyframes rotate-border {
+    0% {
+        box-shadow: 0 0 5px 2px rgba(0, 0, 0, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 10px 4px rgba(0, 0, 0, 0.2);
+    }
+    100% {
+        box-shadow: 0 0 5px 2px rgba(0, 0, 0, 0.2);
+    }
+}
+
+#scale-1.scale-item.active {
+    animation: rotate-border 2s infinite;
+    box-shadow: 0 0 5px 2px #5cb85c;
+}
+
+#scale-2.scale-item.active {
+    animation: rotate-border 2s infinite;
+    box-shadow: 0 0 5px 2px #5cb85c;
+}
+
+#scale-3.scale-item.active {
+    animation: rotate-border 2s infinite;
+    box-shadow: 0 0 5px 2px #f0ad4e;
+}
+
+#scale-4.scale-item.active {
+    animation: rotate-border 2s infinite;
+    box-shadow: 0 0 5px 2px #d9534f;
+}
+
+#scale-5.scale-item.active {
+    animation: rotate-border 2s infinite;
+    box-shadow: 0 0 5px 2px #d9534f;
+}
+
+/* Darken all other DOM elements when pop-up is visible */
+.scale-item:hover ~ .popup,
+.popup.visible ~ * {
+    filter: brightness(0.5); /* Darken all other elements */
+}
+
+/* Update feedback container styling */
+.feedback-container {
+    position: relative; /* normal flow inside grid */
+    width: 100%;
+    padding: 10px 12px 16px 12px;
+    background-color: #f8f9fa;
+    border-radius: 14px;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
+    opacity: 1;
+    transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    cursor: pointer; /* Show pointer cursor on hover */
+    grid-column: 2; /* right column */
+    box-sizing: border-box;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+}
+
+/* Hover state - light blue similar to app's color scheme */
+.feedback-container:hover {
+    background-color: #e1f0ff;
+    box-shadow: 0 0 12px rgba(0, 123, 255, 0.3);
+    transform: scale(1.02);
+}
+
+/* Clicked state - slightly darker blue */
+.feedback-container.clicked {
+    background-color: #cce5ff;
+    box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+    transform: scale(0.98);
+}
+
+/* Add a subtle indicator that the feedback is clickable */
+.feedback-container::after {
+    content: "Click to use";
+    position: absolute;
+    right: 10px;
+    bottom: 5px;
+    font-size: 10px;
+    color: #007bff;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.feedback-container:hover::after {
+    opacity: 0.7;
+}
+
+/* Marker no longer used in grid layout; keep minimal/no-op styling if present */
+.feedback-marker { display: none; }
+
+/* Line animation */
+.line { display: none; }
+
+/* Pop-up styles */
+
+.popup {
+    position: absolute;
+    padding: 10px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 10px; /* Rounded edges */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+    z-index: 2010; /* Base z-index */
+}
+
+.popup.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.popup.fade-out {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* Overlay for dimming background when popup is visible */
+.popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000; /* Just below popups */
+    pointer-events: auto;
+    opacity: 1;
+    transition: opacity 0.3s;
+    display: none;
+}
+
+.popup-overlay.visible {
+    display: block;
+}
+
+/* Session groups */
+.session-group {
+    margin-bottom: 5px;
+}
+
+.session-group h4 {
+    margin: 0;
+    padding: 10px;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+}
+
+.session-list {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+    min-height: 50px; /* Ensure there's space to drop */
+}
+
+.example-prompts {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 5px;
+    font-size: 0.75em; /* Reduced font size */
+    position: relative; /* Ensure relative positioning for absolute children */
+}
+
+.prompt-buttons {
+    display: none; /* Hide the buttons initially */
+    flex-direction: row; /* Stack buttons horizontally */
+    position: absolute; /* Position relative to the parent */
+    background-color: #fff; /* Background color */
+    border: 1px solid #ccc; /* Border */
+    margin-left: 6px;
+    margin-bottom: 2px;
+    margin-top: -2px;
+    border-radius: 10px; /* Rounded edges */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2); /* Shadow effect */
+    z-index: 1000; /* Ensure it appears above other elements */
+}
+
+.prompt-examples-button.active + .prompt-buttons {
+    display: flex; /* Reveal the buttons when the button is active */
+}
+
+.prompt-button {
+    padding: 8px 16px; /* Adjusted padding */
+    margin: 1px;
+    border: none;
+    border-radius: 10px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    font-size: 0.9em; /* Reduced font size */
+}
+
+.prompt-button:hover {
+    background-color: #0056b3;
+}
+
+.prompt-popup {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2002; /* Above overlay */
+}
+
+/* Styling for buttons inside prompt popups */
+.prompt-popup button {
+    background-color: #f0f7ff;
+    color: #0056b3;
+    border: 1px solid #cce5ff;
+    border-radius: 8px;
+    padding: 10px 15px;
+    width: 100%;
+    text-align: left;
+    margin: 5px 0;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.prompt-popup button:hover {
+    background-color: #e1f0ff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.prompt-popup button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.prompt-popup button::after {
+    content: '→';
+    position: absolute;
+    right: 15px;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.prompt-popup button:hover::after {
+    opacity: 1;
+    transform: translateX(5px);
+}
+
+.popup-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    width: 80%;
+    max-width: 500px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.25);
+    z-index: 2003; /* Above prompt-popup and overlay */
+}
+
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #333;
+    background: none;
+    border: none;
+    cursor: pointer;
+    z-index: 2100;
+    line-height: 1;
+    opacity: 0.8;
+    transition: color 0.2s, opacity 0.2s;
+}
+
+.close-button:hover {
+    color: #d9534f;
+    opacity: 1;
+}
+
+.prompt-header {
+    display: flex;
+    align-items: left;
+    margin-left: 5px;
+    margin-top: 0px;
+    margin-right: 0px;
+    gap: 5px;
+    position: relative; /* Add relative positioning */
+}
+
+.prompt-examples-button {
+    padding: 8px 16px; /* Adjusted padding */
+    margin: 1px;
+    left: 0%;
+    border: none;
+    border-radius: 10px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    font-size: 0.9em; /* Reduced font size */
+    position: relative; /* Add relative positioning */
+}
+
+.prompt-examples-button.active + .prompt-buttons {
+    display: flex; /* Reveal the buttons when the button is active */
+    height: auto;
+}
+
+.prompt-examples-button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+    height: auto;
+}
+
+.create-reference-button {
+    padding: 8px 16px; /* Adjusted padding */
+    margin: 1px;
+    border: none;
+    border-radius: 10px;
+    background-color: #6c757d; /* Grey coloration */
+    color: white;
+    cursor: pointer;
+    font-size: 0.9em; /* Reduced font size */
+}
+
+.create-reference-button:hover {
+    background-color: #5a6268; /* Darker grey on hover */
+}
+
+/* Export prompt + AI as image button */
+.export-screenshot-button {
+    padding: 8px 16px;
+    margin: 1px;
+    border-radius: 10px;
+    font-size: 0.9em;
+    cursor: pointer;
+    /* Complementary light-blue treatment, consistent with popup buttons */
+    background-color: #f0f7ff;
+    color: #0056b3;
+    border: 1px solid #cce5ff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.export-screenshot-button:hover {
+    background-color: #e1f0ff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+}
+
+.export-screenshot-button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+}
+
+.reference-popup {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.25);
+    z-index: 2002; /* Above overlay */
+}
+
+.reference-popup.visible {
+    display: block;
+}
+
+.reference-popup .close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+/* Action buttons within the reference popup */
+.reference-popup .reference-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.reference-popup button {
+    background-color: #f0f7ff;
+    color: #0056b3;
+    border: 1px solid #cce5ff;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.reference-popup button:hover {
+    background-color: #e1f0ff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.10);
+}
+
+.reference-popup button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+}
+
+.send-message-button {
+    position: absolute;
+    right: 14px;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 10px 14px;
+    cursor: pointer;
+    box-sizing: border-box;
+    border-radius: 50%; /* Circular button */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08); /* Depth effect */
+    transition: transform 0.2s ease, box-shadow 0.2s ease; /* Smooth transition */
+    height: 38px;
+    width: 38px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.send-message-button:hover {
+    transform: translateY(-2px); /* Slight lift on hover */
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1); /* Enhanced shadow on hover */
+}
+
+.send-message-button:active {
+    transform: translateY(1px); /* Slight press down on click */
+    box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15); /* Reduced shadow on click */
+}
+
+/* Use a compact icon */
+.send-message-button::before { content: '📤'; margin: 0; }
+
+/* Remove tooltip for cleaner UI */
+.send-message-button:hover::after { content: none; }
+.send-message-button::after { content: none; }
+
+.placeholder-message {
+    padding-bottom: 40px !important;
+}
+
+
+.message.assistant.with-feedback {
+    position: relative;
+    overflow: visible;
+}
+
+.message-assistant-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #d9534f;
+    color: #fff;
+    opacity: 0.97;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 15px;
+    z-index: 10;
+    font-weight: bold;
+    font-size: 0.90em;
+    text-align: center;
+    pointer-events: auto;
+    transition: opacity 0.2s;
+}
+
+/* Responsive: stack columns on smaller screens */
+@media (max-width: 900px) {
+    .message-row {
+        display: grid;
+        grid-template-columns: 1fr; /* single column */
+    }
+    .feedback-container {
+        grid-column: 1;
+        margin-left: 0;
+        margin-top: 6px;
+    }
+}
+.message-assistant-overlay .close-overlay-btn {
+    position: absolute;
+    top: 8px;
+    right: 16px;
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.5em;
+    font-weight: bold;
+    cursor: pointer;
+    opacity: 0.8;
+    z-index: 11;
+    padding: 0;
+    line-height: 1;
+}
+
+/* Export fan overlay */
+.export-fan-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 3000; /* above popups */
+    display: none; /* toggled to block when open */
+}
+.export-fan-overlay.visible { display: block; }
+
+.export-fan-origin {
+    position: absolute;
+    transform-origin: bottom right;
+}
+
+.export-fan-items {
+    position: relative;
+    width: 0; height: 0; /* positioned via transforms */
+}
+
+.export-fan-item {
+    position: absolute;
+    transform-origin: bottom right;
+    background: #007bff; /* user bubble blue */
+    color: #fff;
+    border-radius: 12px;
+    padding: 8px 10px;
+    max-width: 320px;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.22);
+    cursor: pointer;
+    opacity: 0;
+    transition: transform 240ms ease, opacity 200ms ease, box-shadow 200ms ease;
+    will-change: transform, opacity;
+}
+
+.export-fan-item:hover { box-shadow: 0 10px 26px rgba(0,0,0,0.28); }
+
+.export-fan-item .snippet {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+    .export-fan-origin { right: 16px; bottom: 92px; }
+    .export-fan-item { max-width: 68vw; }
+}

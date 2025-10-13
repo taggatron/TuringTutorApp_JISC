@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Home</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    /* General styling */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f7f7f8;
+      margin: 0;
+    }
+
+    /* Header styling */
+    #header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 10px;
+    }
+
+    /* Home box styling */
+    #home-box {
+      text-align: center;
+    }
+
+    #home-box a {
+      display: block;
+      margin: 10px;
+      padding: 10px 20px;
+      border: 2px solid purple;
+      color: grey;
+      text-decoration: none;
+      border-radius: 5px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Drop shadow added */
+    }
+
+    #home-box a:hover {
+      background-color: purple;
+      color: white;
+      box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2); /* Shadow on hover */
+    }
+
+    /* Typing effect styling */
+    #footer {
+      position: absolute;
+      bottom: 10px;
+      font-family: monospace;
+      color: darkgray;
+    }
+
+    #animated-text {
+      display: inline-block;
+      overflow: hidden;
+      white-space: nowrap;
+      border-right: 2px solid purple;
+      font-weight: bold;
+      color: darkgray;
+      animation: blink-caret 1s step-end infinite;
+    }
+
+    .code-example {
+      display: none;
+      color: lightgray;
+    }
+
+    @keyframes blink-caret {
+      from, to {
+        border-color: transparent;
+      }
+      50% {
+        border-color: purple;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <img src="sdc-logo.svg" alt="SDC Logo" height="50">
+  </div>
+  
+  <div id="home-box">
+    <h3>Welcome to Turing Tutor, your personalised AI Assessment Support.</h3>
+    <a href="/register.html">Register</a>
+    <a href="/login.html">Login</a>
+  </div>
+  
+  <div id="footer">
+    <span id="animated-text"></span>
+    <div id="code-snippet" class="code-example"> /* Your code snippet will appear here */ </div>
+  </div>
+
+  <script>
+    const text = '[SDCGenAI]';
+    let index = 0;
+    const speed = 150; // Speed of typing
+
+    function typeWriter() {
+      if (index < text.length) {
+        document.getElementById('animated-text').textContent += text.charAt(index);
+        index++;
+        setTimeout(typeWriter, speed);
+      } else {
+        // Show code snippet after the text is fully typed
+        setTimeout(() => {
+          document.getElementById('code-snippet').style.display = 'inline';
+          document.getElementById('code-snippet').textContent = ''; // Replace with actual code snippet
+          setTimeout(() => {
+            document.getElementById('code-snippet').style.display = 'none';
+          }, 2000000000000000000000000); // Hide after 2 seconds
+        }, 500); // Wait 0.5s after typing is done
+      }
+    }
+
+    typeWriter();
+  </script>
+</body>
+</html>

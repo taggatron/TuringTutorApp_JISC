@@ -1,0 +1,2222 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT Web App</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* ...existing styles... */
+        .prompt-buttons {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            display: none; /* shown via JS */
+        }
+        /* Assistant message edit mode styles */
+        .assistant-edit-mode {
+            position: fixed !important;
+            top: 0; /* Start at very top, above AI assessment bar */
+            left: var(--sidebar-left, 0px); /* Align with sidebar */
+            width: 100vw !important;
+            height: var(--assistant-edit-height, calc(100vh - 120px)) !important; /* dynamic height */
+            z-index: 3000;
+            background: #fff;
+            box-shadow: 0 0 40px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start; /* top align */
+            align-items: center;
+            animation: expandAssistantMsg 0.4s cubic-bezier(.4,2,.6,1) forwards;
+            overflow: hidden; /* child will scroll */
+            padding-top: 88px; /* space for toolbar + close button */
+        }
+        @keyframes expandAssistantMsg {
+            from { transform: scale(0.95); opacity: 0.7; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .assistant-edit-close {
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            font-size: 2rem;
+            color: #888;
+            background: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            z-index: 3100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: background 0.2s;
+        }
+        .assistant-edit-close:hover {
+            background: #f2f2f2;
+        }
+        .assistant-editable-content {
+            outline: 2px solid #2d8cff;
+            background: #fafbfc;
+            border-radius: 10px;
+            min-height: 60px;
+            padding: 24px;
+            margin-top: 0;
+            width: 100%;
+            max-width: 900px;
+            box-sizing: border-box;
+            font-size: 1.0rem;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+            transition: box-shadow 0.2s;
+            flex: 1 1 auto; /* allow to fill remaining height */
+            overflow-y: auto; /* scroll inner content, prevent overflow */
+        }
+
+        /* Sticky formatting toolbar */
+        .assistant-edit-toolbar {
+            position: absolute;
+            top: 40px; /* below close button area */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            gap: 6px;
+            padding: 8px 10px;
+            background: linear-gradient(180deg,#ffffff 0%,#f7f9fb 100%);
+            border: 1px solid #d9dfe5;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            box-sizing: border-box;
+            z-index: 3050;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 120ms ease;
+        }
+        .assistant-edit-mode > .assistant-edit-toolbar { opacity:1; pointer-events:auto; }
+        .assistant-edit-toolbar button {
+            background: #fff;
+            border: 1px solid #cfd6dd;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 0.78rem;
+            font-family: inherit;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #2d3e50;
+            line-height: 1;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .assistant-edit-toolbar button:hover { background:#f0f4f7; }
+        .assistant-edit-toolbar button:active { background:#e2e8ec; }
+        .assistant-edit-toolbar button.active { background:#2d8cff; color:#fff; border-color:#2d8cff; }
+        .assistant-edit-toolbar button[disabled] { opacity:0.4; cursor:default; }
+
+        .assistant-edit-toolbar .spacer { flex:1; }
+        .assistant-edit-toolbar .label { font-weight:600; margin-right:4px; }
+        .hide-sidebar {
+            animation: hideSidebar 0.4s cubic-bezier(.4,2,.6,1) forwards;
+        }
+        @keyframes hideSidebar {
+            from { width: 260px; opacity: 1; }
+            to { width: 0; opacity: 0; }
+        }
+        .expand-chat-area {
+            animation: expandChatArea 0.4s cubic-bezier(.4,2,.6,1) forwards;
+        }
+        @keyframes expandChatArea {
+            from { width: calc(100vw - 260px); }
+            to { width: 100vw; }
+        }
+        .expand-meta-container {
+            animation: expandMetaContainer 0.4s cubic-bezier(.4,2,.6,1) forwards;
+        }
+        @keyframes expandMetaContainer {
+            from { width: calc(100vw - 260px); }
+            to { width: 100vw; }
+        }
+        .hide-user-message { display: none !important; }
+
+        /* Visual cue when ChatGPT Reference is a drop target */
+        .create-reference-button.drop-target {
+            box-shadow: 0 0 0 3px rgba(45,140,255,0.35), 0 0 0 10px rgba(45,140,255,0.18);
+            border-color: #2d8cff !important;
+            outline: none;
+            transition: box-shadow 120ms ease, border-color 120ms ease;
+            animation: refPulse 1.2s ease-in-out infinite, refBgPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes refPulse {
+            0%, 100% { filter: drop-shadow(0 0 0 rgba(45,140,255,0)); }
+            50% { filter: drop-shadow(0 0 8px rgba(45,140,255,0.55)); }
+        }
+        /* Pulse the button background to the same blue as the border glow */
+        @keyframes refBgPulse {
+            0%, 100% { background-color: #6c757d; }
+            50% { background-color: #2d8cff; }
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <img src="sdc-logo.svg" alt="SDC Logo" height="25">
+    </div>
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>Chat Sessions</h3>
+                <button class="new-chat-button" id="new-chat-button" onclick="startNewChat()">+ 💬</button>
+                <button class="new-group-button" id="new-group-button" onclick="createNewGroup()">+ 📁</button>
+            </div>
+            <div class="sidebar-content">
+                <!-- Replace the existing groups in the sidebar with this structure -->
+                <div id="session-groups">
+                    <!-- Groups will be added here dynamically -->
+                </div>
+                <div id="new-chats"></div> <!-- Container for new chats -->
+            </div>
+        </div>
+        <div class="chat-container">
+            <div class="chat-surface">
+                <div id="chat-messages" class="chat-messages"></div>
+            </div>
+            <div class="meta-container">
+                <div class="chat-input">
+                    <textarea id="message-input" type="text" placeholder="Type your message..." onkeypress="handleKeyPress(event)" oninput="resizeInput(event)"></textarea>
+                    <button class="send-message-button" onclick="sendMessage()"></button>
+                </div>
+                <!-- Example Prompts Section -->
+                <div class="example-prompts">
+                    <div class="prompt-header">
+                        <button class="create-reference-button" onclick="createReference()">ChatGPT Reference</button>
+                        <button class="prompt-examples-button" onclick="togglePromptButtons()">Prompt Examples</button>
+                        <div class="prompt-buttons">
+                            <button class="prompt-button" onclick="showPromptPopup('research')">Research</button>
+                            <button class="prompt-button" onclick="showPromptPopup('editing')">Editing</button>
+                            <button class="prompt-button" onclick="showPromptPopup('drafting')">Drafting</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reference Pop-up -->
+        <div id="reference-popup" class="reference-popup">
+            <span class="close-button" onclick="hideReferencePopup()">&times;</span>
+            <p id="reference-content"></p>
+            <div class="reference-actions">
+                <button id="copy-image-btn" type="button">Copy prompt + AI as image</button>
+                <button id="download-image-btn" type="button">Download PNG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pop-up for scale explanations -->
+    <div id="scale-popup" class="popup"></div>
+
+    <!-- Prompt Pop-up -->
+    <div id="prompt-popup" class="prompt-popup">
+        <div class="popup-content">
+            <span class="close-button" onclick="hidePromptPopup()">&times;</span>
+            <div id="prompt-content"></div>
+        </div>
+    </div>
+
+    <div id="feedback-container-template" class="feedback-container" style="display: none;">
+        <p class="feedback-message"></p>
+    </div>
+
+    <!-- AI Assessment Scale -->
+    <div class="ai-assessment-scale" id="ai-assessment-scale">
+        <div id="scale-5" class="scale-item inactive">Full AI</div>
+        <div id="scale-4" class="scale-item inactive">AI + Human Evaluation</div>
+        <div id="scale-3" class="scale-item inactive">AI Editing</div>
+        <div id="scale-2" class="scale-item inactive">Ideas and Structure</div>
+        <div id="scale-1" class="scale-item inactive">No AI</div>
+    </div>
+
+    <!-- Overlay for dimming background when popup is visible -->
+    <div id="popup-overlay" class="popup-overlay"></div>
+
+    <div id="footer">
+        <span id="animated-text"></span>
+        <div id="code-snippet" class="code-example">/* Your code snippet will appear here */</div>
+    </div>
+
+    <script>
+        // Inject html2canvas for client-side screenshot export
+        (function ensureHtml2Canvas() {
+            if (!window.html2canvas) {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                s.defer = true;
+                document.head.appendChild(s);
+            }
+        })();
+        const popup = document.getElementById('scale-popup');
+        let fadeTimeout;
+
+        // Function to show the pop-up with information
+        function showPopup(element, message) {
+            clearTimeout(fadeTimeout); // Clear any fade out timeout
+
+            // Set the message content
+            popup.textContent = message;
+
+            // Position the pop-up horizontally central to the window
+            const rect = element.getBoundingClientRect();
+            popup.style.top = `${rect.top - popup.offsetHeight - 10}px`;
+            popup.style.left = `${window.innerWidth / 2 - popup.offsetWidth / 2}px`;
+
+            // Set unique z-index
+            popup.style.zIndex = 2010 + parseInt(element.id.split('-')[1]);
+
+            // Show the pop-up
+            popup.classList.add('visible');
+            popup.classList.remove('fade-out');
+        }
+
+        // Function to hide the pop-up with a fade-out effect
+        function hidePopup() {
+            popup.classList.add('fade-out'); // Start fade out
+
+            // Fade out after 4 seconds
+            fadeTimeout = setTimeout(() => {
+                popup.classList.remove('visible');
+            }, 4000);
+        }
+
+        
+
+        const ws = new WebSocket('ws://localhost:3000');
+        const chatMessages = document.getElementById('chat-messages');
+        const sessionList = document.getElementById('session-list');
+        let session_id = null;
+        let botMessageDiv = null;
+        let activeLevels = new Set(); // To track all active levels
+        let feedbackMapping = []; // Array to map message elements to feedback containers
+        let sessionFeedback = {}; // Object to store feedback for each session
+
+        window.onload = async () => {
+            // First load groups and existing sessions
+            await loadGroups();
+            
+            // Check if any sessions exist before creating a new one
+            const sessionButtons = document.querySelectorAll('.session-button');
+            if (sessionButtons.length === 0) {
+                // Only create a new chat if no sessions exist
+                startNewChat();
+            } else {
+                // If sessions exist, load the most recent one
+                const mostRecentButton = sessionButtons[0];
+                if (mostRecentButton) {
+                    const sessionId = mostRecentButton.id.replace('session-', '');
+                    loadSessionHistory(sessionId);
+                    highlightCurrentSession(sessionId);
+                }
+            }
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+        
+                // Handle chat history messages
+                if (message.type === 'history') {
+                    loadChatHistory(message.data);
+        
+                // Handle assistant messages
+                } else if (message.type === 'assistant') {
+                    if (!botMessageDiv) {
+                        const row = document.createElement('div');
+                        row.className = 'message-row';
+                        botMessageDiv = document.createElement('div');
+                        botMessageDiv.className = 'message assistant with-feedback';
+                        botMessageDiv.dataset.messageId = 'streaming';
+                        botMessageDiv.innerHTML = `
+                            <div class="message-content"></div>
+                            <div class="message-assistant-overlay" style="display:none;"></div>`;
+                        row.appendChild(botMessageDiv);
+                        chatMessages.appendChild(row);
+                    }
+                    const contentDiv = botMessageDiv.querySelector('.message-content');
+                    contentDiv.innerHTML += (message.content || '').replace(/\n/g, '<br>');
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    // No collapse here; wait for scale message
+                } else if (message.type === 'scale') {
+                    updateScale(message.data);
+
+                    // Instead of collapsing, add overlay to the most recent assistant message if scale >= 3
+                    if (message.data.some(level => level >= 3)) {
+                        const assistantMessages = document.querySelectorAll('.message.assistant');
+                        for (let i = assistantMessages.length - 1; i >= 0; i--) {
+                            const lastAssistant = assistantMessages[i];
+                            // Only add overlay if not already present
+                            if (!lastAssistant.querySelector('.message-assistant-overlay')) {
+                                // Remove any previous overlay just in case
+                                const oldOverlay = lastAssistant.querySelector('.message-assistant-overlay');
+                                if (oldOverlay) oldOverlay.remove();
+                                // Create overlay
+                                const overlay = document.createElement('div');
+                                overlay.className = 'message-assistant-overlay';
+                                overlay.innerHTML = `
+                                    <span>Copying or directly using this response breaches academic integrity guidelines</span>
+                                    <button class="close-overlay-btn" title="Remove warning">&times;</button>
+                                `;
+                                overlay.addEventListener('click', function(e) {
+                                    if (e.target.classList.contains('close-overlay-btn') || e.target === overlay) {
+                                        overlay.remove();
+                                    }
+                                });
+                                lastAssistant.appendChild(overlay);
+                                break; // Only add overlay to the most recent assistant message
+                            }
+                        }
+                    }
+        
+                // Handle feedback messages using displayFeedback function
+                } else if (message.type === 'feedback') {
+                    if (message.content) {
+                        displayFeedback(message.content, message.message_id);  // Inline in row, prefer provided message_id
+                        console.log('Feedback updated in the container:', message.content);
+                    } else {
+                        console.error('Feedback content is empty');
+                    }
+                }
+            } catch (e) {
+                console.error('Error parsing WebSocket message:', e);
+            }
+        };
+
+        // Replace the existing functions with these updated versions
+        
+        // Helper: Check if a message is the last assistant message in the session (DB-backed)
+async function isLastAssistantMessageDB(messageId, sessionId) {
+    try {
+        const response = await fetch(`/messages?session_id=${sessionId}`);
+        const data = await response.json();
+        console.log('[isLastAssistantMessageDB] Raw data from server for session ' + sessionId + ':', JSON.stringify(data, null, 2)); // Log raw data
+
+        if (!data.success || !Array.isArray(data.messages)) {
+            console.error('[isLastAssistantMessageDB] Invalid data structure received:', data);
+            return false;
+        }
+        const assistantMessages = data.messages.filter(msg => msg.role === 'assistant'); // Changed msg.type to msg.role
+        console.log('[isLastAssistantMessageDB] Filtered assistant messages (using msg.role):', JSON.stringify(assistantMessages, null, 2)); // Log filtered assistant messages
+
+        if (assistantMessages.length === 0) {
+            console.log('[isLastAssistantMessageDB] No assistant messages found.');
+            return false;
+        }
+        const lastDbAssistantMessage = assistantMessages[assistantMessages.length - 1];
+        console.log('[isLastAssistantMessageDB] Checking messageId: ' + messageId + ' against last DB assistant messageId: ' + lastDbAssistantMessage.message_id); // Log comparison - CHANGED .id to .message_id
+        return String(lastDbAssistantMessage.message_id) === messageId; // CHANGED .id to .message_id and ensured string comparison
+    } catch (e) {
+        console.error('Error checking last assistant message from DB:', e);
+        return false;
+    }
+}
+
+        function resizeInput(event) {
+            const textarea = event.target;
+            const max = parseInt(getComputedStyle(textarea).maxHeight || 0, 10) || 0;
+            textarea.style.height = 'auto';
+            const needed = textarea.scrollHeight;
+            if (max && needed > max) {
+                textarea.style.height = max + 'px';
+                textarea.style.overflowY = 'auto';
+                textarea.closest('.meta-container')?.classList.add('input-overflow');
+            } else {
+                textarea.style.height = needed + 'px';
+                textarea.style.overflowY = 'hidden';
+                textarea.closest('.meta-container')?.classList.remove('input-overflow');
+            }
+        }
+
+
+    const pendingFeedbackMargins = new Map(); // legacy no-op
+
+        function createFeedbackContainer(feedback) {
+            const template = document.getElementById('feedback-container-template');
+            const feedbackContainer = template.cloneNode(true);
+            feedbackContainer.style.display = 'block';
+            feedbackContainer.style.position = 'relative';
+            feedbackContainer.querySelector('.feedback-message').textContent = feedback;
+            
+            // Add click functionality to populate chat input
+            feedbackContainer.addEventListener('click', function() {
+                const feedbackText = this.querySelector('.feedback-message').textContent;
+                const input = document.getElementById('message-input');
+                input.value = feedbackText;
+                input.focus();
+                
+                // Add a temporary "clicked" class for visual feedback
+                this.classList.add('clicked');
+                setTimeout(() => {
+                    this.classList.remove('clicked');
+                }, 300);
+            });
+            
+            return feedbackContainer;
+        }
+
+
+        function updateScale(levels) {
+            // If levels is a single value, convert to array
+            if (!Array.isArray(levels)) levels = [levels];
+            // Add new levels to the running set
+            levels.forEach(level => activeLevels.add(level));
+            document.querySelectorAll('.scale-item').forEach(item => {
+                const level = parseInt(item.id.replace('scale-', ''), 10);
+                if (activeLevels.has(level)) {
+                    item.classList.add('active');
+                    item.classList.remove('inactive');
+                } else {
+                    item.classList.add('inactive');
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+
+        function resetScale() {
+            activeLevels.clear();
+            document.querySelectorAll('.scale-item').forEach(item => {
+                item.classList.add('inactive');
+                item.classList.remove('active');
+            });
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevent default enter behavior
+                sendMessage();
+            }
+            // Allow default behavior when Shift+Enter is pressed (creates a new line)
+        }
+
+        // Modify the sendMessage function to ensure new messages have their IDs tracked
+        
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value;
+        
+            if (message.trim()) {
+                botMessageDiv = null;
+                ws.send(JSON.stringify({ content: message, session_id }));
+        
+                const userMessage = document.createElement('div');
+                userMessage.className = 'message user';
+
+                // In sendMessage function
+                const previousMapping = feedbackMapping[feedbackMapping.length - 1];
+                const hasFeedback = previousMapping && 
+                                   previousMapping.feedbackContainer.style.display !== 'none' &&
+                                   previousMapping.feedbackContainer.querySelector('.feedback-message').textContent.trim() !== '';
+                
+                // Then in sendMessage()
+                if (hasFeedback) {
+                    setDynamicTopMargin(userMessage, previousMapping.feedbackContainer);
+                }
+
+                userMessage.textContent = message;
+        
+                // Remove any existing transparent placeholder user message
+                const oldPlaceholder = chatMessages.querySelector('.user.placeholder-message');
+                if (oldPlaceholder) {
+                    oldPlaceholder.remove();
+                }
+        
+                chatMessages.appendChild(userMessage);
+        
+                // Create an empty feedback container and store it in feedbackMapping
+                const feedbackContainer = createFeedbackContainer('');  // Initially empty
+                feedbackMapping.push({
+                    messageElement: userMessage,
+                    feedbackContainer: feedbackContainer
+                });
+        
+                console.log(`Stored feedback for the message`);
+        
+                input.value = '';
+                input.style.height = 'auto';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Focus back on the textarea and ensure cursor is at the beginning
+                setTimeout(() => {
+                    input.focus();
+                    input.setSelectionRange(0, 0); // Place cursor at the start
+                    
+                    // Programmatically simulate up arrow key press to ensure cursor is at top
+                    const upArrowEvent = new KeyboardEvent('keydown', {
+                        key: 'ArrowUp',
+                        code: 'ArrowUp',
+                        keyCode: 38,
+                        which: 38,
+                        bubbles: true
+                    });
+                    input.dispatchEvent(upArrowEvent);
+                }, 0);
+            }
+        }
+
+        // Add this new helper function
+        function setDynamicTopMargin(messageElement, previousFeedbackContainer) {
+            if (!messageElement || !previousFeedbackContainer) return;
+            
+            // Get the computed height of the feedback container
+            const feedbackHeight = previousFeedbackContainer.offsetHeight;
+            
+            // Add some extra padding for visual separation
+            const marginValue = Math.max(0, feedbackHeight - 28.5);
+            
+            // Apply the calculated margin to the message
+            messageElement.style.marginTop = `${marginValue}px`;
+        }
+        
+        
+
+        // New helper function to set dynamic margin based on feedback container height
+        function setDynamicMargin(messageElement, feedbackContainer) {
+            if (!messageElement || !feedbackContainer) return;
+            
+            // Get the computed height of the feedback container
+            const feedbackHeight = feedbackContainer.offsetHeight;
+            
+            // Add some extra padding (10px) for visual separation
+            const marginValue = Math.max(0, feedbackHeight - 28.5);
+            
+            // Apply the calculated margin to the message
+            messageElement.style.marginBottom = `${marginValue}px`;
+        }
+
+        function displayFeedback(feedback, messageId = null) {
+            // Prefer explicit messageId to locate the correct assistant row, otherwise fall back to last assistant
+            let targetAssistant = null;
+            if (messageId) {
+                targetAssistant = chatMessages.querySelector(`.message.assistant[data-message-id="${messageId}"]`);
+            }
+            if (!targetAssistant) {
+                targetAssistant = Array.from(chatMessages.querySelectorAll('.message.assistant')).pop();
+            }
+            if (!targetAssistant) return;
+            let row = targetAssistant.closest('.message-row');
+            if (!row) {
+                row = document.createElement('div');
+                row.className = 'message-row';
+                targetAssistant.replaceWith(row);
+                row.appendChild(targetAssistant);
+            }
+            const feedbackContainer = createFeedbackContainer(feedback);
+            row.appendChild(feedbackContainer);
+            const overlay = targetAssistant.querySelector('.message-assistant-overlay');
+            if (overlay) {
+                overlay.style.display = 'flex';
+                overlay.innerHTML = `
+                    <span>Copying or directly using this response breaches academic integrity guidelines</span>
+                    <button class="close-overlay-btn" title="Remove warning">&times;</button>`;
+                overlay.addEventListener('click', function(e){
+                    if (e.target.classList.contains('close-overlay-btn') || e.target === overlay) {
+                        overlay.style.display = 'none';
+                    }
+                });
+            }
+            // Persist feedback server-side; include message_id if known
+            saveFeedbackToServer(feedback, targetAssistant.dataset.messageId || messageId || null);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+function ensureFeedbackVisible(_) { /* no-op in inline layout */ }
+
+function showFeedbackForSavedSession(sessionId, feedbackData) {
+    if (!feedbackData || feedbackData.length === 0) return;
+
+    feedbackData.forEach(fb => {
+        const assistant = chatMessages.querySelector(`.message.assistant[data-message-id="${fb.messageId}"]`);
+        if (!assistant) return;
+        let row = assistant.closest('.message-row');
+        if (!row) {
+            row = document.createElement('div');
+            row.className = 'message-row';
+            assistant.replaceWith(row);
+            row.appendChild(assistant);
+        }
+        const feedbackContainer = createFeedbackContainer(fb.feedbackContent);
+        row.appendChild(feedbackContainer);
+        const overlay = assistant.querySelector('.message-assistant-overlay');
+        if (overlay) overlay.style.display = 'flex';
+    });
+}
+
+// Replace the existing loadChatHistory function
+async function loadChatHistory(messages) {
+    chatMessages.innerHTML = '';
+    // Check for feedback data to determine which messages need to be shown with overlay
+    // Use feedbackData provided alongside messages if available; fall back to fetching via /messages caller
+    // The caller of loadChatHistory should ensure feedback is in the same payload; here we build map only if global var exists
+    const feedbackByMessageId = new Map();
+    if (window.__lastFeedbackData && Array.isArray(window.__lastFeedbackData)) {
+        window.__lastFeedbackData.forEach(fb => {
+            if (fb.messageId) feedbackByMessageId.set(String(fb.messageId), fb);
+        });
+    }
+    messages.forEach(msg => {
+        if (msg.role === 'assistant') {
+            const row = document.createElement('div');
+            row.className = 'message-row';
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', 'assistant');
+            messageElement.dataset.messageId = msg.message_id;
+            messageElement.innerHTML = `<div class="message-content">${(msg.content||'').replace(/\n/g,'<br>')}</div><div class="message-assistant-overlay" style="display:${feedbackByMessageId.has(String(msg.message_id)) ? 'flex':'none'}"></div>`;
+            row.appendChild(messageElement);
+            const fb = feedbackByMessageId.get(String(msg.message_id));
+            if (fb) {
+                const fbContainer = createFeedbackContainer(fb.feedbackContent);
+                row.appendChild(fbContainer);
+            }
+            chatMessages.appendChild(row);
+        } else {
+            const row = document.createElement('div');
+            row.className = 'message-row user-row';
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message','user');
+            messageElement.dataset.messageId = msg.message_id;
+            messageElement.innerHTML = `<div class=\"message-content\">${(msg.content||'').replace(/\n/g,'<br>')}</div>`;
+            row.appendChild(messageElement);
+            chatMessages.appendChild(row);
+        }
+    });
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+        
+
+        // Replace the existing loadSessions function
+        
+        async function loadSessions() {
+            // Clear previous session lists
+            document.querySelectorAll('.session-list').forEach(list => list.innerHTML = '');
+            document.getElementById('new-chats').innerHTML = ''; // Clear new chats container
+        
+            try {
+                const response = await fetch('/sessions');
+                const data = await response.json();
+                if (data.success) {
+                    data.sessions.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        
+                    data.sessions.forEach((session, index) => {
+                        const button = document.createElement('button');
+                        button.className = 'session-button';
+                        button.textContent = `Session ${index + 1}`;
+                        button.id = `session-${session.id}`;
+                        button.draggable = true;
+                        button.ondragstart = drag;
+                        button.onclick = () => loadSessionHistory(session.id);
+        
+                        const deleteIcon = document.createElement('span');
+                        deleteIcon.textContent = '🗑';
+                        deleteIcon.className = 'delete-icon';
+                        deleteIcon.onclick = (event) => {
+                            event.stopPropagation();
+                            deleteSession(session.id, button.parentElement.id);
+                        };
+        
+                        button.appendChild(deleteIcon);
+        
+                        // Place session in its group or in new-chats if no group
+                        if (session.group_id) {
+                            const groupList = document.getElementById(`session-list-group-${session.group_id}`);
+                            if (groupList) {
+                                groupList.appendChild(button);
+                            } else {
+                                document.getElementById('new-chats').appendChild(button);
+                            }
+                        } else {
+                            document.getElementById('new-chats').appendChild(button);
+                        }
+                    });
+                } else {
+                    console.error('Failed to load sessions:', data.message);
+                }
+            } catch (error) {
+                console.error('Error fetching sessions:', error);
+            }
+        }
+
+        // Update the loadSessionHistory function to use the new functions
+        async function loadSessionHistory(sessionId) {
+            // Hide and store feedback for the current session
+            hideAndStoreFeedback(session_id);
+
+            // Update the current session ID and reset the scale
+            session_id = sessionId;
+            resetScale();
+
+            // Highlight the current session
+            highlightCurrentSession(sessionId);
+
+            // Fetch messages, feedback, and scale levels for the session
+            const response = await fetch(`/messages?session_id=${sessionId}`);
+            const data = await response.json();
+
+            if (data.success) {
+                // Clear chat messages
+                chatMessages.innerHTML = '';
+                // Create a lookup map of message IDs with feedback
+                const messagesWithFeedback = new Set();
+                const feedbackByMessageId = new Map();
+                if (data.feedbackData && data.feedbackData.length > 0) {
+                    data.feedbackData.forEach(feedback => {
+                        messagesWithFeedback.add(String(feedback.messageId));
+                        feedbackByMessageId.set(String(feedback.messageId), feedback);
+                    });
+                }
+                let prevMsg = null;
+                let prevAssistantHadFeedback = false;
+                let prevAssistantFeedbackMargin = 0;
+                data.messages.forEach((msg, idx) => {
+                    console.log(`[loadSessionHistory] Rendering message #${idx}:`, msg);
+                    if (msg.role === 'user') {
+                        const userMessageDiv = document.createElement('div');
+                        userMessageDiv.className = 'message user';
+                        userMessageDiv.textContent = msg.content;
+                        userMessageDiv.dataset.messageId = msg.message_id;
+                        // --- Apply feedbackMargin if present on this message ---
+                        const fb = feedbackByMessageId.get(String(msg.message_id));
+                        let marginApplied = false;
+                        if (fb && typeof fb.feedbackMargin === 'number' && !isNaN(fb.feedbackMargin)) {
+                            userMessageDiv.style.marginTop = fb.feedbackMargin + 'px';
+                            marginApplied = true;
+                            console.log(`[loadSessionHistory] Applied marginTop to user messageId=${msg.message_id}:`, userMessageDiv.style.marginTop);
+                        }
+                        // --- If previous message was assistant with feedback, apply its margin to this user message ---
+                        if (!marginApplied && prevAssistantHadFeedback && typeof prevAssistantFeedbackMargin === 'number' && !isNaN(prevAssistantFeedbackMargin)) {
+                            userMessageDiv.style.marginTop = prevAssistantFeedbackMargin + 'px';
+                            console.log(`[loadSessionHistory] Applied PREVIOUS assistant feedbackMargin to user messageId=${msg.message_id}:`, userMessageDiv.style.marginTop, 'From assistant messageId:', prevMsg ? prevMsg.message_id : null);
+                        }
+                        if (!marginApplied && !prevAssistantHadFeedback) {
+                            console.log(`[loadSessionHistory] No feedbackMargin for user messageId=${msg.message_id}. fb=`, fb);
+                        }
+                        chatMessages.appendChild(userMessageDiv);
+                        setTimeout(() => {
+                            feedbackMapping.push({
+                                messageElement: userMessageDiv,
+                                feedbackContainer: createFeedbackContainer('Feedback for session')
+                            });
+                        }, 0);
+                    } else if (msg.role === 'assistant') {
+                        const assistantMessageDiv = document.createElement('div');
+                        assistantMessageDiv.className = 'message assistant with-feedback';
+                        assistantMessageDiv.dataset.messageId = msg.message_id;
+                        assistantMessageDiv.innerHTML = `
+                            <div class=\"message-content\" style=\"${messagesWithFeedback.has(String(msg.message_id)) ? 'opacity:0.3;pointer-events:none;' : ''}\">${msg.content.replace(/\n/g, '<br>')}</div>
+                            <div class=\"message-assistant-overlay\" style=\"${messagesWithFeedback.has(String(msg.message_id)) ? 'display:flex;' : 'display:none;'}\">\n                                <span>Copying or directly using this response breaches academic integrity guidelines</span>\n                                <button class=\"close-overlay-btn\" type=\"button\">×</button>\n                            </div>\n                        `;
+                // Add close button event listener
+                const overlay = assistantMessageDiv.querySelector('.message-assistant-overlay');
+                const closeBtn = assistantMessageDiv.querySelector('.close-overlay-btn');
+                const contentDiv = assistantMessageDiv.querySelector('.message-content');
+                if (closeBtn && overlay && contentDiv) {
+                    closeBtn.addEventListener('click', function(e) {
+                        overlay.style.display = 'none';
+                        contentDiv.style.opacity = '1';
+                        contentDiv.style.pointerEvents = 'auto';
+                    });
+                }
+                chatMessages.appendChild(assistantMessageDiv);
+            }
+            // Track for next iteration
+            if (msg.role === 'assistant' && feedbackByMessageId.has(String(msg.message_id))) {
+                prevAssistantHadFeedback = true;
+                prevAssistantFeedbackMargin = feedbackByMessageId.get(String(msg.message_id)).feedbackMargin;
+            } else {
+                prevAssistantHadFeedback = false;
+                prevAssistantFeedbackMargin = 0;
+            }
+            prevMsg = msg;
+        });
+        // Adjust margin if the last user message had feedback
+        const userMessages = chatMessages.querySelectorAll('.message.user');
+        const lastUserMessage = userMessages[userMessages.length - 1];
+        // Find feedback for the last user message and check scale_level
+        let lastUserFeedback = null;
+        let lastUserScaleLevel = null;
+        const lastMsg = data.messages[data.messages.length - 1];
+        if (lastMsg && lastMsg.role === 'user') {
+            if (data.feedbackData && data.feedbackData.length > 0) {
+                lastUserFeedback = data.feedbackData.find(fb => String(fb.messageId) === String(lastMsg.message_id));
+            }
+            lastUserScaleLevel = lastMsg.scale_level || 1;
+        }
+        if (
+            lastUserMessage &&
+            lastUserFeedback &&
+            lastUserScaleLevel >= 3
+        ) {
+            lastUserMessage.style.marginBottom = '80px';
+        } else if (lastUserMessage) {
+            lastUserMessage.style.marginBottom = '';
+        }
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    window.__lastFeedbackData = data.feedbackData || [];
+    showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
+        updateScale(data.scale_levels);
+        // Ensure feedback containers do not underlap the chat input area
+        // No special visibility enforcement needed in inline layout
+    } else {
+        alert('Failed to load session history.');
+    }
+}
+
+
+
+        async function deleteSession(sessionId, parentElementId) {
+            const response = await fetch(`/delete-session?session_id=${sessionId}`, { method: 'DELETE' });
+            const data = await response.json();
+            if (data.success) {
+                // Remove the session button from the DOM
+                const sessionButton = document.getElementById(`session-${sessionId}`);
+                if (sessionButton) {
+                    sessionButton.remove();
+                }
+                // Ensure the parent element retains its ID
+                const parentElement = document.getElementById(parentElementId);
+                if (parentElement) {
+                    parentElement.id = parentElementId;
+                }
+                chatMessages.innerHTML = '';
+
+                // --- Auto-select a new session or start a new chat ---
+                // Find all remaining session buttons
+                // (No longer starting a new chat here)
+
+                // --- Hide all visible feedback containers ---
+                document.querySelectorAll('.feedback-container').forEach(container => {
+                    container.style.display = 'none';
+                });
+                // --- End hide feedback containers ---
+            } else {
+                alert('Failed to delete the session.');
+            }
+        }
+
+        async function startNewChat() {
+            // Hide and store feedback for the current session
+            hideAndStoreFeedback(session_id);
+
+            try {
+                const response = await fetch('/start-session', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    session_id = data.session_id;
+                    console.log('New session created:', session_id);
+
+                    // Clear the chat messages and reset the UI
+                    chatMessages.innerHTML = '';
+                    resetScale();
+
+                    // Add the new session button to the session list
+                    addSessionButton(session_id);
+
+                    // Highlight the new session
+                    highlightCurrentSession(session_id);
+
+                    // No feedback to show for a new session
+                } else {
+                    alert('Failed to start a new session.');
+                }
+            } catch (error) {
+                console.error('Error starting a new session:', error);
+            }
+        }
+
+        // Function to add a session button to the new chats container
+                function addSessionButton(sessionId) {
+            // Ensure newChats is selected
+            const newChats = document.getElementById('new-chats');
+            if (!newChats) {
+                console.error('New chats container not found.');
+                return;
+            }
+        
+            // Find the highest existing session number across ALL session buttons,
+            // including those that might be hidden in collapsed groups
+            const sessionButtons = document.querySelectorAll('.session-button');
+            let highestSessionNumber = 0;
+        
+            sessionButtons.forEach(button => {
+                // Get the text content without the delete icon
+                const buttonText = button.textContent.replace('🗑', '').trim();
+                // Extract the session number using regex
+                const matches = buttonText.match(/\d+/);
+                if (matches && matches.length > 0) {
+                    const sessionNumber = parseInt(matches[0]);
+                    if (sessionNumber > highestSessionNumber) {
+                        highestSessionNumber = sessionNumber;
+                    }
+                }
+            });
+        
+            // Label the new session with the next highest number
+            const newSessionNumber = highestSessionNumber + 1;
+        
+            const button = document.createElement('button');
+            button.className = 'session-button';
+            button.textContent = `Session ${newSessionNumber}`;
+            button.id = `session-${sessionId}`;
+            button.draggable = true;
+            button.ondragstart = drag;
+            button.onclick = () => loadSessionHistory(sessionId);
+        
+            const deleteIcon = document.createElement('span');
+            deleteIcon.textContent = '🗑';
+            deleteIcon.className = 'delete-icon';
+            deleteIcon.onclick = (event) => {
+                event.stopPropagation();
+                deleteSession(sessionId, button.parentElement.id);
+            };
+        
+            button.appendChild(deleteIcon);
+            newChats.appendChild(button);
+        }
+
+
+
+        async function startNewChat() {
+            // Hide and store feedback for the current session
+            hideAndStoreFeedback(session_id);
+
+            try {
+                const response = await fetch('/start-session', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    session_id = data.session_id;
+                    console.log('New session created:', session_id);
+
+                    // Clear the chat messages and reset the UI
+                    chatMessages.innerHTML = '';
+                    resetScale();
+
+                    // Add the new session button to the session list
+                    addSessionButton(session_id);
+
+                    // Highlight the new session
+                    highlightCurrentSession(session_id);
+
+                    // No feedback to show for a new session
+                } else {
+                    alert('Failed to start a new session.');
+                }
+            } catch (error) {
+                console.error('Error starting a new session:', error);
+            }
+        }
+
+        // Removed obsolete showFeedbackForSession (absolute positioning) in favor of inline feedback rendering
+
+
+
+
+        // Removed fade/clip behavior; inline layout keeps feedback fully visible within rows
+
+
+
+
+        window.addEventListener('beforeunload', (event) => {
+            // Store feedback for the current session before leaving the page
+            if (session_id) {
+                hideAndStoreFeedback(session_id);
+            }
+            // Optionally, you can show a confirmation dialog to the user
+            // event.preventDefault(); // For some browsers
+            // event.returnValue = ''; // Show default dialog for older browsers
+        });
+
+       function saveFeedbackToServer(feedbackContent, message_id = null) {
+           fetch('/save-feedback', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ session_id, feedbackContent, message_id })
+           }).then(r => r.json()).then(data => {
+               if (!data.success) console.error('Failed to save feedback:', data.message);
+           }).catch(err => console.error('Error saving feedback:', err));
+       }
+
+
+
+        function hideAndStoreFeedback(sessionId) {
+            if (!sessionId) return;
+
+            // Store feedback containers for the current session
+            const feedbackContainers = document.querySelectorAll('.feedback-container');
+            sessionFeedback[sessionId] = [];
+
+            feedbackContainers.forEach(container => {
+                // Store feedback content only (layout is inline)
+                sessionFeedback[sessionId].push({
+                    content: container.querySelector('.feedback-message').textContent
+                });
+                container.style.display = 'none';
+            });
+        }
+
+        
+
+
+        const text = '[SDC Turing Tutor]';
+        let index = 0;
+        const defaultSpeed = 150;
+        const scaleSpeed = 40;
+        let animating = false;
+
+        function isAnimating() {
+            return animating;
+        }
+
+        function typeWriter(elementId, text, speed, callback) {
+            let i = 0;
+            animating = true;
+            function type() {
+                if (i < text.length) {
+                    document.getElementById(elementId).textContent += text.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                } else {
+                    animating = false;
+                    if (callback) {
+                        callback();
+                    }
+                }
+            }
+            type();
+            
+        }
+
+        typeWriter('animated-text', text, defaultSpeed);
+
+        const scaleDescriptions = {
+            'scale-1': 'This represents tasks or processes that are done entirely by humans without any AI involvement.',
+            'scale-2': 'AI is used to generate ideas or structure content, but the primary content creation is still human-driven.',
+            'scale-3': 'AI is used to assist with editing or refining content that has been primarily generated by a human.',
+            'scale-4': 'Both AI and humans are involved in creating and evaluating the content.',
+            'scale-5': 'The AI is fully responsible for the task or process with little to no human intervention.'
+        };
+
+        document.querySelectorAll('.scale-item').forEach(item => {
+            let hoverTimeout;
+        
+            item.addEventListener('mouseover', () => {
+                hoverTimeout = setTimeout(() => {
+                    if (!isAnimating()) {
+                        const description = scaleDescriptions[item.id];
+                        // Store the original active state before adding the hover effect
+                        const wasActiveBeforeHover = item.classList.contains('active');
+                        
+                        document.getElementById('animated-text').textContent = '';
+                        // Disable mouseover for all items
+                        document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'none');
+                        item.classList.add('active'); // Add active class to the hovered item
+                        
+                        typeWriter('animated-text', description, scaleSpeed, () => {
+                            setTimeout(() => {
+                                document.getElementById('animated-text').textContent = '';
+                                typeWriter('animated-text', text, defaultSpeed);
+                                // Re-enable mouseover for all items
+                                document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'auto');
+                                
+                                // Only remove active class if it wasn't active before the hover
+                                if (!wasActiveBeforeHover) {
+                                    item.classList.remove('active');
+                                }
+                            }, 3500); // Delay before reverting back to default text
+                        });
+                    }
+                }, 500); // Adjust the delay time as needed (500ms in this example)
+            });
+        
+            item.addEventListener('mouseout', () => {
+                clearTimeout(hoverTimeout); // Clear the timeout if the mouse leaves the item
+            });
+        });
+
+        function allowDrop(event) {
+            event.preventDefault();
+        }
+
+        function createNewGroup() {
+            // Create a pop-up container
+            const popupContainer = document.createElement('div');
+            popupContainer.className = 'popup-container';
+            popupContainer.style.position = 'fixed';
+            popupContainer.style.top = '50%';
+            popupContainer.style.left = '50%';
+            popupContainer.style.transform = 'translate(-50%, -50%)';
+            popupContainer.style.zIndex = '2000';
+            popupContainer.style.backgroundColor = 'white';
+            popupContainer.style.padding = '20px';
+            popupContainer.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.2)';
+            popupContainer.style.borderRadius = '8px';
+        
+            // Add heading
+            const heading = document.createElement('h3');
+            heading.textContent = 'Create a New Group';
+            heading.style.marginTop = '0';
+            popupContainer.appendChild(heading);
+        
+            // Create form
+            const form = document.createElement('form');
+            form.onsubmit = (e) => {
+                e.preventDefault();
+                const groupNameInput = document.getElementById('group-name-input');
+                const groupName = groupNameInput.value.trim();
+                
+                if (groupName) {
+                    // Save to database
+                    fetch('/create-group', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ group_name: groupName })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Create group in UI
+                            const groupId = data.group_id;
+                            createGroupInUI(groupId, groupName);
+                            // Close the popup
+                            document.body.removeChild(popupContainer);
+                        } else {
+                            // Show error
+                            const errorMsg = document.createElement('p');
+                            errorMsg.textContent = 'Error: ' + data.message;
+                            errorMsg.style.color = 'red';
+                            form.appendChild(errorMsg);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error creating group:', error);
+                        const errorMsg = document.createElement('p');
+                        errorMsg.textContent = 'Error creating group. Please try again.';
+                        errorMsg.style.color = 'red';
+                        form.appendChild(errorMsg);
+                    });
+                } else {
+                    // Show validation error
+                    const errorMsg = document.createElement('p');
+                    errorMsg.textContent = 'Please enter a group name.';
+                    errorMsg.style.color = 'red';
+                    form.appendChild(errorMsg);
+                }
+            };
+            
+            // Create group name input
+            const inputDiv = document.createElement('div');
+            inputDiv.style.marginBottom = '15px';
+            
+            const label = document.createElement('label');
+            label.setAttribute('for', 'group-name-input');
+            label.textContent = 'Group Name:';
+            label.style.display = 'block';
+            label.style.marginBottom = '5px';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'group-name-input';
+            input.placeholder = `Group ${document.querySelectorAll('.session-group').length + 1}`;
+            input.style.width = '100%';
+            input.style.padding = '8px';
+            input.style.boxSizing = 'border-box';
+            input.style.borderRadius = '4px';
+            input.style.border = '1px solid #ccc';
+            
+            inputDiv.appendChild(label);
+            inputDiv.appendChild(input);
+            form.appendChild(inputDiv);
+            
+            // Create button container
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.justifyContent = 'space-between';
+            
+            // Create buttons
+            const createButton = document.createElement('button');
+            createButton.type = 'submit';
+            createButton.textContent = 'Create Group';
+            createButton.style.padding = '8px 12px';
+            createButton.style.backgroundColor = '#4CAF50';
+            createButton.style.color = 'white';
+            createButton.style.border = 'none';
+            createButton.style.borderRadius = '4px';
+            createButton.style.cursor = 'pointer';
+            
+            const cancelButton = document.createElement('button');
+            cancelButton.type = 'button';
+            cancelButton.textContent = 'Cancel';
+            cancelButton.style.padding = '8px 12px';
+            cancelButton.style.backgroundColor = '#f44336';
+            cancelButton.style.color = 'white';
+            cancelButton.style.border = 'none';
+            cancelButton.style.borderRadius = '4px';
+            cancelButton.style.cursor = 'pointer';
+            cancelButton.onclick = () => {
+                document.body.removeChild(popupContainer);
+            };
+            
+            buttonContainer.appendChild(cancelButton);
+            buttonContainer.appendChild(createButton);
+            form.appendChild(buttonContainer);
+            
+            popupContainer.appendChild(form);
+            
+            // Append the pop-up to the body
+            document.body.appendChild(popupContainer);
+            
+            // Focus on the input field
+            setTimeout(() => {
+                input.focus();
+            }, 0);
+        }
+
+        function createGroup() {
+            // Prompt user for group name
+            const groupName = prompt('Enter name for new group:', `Group ${document.querySelectorAll('.session-group').length + 1}`);
+            
+            if (groupName && groupName.trim()) {
+                // First save to database
+                fetch('/create-group', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ group_name: groupName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Create group in UI
+                        const groupId = data.group_id;
+                        createGroupInUI(groupId, groupName);
+                    } else {
+                        alert('Failed to create group: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating group:', error);
+                    alert('Error creating group');
+                });
+            }
+        }
+        
+        function createGroupInUI(groupId, groupName) {
+            const groupDiv = document.createElement('div');
+            groupDiv.className = 'session-group';
+            groupDiv.id = `group-${groupId}`;
+            groupDiv.ondrop = drop;
+            groupDiv.ondragover = allowDrop;
+        
+            const groupHeader = document.createElement('div');
+            groupHeader.className = 'group-header';
+        
+            const groupTitle = document.createElement('h4');
+            groupTitle.contentEditable = true;
+            groupTitle.onblur = () => renameGroup(groupTitle, groupId);
+            groupTitle.textContent = groupName;
+            groupTitle.onclick = () => toggleGroup(groupTitle);
+        
+            const deleteIcon = document.createElement('span');
+            deleteIcon.textContent = '🗑';
+            deleteIcon.className = 'delete-icon';
+            deleteIcon.onclick = (event) => {
+                event.stopPropagation(); // Prevent triggering group toggle
+                deleteGroupHandler(groupId);
+            };
+        
+            groupHeader.appendChild(groupTitle);
+            groupHeader.appendChild(deleteIcon);
+        
+            const sessionListDiv = document.createElement('div');
+            sessionListDiv.className = 'session-list';
+            sessionListDiv.id = `session-list-group-${groupId}`;
+        
+            groupDiv.appendChild(groupHeader);
+            groupDiv.appendChild(sessionListDiv);
+        
+            document.getElementById('session-groups').appendChild(groupDiv);
+        }
+        
+        function deleteGroupHandler(groupId) {
+            if (confirm('Are you sure you want to delete this group? Sessions will be preserved but ungrouped.')) {
+                fetch(`/delete-group?group_id=${groupId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Remove group from UI
+                        const groupElement = document.getElementById(`group-${groupId}`);
+                        if (groupElement) {
+                            // Move any sessions in this group to the new-chats container
+                            const sessions = groupElement.querySelectorAll('.session-button');
+                            const newChats = document.getElementById('new-chats');
+                            
+                            sessions.forEach(session => {
+                                newChats.appendChild(session);
+                            });
+                            
+                            // Remove the group container
+                            groupElement.remove();
+                        }
+                    } else {
+                        alert('Failed to delete group: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting group:', error);
+                    alert('Error deleting group');
+                });
+            }
+        }
+        
+        // Update renameGroup function to save changes to database
+        function renameGroup(element, groupId) {
+            const newName = element.textContent.trim();
+            if (!newName) {
+                element.textContent = 'Unnamed Group';
+            }
+            
+            // Save new name to database
+            fetch('/rename-group', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    group_id: groupId,
+                    group_name: newName || 'Unnamed Group'
+                })
+            })
+            .then(response => {
+                // Check if response is OK before trying to parse as JSON
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to rename group:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error renaming group:', error);
+                // Revert to previous name or notify user
+                alert('Failed to save group name. Please try again.');
+            });
+        }
+        
+        function toggleGroup(element) {
+            // Find the session list - different DOM structure now with the header
+            const groupHeader = element.parentElement;
+            const sessionList = groupHeader.nextElementSibling || element.nextElementSibling;
+            
+            if (sessionList && sessionList.classList.contains('session-list')) {
+                if (sessionList.style.display === "none") {
+                    sessionList.style.display = "block";
+                } else {
+                    sessionList.style.display = "none";
+                }
+            }
+        }
+        
+        // Update drag function to store the source group
+        function drag(event) {
+            const sessionId = event.target.id.replace('session-', '');
+            event.dataTransfer.setData("text", event.target.id);
+            event.dataTransfer.setData("sessionId", sessionId);
+        }
+        
+        // Update drop function to save the new group assignment
+        function drop(event) {
+            event.preventDefault();
+            const sessionButtonId = event.dataTransfer.getData("text");
+            const sessionId = event.dataTransfer.getData("sessionId");
+            const sessionButton = document.getElementById(sessionButtonId);
+            
+            // Find the target group
+            let targetGroup = event.target;
+            while (targetGroup && !targetGroup.classList.contains('session-list') && !targetGroup.classList.contains('session-group')) {
+                targetGroup = targetGroup.parentElement;
+            }
+            
+            if (!targetGroup) return;
+            
+            // If we dropped on the group div, find its session list
+            if (targetGroup.classList.contains('session-group')) {
+                targetGroup = targetGroup.querySelector('.session-list');
+            }
+            
+            if (!targetGroup) return;
+            
+            // Extract group ID from the session list ID
+            const groupId = targetGroup.id.replace('session-list-group-', '');
+            
+            // Move the session button to the target group's session list
+            targetGroup.appendChild(sessionButton);
+            
+            // Save the change to the database
+            fetch('/update-session-group', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    group_id: groupId === 'new-chats' ? null : groupId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to update session group:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating session group:', error);
+            });
+        }
+
+        
+        // Add function to load groups from server
+        async function loadGroups() {
+            try {
+                const response = await fetch('/groups');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Clear existing groups
+                    document.getElementById('session-groups').innerHTML = '';
+                    
+                    // Create groups in UI
+                    data.groups.forEach(group => {
+                        createGroupInUI(group.id, group.group_name);
+                    });
+                    
+                    // Load sessions after groups are loaded
+                    loadSessions();
+                } else {
+                    console.error('Failed to load groups:', data.message);
+                }
+            } catch (error) {
+                console.error('Error fetching groups:', error);
+            }
+        }
+        
+
+        function showPromptPopup(type) {
+            const popup = document.getElementById('prompt-popup');
+            const overlay = document.getElementById('popup-overlay');
+            const content = document.querySelector('#prompt-popup .popup-content');
+            let prompts = '';
+            // Add close button
+            const closeBtn = '<span class="close-button" onclick="hidePromptPopup()">×</span>';
+
+            if (type === 'research') {
+                prompts = `
+                    ${closeBtn}
+                    <h4>Research Prompts</h4>
+                    <ul>
+                        <li><button onclick="populateChatInput('Find me a highly cited reference about')">Find me a highly cited reference about ...</button></li>
+                        <li><button onclick="populateChatInput('What are the latest trends in')">What are the latest trends in ...?</button></li>
+                        <li><button onclick="populateChatInput('Provide a summary of recent studies on')">Provide a summary of recent studies on ...</button></li>
+                    </ul>
+                `;
+            } else if (type === 'editing') {
+                prompts = `
+                    ${closeBtn}
+                    <h4>Editing Prompts</h4>
+                    <ul>
+                        <li><button onclick="populateChatInput('Suggest tonal changes e.g. Avoid writing in the 1st person')">Suggest tonal changes e.g. Avoid writing in the 1st person...</button></li>
+                        <li><button onclick="populateChatInput('Check for grammatical errors in this text')">Check for grammatical errors in this text ...</button></li>
+                        <li><button onclick="populateChatInput('Improve the clarity of this paragraph')">Improve the clarity of this paragraph ...</button></li>
+                    </ul>
+                `;
+            } else if (type === 'drafting') {
+                prompts = `
+                    ${closeBtn}
+                    <h4>Drafting Prompts</h4>
+                    <ul>
+                        <li><button onclick="populateChatInput('Mark this essay against these specific criteria')">Mark this essay against these specific criteria ...</button></li>
+                        <li><button onclick="populateChatInput('Provide an outline for an essay on')">Provide an outline for an essay on ...</button></li>
+                        <li><button onclick="populateChatInput('Generate a draft introduction for a paper on')">Generate a draft introduction for a paper on ...</button></li>
+                    </ul>
+                `;
+            }
+
+            content.innerHTML = prompts;
+            popup.style.display = 'block';
+            overlay.classList.add('visible'); // Show overlay
+}
+
+function hidePromptPopup() {
+    const popup = document.getElementById('prompt-popup');
+    const overlay = document.getElementById('popup-overlay');
+    popup.style.display = 'none';
+    overlay.classList.remove('visible'); // Hide overlay
+}
+
+function showChatGPTReferencePopup() {
+    // Get today's date in the format: 22 May 2025
+    const now = new Date();
+    const day = now.getDate();
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const month = monthNames[now.getMonth()];
+    const year = now.getFullYear();
+    const formattedDate = `${day} ${month} ${year}`;
+    // Include dropped prompt inline following Jisc-style guidance
+    const droppedPrompt = (window.__lastDroppedPromptText || '').trim();
+    const safePrompt = droppedPrompt ? droppedPrompt.replace(/\s+/g, ' ').slice(0, 2000) : '';
+    const promptLine = droppedPrompt ? ` Response generated to the prompt: "${safePrompt}".` : '';
+    const reference = `OpenAI (2025) ChatGPT [AI language model].${promptLine} Available at: https://chat.openai.com/ (Accessed: ${formattedDate}).`;
+    document.getElementById('reference-content').textContent = reference;
+    const popup = document.getElementById('reference-popup');
+    popup.style.display = 'block';
+    const overlay = document.getElementById('popup-overlay');
+    overlay.classList.add('visible'); // Show overlay
+    // Automatically copy to clipboard
+    navigator.clipboard.writeText(reference).then(() => {
+        // Optionally, you could show a small message in the popup
+        // e.g. document.getElementById('reference-content').textContent += '\n(Copied to clipboard)';
+    }).catch(err => {
+        console.error('Error copying reference to clipboard:', err);
+    });
+
+    // Wire up copy/download image actions
+    setupReferenceImageActions();
+}
+
+function hideReferencePopup() {
+    const popup = document.getElementById('reference-popup');
+    popup.style.display = 'none';
+    const overlay = document.getElementById('popup-overlay');
+    overlay.classList.remove('visible'); // Hide overlay
+}
+
+// Attach the click event to the ChatGPT Reference button
+const chatgptRefBtn = document.querySelector('.create-reference-button');
+if (chatgptRefBtn) {
+    chatgptRefBtn.onclick = showChatGPTReferencePopup;
+    chatgptRefBtn.onmouseover = null;
+
+    // Enable drag-to-reference: drag any user prompt onto the button to include it in the citation
+    (function enablePromptDragToReference() {
+        const chatMessagesEl = document.getElementById('chat-messages');
+        if (!chatMessagesEl) return;
+
+        // Mark existing and future user messages draggable
+        function armDraggable(el) {
+            if (!el || el.__armedDrag) return;
+            el.__armedDrag = true;
+            el.setAttribute('draggable', 'true');
+            el.addEventListener('dragstart', (e) => {
+                const txt = (el.innerText || el.textContent || '').trim();
+                e.dataTransfer.setData('text/plain', txt);
+                e.dataTransfer.effectAllowed = 'copy';
+                window.__lastDraggedPromptElement = el; // for export pairing
+                // Create a custom drag image that matches the rounded blue bubble only
+                try {
+                    const rect = el.getBoundingClientRect();
+                    const cs = getComputedStyle(el);
+                    const ghost = el.cloneNode(true);
+                    // Ensure we only render the bubble, with no container fill
+                    Object.assign(ghost.style, {
+                        position: 'fixed',
+                        top: '0px',
+                        left: '0px',
+                        width: rect.width + 'px',
+                        height: rect.height + 'px',
+                        boxSizing: 'border-box',
+                        background: cs.backgroundColor || '#007bff',
+                        color: cs.color || '#fff',
+                        borderRadius: cs.borderRadius || '15px',
+                        padding: cs.padding || '10px',
+                        lineHeight: cs.lineHeight,
+                        font: cs.font,
+                        whiteSpace: 'pre-wrap',
+                        boxShadow: '0 6px 14px rgba(0,0,0,0.18)',
+                        pointerEvents: 'none',
+                        zIndex: 9999,
+                        opacity: '0.95',
+                        overflow: 'hidden',
+                        backgroundClip: 'padding-box'
+                    });
+                    document.body.appendChild(ghost);
+                    const offsetX = (e.clientX || 0) - rect.left;
+                    const offsetY = (e.clientY || 0) - rect.top;
+                    if (e.dataTransfer && e.dataTransfer.setDragImage) {
+                        e.dataTransfer.setDragImage(ghost, Math.max(0, Math.min(rect.width, offsetX)), Math.max(0, Math.min(rect.height, offsetY)));
+                    }
+                    // keep reference to remove later
+                    el.__dragGhost = ghost;
+                } catch (err) {
+                    // Fallback: ignore if setDragImage not available
+                    console.debug('Custom drag image setup skipped:', err);
+                }
+                // Highlight reference button as drop target
+                chatgptRefBtn.classList.add('drop-target');
+            });
+            el.addEventListener('dragend', () => {
+                chatgptRefBtn.classList.remove('drop-target');
+                if (el.__dragGhost) {
+                    try { el.__dragGhost.remove(); } catch(_) {}
+                    el.__dragGhost = null;
+                }
+            });
+        }
+        chatMessagesEl.querySelectorAll('.message.user').forEach(armDraggable);
+        const mo = new MutationObserver((muts) => {
+            muts.forEach(m => m.addedNodes.forEach(node => {
+                if (node instanceof HTMLElement) {
+                    if (node.matches && node.matches('.message.user')) armDraggable(node);
+                    node.querySelectorAll && node.querySelectorAll('.message.user').forEach(armDraggable);
+                }
+            }));
+        });
+        mo.observe(chatMessagesEl, { childList: true, subtree: true });
+
+        // Desktop DnD onto the reference button
+        chatgptRefBtn.addEventListener('dragenter', (e) => { e.preventDefault(); chatgptRefBtn.classList.add('drop-target'); });
+        chatgptRefBtn.addEventListener('dragover', (e) => { e.preventDefault(); chatgptRefBtn.classList.add('drop-target'); });
+        chatgptRefBtn.addEventListener('dragleave', () => chatgptRefBtn.classList.remove('drop-target'));
+        chatgptRefBtn.addEventListener('drop', (e) => {
+            e.preventDefault();
+            chatgptRefBtn.classList.remove('drop-target');
+            const txt = e.dataTransfer.getData('text/plain');
+            if (txt) {
+                window.__lastDroppedPromptText = txt;
+                showChatGPTReferencePopup();
+            }
+        });
+
+        // Mobile: long-press pseudo-drag from a user message
+        let touchState = { active: false, el: null, ghost: null };
+        let longPressTimer = null;
+        function startTouchDrag(el, touch) {
+            touchState.active = true; touchState.el = el;
+            const ghost = document.createElement('div');
+            ghost.textContent = 'Drag to Reference';
+            Object.assign(ghost.style, {
+                position: 'fixed', left: touch.clientX + 'px', top: touch.clientY + 'px',
+                transform: 'translate(-50%, -150%)', background: '#2d8cff', color: '#fff',
+                padding: '6px 10px', borderRadius: '6px', fontSize: '12px', zIndex: 9999
+            });
+            document.body.appendChild(ghost); touchState.ghost = ghost;
+        }
+        function endTouchDrag(touch) {
+            if (!touchState.active) return;
+            const rect = chatgptRefBtn.getBoundingClientRect();
+            const x = touch.clientX, y = touch.clientY;
+            if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                const txt = (touchState.el.innerText || touchState.el.textContent || '').trim();
+                window.__lastDroppedPromptText = txt; window.__lastDraggedPromptElement = touchState.el;
+                showChatGPTReferencePopup();
+            }
+            if (touchState.ghost) touchState.ghost.remove();
+            touchState = { active: false, el: null, ghost: null };
+            chatgptRefBtn.classList.remove('drop-target');
+        }
+        chatMessagesEl.addEventListener('touchstart', (e) => {
+            const msg = e.target.closest && e.target.closest('.message.user');
+            if (!msg) return;
+            if (longPressTimer) clearTimeout(longPressTimer);
+            const t = e.touches[0];
+            longPressTimer = setTimeout(() => startTouchDrag(msg, t), 350);
+        }, { passive: true });
+        chatMessagesEl.addEventListener('touchmove', (e) => {
+            if (!touchState.active || !touchState.ghost) return;
+            const t = e.touches[0];
+            touchState.ghost.style.left = t.clientX + 'px';
+            touchState.ghost.style.top = t.clientY + 'px';
+            // Toggle drop target highlighting when finger is over the button
+            const rect = chatgptRefBtn.getBoundingClientRect();
+            const over = (t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom);
+            chatgptRefBtn.classList.toggle('drop-target', over);
+        }, { passive: true });
+        chatMessagesEl.addEventListener('touchend', (e) => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+            const t = e.changedTouches && e.changedTouches[0];
+            if (t) endTouchDrag(t);
+        });
+        chatMessagesEl.addEventListener('touchcancel', () => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+            if (touchState.ghost) touchState.ghost.remove();
+            touchState = { active: false, el: null, ghost: null };
+            chatgptRefBtn.classList.remove('drop-target');
+        });
+    })();
+
+    // Add export screenshot button next to reference button
+    (function addExportButton() {
+        const parent = chatgptRefBtn.parentElement;
+        if (!parent || document.querySelector('.export-screenshot-button')) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'export-screenshot-button';
+        btn.textContent = 'Export prompt + AI as image';
+        btn.style.marginLeft = '8px';
+        parent.appendChild(btn);
+
+        function findPairFromPromptEl(promptEl) {
+            if (!promptEl) return null;
+            let ai = promptEl.nextElementSibling;
+            while (ai && !(ai.classList && ai.classList.contains('assistant'))) ai = ai.nextElementSibling;
+            if (!ai) ai = document.querySelector('#chat-messages .message.assistant:last-of-type');
+            return ai ? { promptEl, assistantEl: ai } : null;
+        }
+        function findDefaultPair() {
+            const ai = document.querySelector('#chat-messages .message.assistant:last-of-type');
+            if (!ai) return null;
+            let user = ai.previousElementSibling;
+            while (user && !(user.classList && user.classList.contains('user'))) user = user.previousElementSibling;
+            return user ? { promptEl: user, assistantEl: ai } : null;
+        }
+        function buildCaptureContainer(pair) {
+            const wrap = document.createElement('div');
+            Object.assign(wrap.style, {
+                maxWidth: '760px', padding: '16px', background: '#ffffff', color: '#111827',
+                fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+                border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 6px 18px rgba(0,0,0,0.08)'
+            });
+            const h = document.createElement('div'); h.textContent = 'Chat excerpt'; h.style.fontWeight = '600'; h.style.marginBottom = '12px'; wrap.appendChild(h);
+            const p = pair.promptEl.cloneNode(true); const a = pair.assistantEl.cloneNode(true);
+            // Match chat user bubble styling (blue background, white text)
+            p.style.background = '#007bff';
+            p.style.color = '#ffffff';
+            p.style.textAlign = 'right';
+            p.style.marginLeft = 'auto';
+            // Match chat assistant bubble styling (light grey background)
+            a.style.background = '#f1f1f1';
+            a.style.color = '#000000';
+            a.style.width = '100%';
+            // Match chat bubble radii
+            p.style.borderRadius = '15px'; a.style.borderRadius = '15px';
+            p.style.padding = '10px 12px'; a.style.padding = '10px 12px';
+            p.style.marginBottom = '8px';
+            p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove());
+            a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove());
+            wrap.appendChild(p); wrap.appendChild(a);
+            return wrap;
+        }
+        async function capture(el, filename = 'chat-snippet.png') {
+            if (!window.html2canvas) { alert('Preparing image export... please try again in a moment.'); return; }
+            await new Promise(r => setTimeout(r, 50));
+            const canvas = await window.html2canvas(el, { backgroundColor: '#ffffff', scale: window.devicePixelRatio || 2 });
+            const a = document.createElement('a'); a.download = filename; a.href = canvas.toDataURL('image/png');
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+        // Fan overlay logic
+        function openExportFan() {
+            const overlayId = 'export-fan-overlay';
+            let overlay = document.getElementById(overlayId);
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = overlayId; overlay.className = 'export-fan-overlay';
+                const origin = document.createElement('div'); origin.className = 'export-fan-origin';
+                const itemsWrap = document.createElement('div'); itemsWrap.className = 'export-fan-items';
+                origin.appendChild(itemsWrap); overlay.appendChild(origin); document.body.appendChild(overlay);
+            }
+
+            // Make overlay visible before laying out items so animations run
+            overlay.classList.add('visible');
+
+            // Position the origin at the export button's bottom-right corner
+            const originEl = overlay.querySelector('.export-fan-origin');
+            if (originEl && btn && btn.getBoundingClientRect) {
+                const r = btn.getBoundingClientRect();
+                const left = Math.round(r.right + window.scrollX);
+                const top = Math.round(r.bottom + window.scrollY);
+                originEl.style.left = `${left}px`;
+                originEl.style.top = `${top}px`;
+                originEl.style.right = 'auto';
+                originEl.style.bottom = 'auto';
+            }
+
+            // Collect recent user prompts (cap to last 10)
+            const allUsers = Array.from(document.querySelectorAll('#chat-messages .message.user'));
+            if (!allUsers.length) { alert('No user prompts found in this chat.'); return; }
+            const users = allUsers.slice(-10);
+
+            const itemsWrap = overlay.querySelector('.export-fan-items');
+            itemsWrap.innerHTML = '';
+
+            // Layout in an arc from 20deg to 70deg (above the origin) relative to bottom-right origin
+            const N = users.length;
+            const start = 20, end = 70; // degrees (upwards arc)
+            const radius = Math.min(260, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.33));
+            users.forEach((u, i) => {
+                const angle = (N === 1) ? ((start + end) / 2) : start + (end - start) * (i / (N - 1));
+                const rad = angle * Math.PI / 180;
+                const dx = Math.cos(rad) * radius;
+                const dy = Math.sin(rad) * radius;
+                const item = document.createElement('div');
+                item.className = 'export-fan-item';
+                const text = (u.innerText || u.textContent || '').trim().replace(/\s+/g, ' ');
+                item.innerHTML = `<div class="snippet">${text}</div>`;
+                // initial off-state near origin, then animate out
+                const rot = Math.max(-12, Math.min(12, (angle - 45) * 0.4));
+                item.style.transform = `translate(${-8}px, ${-8}px) rotate(${rot}deg)`;
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        item.style.opacity = '1';
+                        item.style.transform = `translate(${-dx}px, ${-dy}px) rotate(${rot}deg)`;
+                    });
+                });
+                // Click -> export this pair
+                item.addEventListener('click', async (ev) => {
+                    ev.stopPropagation();
+                    const pair = findPairFromPromptEl(u) || findDefaultPair();
+                    if (!pair) return;
+                    const cont = buildCaptureContainer(pair);
+                    cont.style.position = 'fixed'; cont.style.left = '-10000px'; cont.style.top = '0';
+                    document.body.appendChild(cont);
+                    try { await capture(cont); } finally { cont.remove(); }
+                    overlay.classList.remove('visible');
+                });
+                itemsWrap.appendChild(item);
+            });
+
+            // Click outside to dismiss, ignore clicks on items
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) overlay.classList.remove('visible');
+            });
+            // Escape to dismiss
+            function onKey(e){ if(e.key === 'Escape'){ overlay.classList.remove('visible'); document.removeEventListener('keydown', onKey);} }
+            document.addEventListener('keydown', onKey);
+            // already visible above
+        }
+
+        btn.addEventListener('click', openExportFan);
+    })();
+}
+
+// Helpers for reference popup image actions (copy/download)
+function setupReferenceImageActions() {
+    const copyBtn = document.getElementById('copy-image-btn');
+    const dlBtn = document.getElementById('download-image-btn');
+    if (!copyBtn || !dlBtn) return;
+
+    // Build the same pair and container used by the export button
+    function findPairFromPromptEl(promptEl) {
+        if (!promptEl) return null;
+        let ai = promptEl.nextElementSibling;
+        while (ai && !(ai.classList && ai.classList.contains('assistant'))) ai = ai.nextElementSibling;
+        if (!ai) ai = document.querySelector('#chat-messages .message.assistant:last-of-type');
+        return ai ? { promptEl, assistantEl: ai } : null;
+    }
+    function findDefaultPair() {
+        const ai = document.querySelector('#chat-messages .message.assistant:last-of-type');
+        if (!ai) return null;
+        let user = ai.previousElementSibling;
+        while (user && !(user.classList && user.classList.contains('user'))) user = user.previousElementSibling;
+        return user ? { promptEl: user, assistantEl: ai } : null;
+    }
+    function buildCaptureContainer(pair) {
+        const wrap = document.createElement('div');
+        Object.assign(wrap.style, {
+            maxWidth: '760px', padding: '16px', background: '#ffffff', color: '#111827',
+            fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+            border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 6px 18px rgba(0,0,0,0.08)'
+        });
+        const h = document.createElement('div'); h.textContent = 'Chat excerpt'; h.style.fontWeight = '600'; h.style.marginBottom = '12px'; wrap.appendChild(h);
+        const p = pair.promptEl.cloneNode(true); const a = pair.assistantEl.cloneNode(true);
+        // Match chat user bubble styling (blue background, white text)
+        p.style.background = '#007bff';
+        p.style.color = '#ffffff';
+        p.style.textAlign = 'right';
+        p.style.marginLeft = 'auto';
+    // Match chat assistant bubble styling (light grey background)
+    a.style.background = '#f1f1f1';
+        a.style.color = '#000000';
+    a.style.width = '100%';
+        // Match chat bubble radii
+        p.style.borderRadius = '15px'; a.style.borderRadius = '15px';
+        p.style.padding = '10px 12px'; a.style.padding = '10px 12px';
+        p.style.marginBottom = '8px';
+        p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove());
+        a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove());
+        wrap.appendChild(p); wrap.appendChild(a);
+        return wrap;
+    }
+    async function renderImageCanvas(container) {
+        if (!window.html2canvas) throw new Error('html2canvas not loaded');
+        await new Promise(r => setTimeout(r, 50));
+        return await window.html2canvas(container, { backgroundColor: '#ffffff', scale: window.devicePixelRatio || 2 });
+    }
+
+    async function copyImageFlow() {
+        try {
+            const pair = findPairFromPromptEl(window.__lastDraggedPromptElement) || findDefaultPair();
+            if (!pair) return alert('Could not find a user prompt and assistant reply to export.');
+            const cont = buildCaptureContainer(pair);
+            cont.style.position = 'fixed'; cont.style.left = '-10000px'; cont.style.top = '0';
+            document.body.appendChild(cont);
+            try {
+                const canvas = await renderImageCanvas(cont);
+                const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+                const item = new ClipboardItem({ 'image/png': blob });
+                await navigator.clipboard.write([item]);
+                // Optional toast/notice could be placed into the popup
+            } finally {
+                cont.remove();
+            }
+        } catch (e) {
+            console.error('Copy image failed, falling back to download:', e);
+            await downloadImageFlow();
+        }
+    }
+    async function downloadImageFlow() {
+        try {
+            const pair = findPairFromPromptEl(window.__lastDraggedPromptElement) || findDefaultPair();
+            if (!pair) return alert('Could not find a user prompt and assistant reply to export.');
+            const cont = buildCaptureContainer(pair);
+            cont.style.position = 'fixed'; cont.style.left = '-10000px'; cont.style.top = '0';
+            document.body.appendChild(cont);
+            try {
+                const canvas = await renderImageCanvas(cont);
+                const a = document.createElement('a');
+                a.download = 'chat-snippet.png';
+                a.href = canvas.toDataURL('image/png');
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } finally { cont.remove(); }
+        } catch (e) {
+            console.error('Download image failed:', e);
+            alert('Unable to create image. Please try again.');
+        }
+    }
+
+    copyBtn.onclick = copyImageFlow;
+    dlBtn.onclick = downloadImageFlow;
+}
+        function togglePromptButtons() {
+            const button = document.querySelector('.prompt-examples-button');
+            const promptButtons = document.querySelector('.prompt-buttons');
+            button.classList.toggle('active');
+            promptButtons.style.display = button.classList.contains('active') ? 'flex' : 'none';
+
+            // Position the prompt buttons right next to the right-hand side of the prompt-examples-button
+            const buttonRect = button.getBoundingClientRect();
+            promptButtons.style.position = 'fixed';
+            promptButtons.style.left = `${buttonRect.right}px`;
+            promptButtons.style.top = `${buttonRect.top}px`;
+        }
+
+        // Hide prompt buttons when clicking outside or resizing the window
+        document.addEventListener('click', (event) => {
+            const button = document.querySelector('.prompt-examples-button');
+            const promptButtons = document.querySelector('.prompt-buttons');
+            if (!button.contains(event.target) && !promptButtons.contains(event.target)) {
+                promptButtons.style.display = 'none';
+                button.classList.remove('active');
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            const button = document.querySelector('.prompt-examples-button');
+            const promptButtons = document.querySelector('.prompt-buttons');
+            promptButtons.style.display = 'none';
+            button.classList.remove('active');
+        });
+
+        function highlightCurrentSession(sessionId) {
+            document.querySelectorAll('.session-button').forEach(button => {
+                if (button.id === `session-${sessionId}`) {
+                    button.classList.add('active-session');
+                } else {
+                    button.classList.remove('active-session');
+                }
+            });
+        }
+
+        // Add event listener to close popups when clicking outside the popup content
+const popupOverlay = document.getElementById('popup-overlay');
+if (popupOverlay) {
+    popupOverlay.addEventListener('click', function (e) {
+        // Hide both popups if overlay is clicked
+        hidePromptPopup();
+        hideReferencePopup();
+    });
+}
+// Also close prompt popup if clicking outside the popup-content
+const promptPopup = document.getElementById('prompt-popup');
+if (promptPopup) {
+    // Close prompt popup if clicking outside the popup-content
+    promptPopup.addEventListener('click', function (e) {
+        if (e.target === promptPopup) {
+            hidePromptPopup();
+        }
+    });
+    // Also close prompt popup if clicking the close button (even if it uses hideReferencePopup)
+    promptPopup.addEventListener('click', function (e) {
+        if (e.target.classList.contains('close-button')) {
+            hidePromptPopup();
+        }
+    });
+}
+// Also close reference popup if clicking outside the popup (for consistency)
+const referencePopup = document.getElementById('reference-popup');
+if (referencePopup) {
+    referencePopup.addEventListener('click', function (e) {
+        if (e.target === referencePopup) {
+            hideReferencePopup();
+        }
+    });
+}
+
+// New code for assistant message editing
+document.addEventListener('DOMContentLoaded', function() {
+        const chatMessages = document.getElementById('chat-messages');
+        const sidebar = document.querySelector('.sidebar');
+        const chatContainer = document.querySelector('.chat-container');
+        const metaContainer = document.querySelector('.meta-container');
+
+        function buildToolbar(assistantMsg) {
+            if (assistantMsg.querySelector('.assistant-edit-toolbar')) return;
+            const toolbar = document.createElement('div');
+            toolbar.className = 'assistant-edit-toolbar';
+            toolbar.innerHTML = `
+                <button data-cmd="bold" title="Bold (Ctrl/Cmd+B)"><strong>B</strong></button>
+                <button data-cmd="italic" title="Italic (Ctrl/Cmd+I)"><em>I</em></button>
+                <button data-cmd="underline" title="Underline (Ctrl/Cmd+U)" style="text-decoration:underline;">U</button>
+                <button data-cmd="insertUnorderedList" title="Bullet List">• List</button>
+                <button data-cmd="insertOrderedList" title="Numbered List">1. List</button>
+                <button data-cmd="formatBlock" data-value="BLOCKQUOTE" title="Block Quote">❝</button>
+                <div class="spacer"></div>
+                <button data-cmd="undo" title="Undo">↶</button>
+                <button data-cmd="redo" title="Redo">↷</button>
+                <button data-cmd="removeFormat" title="Clear Formatting">✕</button>
+            `;
+            toolbar.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-cmd]');
+                if (!btn) return;
+                e.preventDefault();
+                const cmd = btn.dataset.cmd;
+                const val = btn.dataset.value || (cmd === 'formatBlock' ? 'div' : undefined);
+                try { document.execCommand(cmd, false, val); } catch (_) {}
+            });
+            assistantMsg.appendChild(toolbar);
+        }
+
+        function waitForOverlayDismiss(assistantMsg) {
+            const overlay = assistantMsg.querySelector('.message-assistant-overlay');
+            if (!overlay) { buildToolbar(assistantMsg); return null; }
+            const obs = new MutationObserver(() => {
+                if (!assistantMsg.querySelector('.message-assistant-overlay')) {
+                    buildToolbar(assistantMsg);
+                    obs.disconnect();
+                }
+            });
+            obs.observe(assistantMsg, { childList: true, subtree: true });
+            return obs;
+        }
+
+        chatMessages.addEventListener('click', function(e) {
+            const assistantMsg = e.target.closest('.message.assistant');
+            if (assistantMsg && !assistantMsg.classList.contains('assistant-edit-mode')) {
+                // Hide sidebar with animation
+                if (sidebar) sidebar.classList.add('hide-sidebar');
+                if (chatContainer) chatContainer.classList.add('expand-chat-area');
+                if (metaContainer) metaContainer.classList.add('expand-meta-container');
+                // Hide all user messages
+                chatMessages.querySelectorAll('.message.user').forEach(msg => msg.classList.add('hide-user-message'));
+                // Expand assistant message
+                assistantMsg.classList.add('assistant-edit-mode');
+                // Add close button if not present
+                if (!assistantMsg.querySelector('.assistant-edit-close')) {
+                    const closeBtn = document.createElement('button');
+                    closeBtn.className = 'assistant-edit-close';
+                    closeBtn.innerHTML = '&times;';
+                    closeBtn.title = 'Close editor';
+                    closeBtn.onclick = function(ev) {
+                        ev.stopPropagation();
+                        // Restore UI
+                        assistantMsg.classList.remove('assistant-edit-mode');
+                        if (sidebar) sidebar.classList.remove('hide-sidebar');
+                        if (chatContainer) chatContainer.classList.remove('expand-chat-area');
+                        if (metaContainer) metaContainer.classList.remove('expand-meta-container');
+                        chatMessages.querySelectorAll('.message.user').forEach(msg => msg.classList.remove('hide-user-message'));
+                        // Remove contenteditable
+                        const contentDiv = assistantMsg.querySelector('.message-content');
+                        if (contentDiv) {
+                            contentDiv.contentEditable = 'false';
+                            contentDiv.classList.remove('assistant-editable-content');
+                        }
+                        const toolbar = assistantMsg.querySelector('.assistant-edit-toolbar');
+                        if (toolbar) toolbar.remove();
+                        if (assistantMsg._toolbarObserver) { assistantMsg._toolbarObserver.disconnect(); delete assistantMsg._toolbarObserver; }
+                        closeBtn.remove();
+                    };
+                    assistantMsg.insertBefore(closeBtn, assistantMsg.firstChild);
+                }
+                // Make message-content editable
+                const contentDiv = assistantMsg.querySelector('.message-content');
+                if (contentDiv) {
+                    contentDiv.contentEditable = 'true';
+                    contentDiv.classList.add('assistant-editable-content');
+                    contentDiv.focus();
+                }
+                assistantMsg._toolbarObserver = waitForOverlayDismiss(assistantMsg);
+                // Compute dynamic height so bottom aligns above AI assessment scale
+                requestAnimationFrame(() => {
+                    const scale = document.querySelector('.ai-assessment-scale');
+                    const header = document.getElementById('header');
+                    if (scale && header) {
+                        const scaleTop = scale.getBoundingClientRect().top;
+                        const viewportTop = 0; // since position fixed relative to viewport
+                        const desired = scaleTop - 8; // small gap
+                        document.documentElement.style.setProperty('--assistant-edit-height', desired + 'px');
+                    } else {
+                        // fallback:  full viewport minus 140px heuristic
+                        document.documentElement.style.setProperty('--assistant-edit-height', 'calc(100vh - 140px)');
+                    }
+                });
+                // Remove any textarea or edit actions if present
+                const textarea = assistantMsg.querySelector('.assistant-edit-textarea');
+                if (textarea) textarea.remove();
+                const actions = assistantMsg.querySelector('.assistant-edit-actions');
+                if (actions) actions.remove();
+            }
+        });
+
+        // Keyboard shortcuts for formatting while in edit mode
+        document.addEventListener('keydown', (e) => {
+            const activeEditable = document.querySelector('.assistant-edit-mode .assistant-editable-content');
+            if (!activeEditable) return;
+            if ((e.metaKey || e.ctrlKey) && ['b','i','u'].includes(e.key.toLowerCase())) {
+                e.preventDefault();
+                const map = { b: 'bold', i: 'italic', u: 'underline' };
+                document.execCommand(map[e.key.toLowerCase()], false, null);
+            }
+        });
+
+        // Recalculate edit height on resize if in edit mode
+        window.addEventListener('resize', () => {
+            const active = document.querySelector('.assistant-edit-mode');
+            if (!active) return;
+            const scale = document.querySelector('.ai-assessment-scale');
+            if (scale) {
+                const scaleTop = scale.getBoundingClientRect().top;
+                document.documentElement.style.setProperty('--assistant-edit-height', (scaleTop - 8) + 'px');
+            }
+        });
+    });
+    </script>
+</body>
+</html>
