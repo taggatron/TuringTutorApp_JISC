@@ -366,10 +366,12 @@
                                     <button class="close-overlay-btn" title="Remove warning">&times;</button>
                                 `;
                                 overlay.addEventListener('click', function(e) {
-                                    if (e.target.classList.contains('close-overlay-btn') || e.target === overlay) {
-                                        overlay.remove();
-                                    }
+                                    // Dismiss overlay on any click inside it and prevent bubbling to edit-mode handler
+                                    e.stopPropagation();
+                                    overlay.remove();
                                 });
+                                // Lock this assistant message from entering edit mode permanently
+                                lastAssistant.classList.add('edit-locked');
                                 lastAssistant.appendChild(overlay);
                                 break; // Only add overlay to the most recent assistant message
                             }
@@ -618,10 +620,17 @@ async function isLastAssistantMessageDB(messageId, sessionId) {
                     <span>Copying or directly using this response breaches academic integrity guidelines</span>
                     <button class="close-overlay-btn" title="Remove warning">&times;</button>`;
                 overlay.addEventListener('click', function(e){
-                    if (e.target.classList.contains('close-overlay-btn') || e.target === overlay) {
-                        overlay.style.display = 'none';
+                    // Hide overlay on any click and prevent bubbling to outer handlers
+                    e.stopPropagation();
+                    overlay.style.display = 'none';
+                    const contentDiv = targetAssistant.querySelector('.message-content');
+                    if (contentDiv) {
+                        contentDiv.style.opacity = '1';
+                        contentDiv.style.pointerEvents = 'auto';
                     }
                 });
+                // Permanently lock this assistant message from edit mode
+                targetAssistant.classList.add('edit-locked');
             }
             // Persist feedback server-side; include message_id if known
             saveFeedbackToServer(feedback, targetAssistant.dataset.messageId || messageId || null);
@@ -668,6 +677,9 @@ async function loadChatHistory(messages) {
             row.className = 'message-row';
             const messageElement = document.createElement('div');
             messageElement.classList.add('message', 'assistant');
+            if (feedbackByMessageId.has(String(msg.message_id))) {
+                messageElement.classList.add('edit-locked');
+            }
             messageElement.dataset.messageId = msg.message_id;
             messageElement.innerHTML = `<div class="message-content">${(msg.content||'').replace(/\n/g,'<br>')}</div><div class="message-assistant-overlay" style="display:${feedbackByMessageId.has(String(msg.message_id)) ? 'flex':'none'}"></div>`;
             row.appendChild(messageElement);
@@ -808,6 +820,9 @@ async function loadChatHistory(messages) {
                     } else if (msg.role === 'assistant') {
                         const assistantMessageDiv = document.createElement('div');
                         assistantMessageDiv.className = 'message assistant with-feedback';
+                        if (messagesWithFeedback.has(String(msg.message_id))) {
+                            assistantMessageDiv.classList.add('edit-locked');
+                        }
                         assistantMessageDiv.dataset.messageId = msg.message_id;
                         assistantMessageDiv.innerHTML = `
                             <div class=\"message-content\" style=\"${messagesWithFeedback.has(String(msg.message_id)) ? 'opacity:0.3;pointer-events:none;' : ''}\">${msg.content.replace(/\n/g, '<br>')}</div>
@@ -817,7 +832,16 @@ async function loadChatHistory(messages) {
                 const closeBtn = assistantMessageDiv.querySelector('.close-overlay-btn');
                 const contentDiv = assistantMessageDiv.querySelector('.message-content');
                 if (closeBtn && overlay && contentDiv) {
+                    // Close button: hide overlay, restore content, and prevent bubbling
                     closeBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        overlay.style.display = 'none';
+                        contentDiv.style.opacity = '1';
+                        contentDiv.style.pointerEvents = 'auto';
+                    });
+                    // Clicking anywhere on overlay should dismiss it too and not open edit mode
+                    overlay.addEventListener('click', function(e){
+                        e.stopPropagation();
                         overlay.style.display = 'none';
                         contentDiv.style.opacity = '1';
                         contentDiv.style.pointerEvents = 'auto';
@@ -2088,6 +2112,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const metaContainer = document.querySelector('.meta-container');
 
         function buildToolbar(assistantMsg) {
+            if (assistantMsg.classList.contains('edit-locked')) return; // do not show toolbar for locked messages
             if (assistantMsg.querySelector('.assistant-edit-toolbar')) return;
             const toolbar = document.createElement('div');
             toolbar.className = 'assistant-edit-toolbar';
@@ -2115,6 +2140,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         function waitForOverlayDismiss(assistantMsg) {
+            if (assistantMsg.classList.contains('edit-locked')) return null; // no toolbar for locked
             const overlay = assistantMsg.querySelector('.message-assistant-overlay');
             if (!overlay) { buildToolbar(assistantMsg); return null; }
             const obs = new MutationObserver(() => {
@@ -2128,8 +2154,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         chatMessages.addEventListener('click', function(e) {
+            // If click originated on the academic-integrity overlay, just ignore here
+            if (e.target.closest('.message-assistant-overlay') || e.target.classList?.contains('close-overlay-btn')) {
+                // overlay handlers will stopPropagation and remove/hide themselves
+                return;
+            }
             const assistantMsg = e.target.closest('.message.assistant');
             if (assistantMsg && !assistantMsg.classList.contains('assistant-edit-mode')) {
+                if (assistantMsg.classList.contains('edit-locked')) {
+                    // Locked message: never enter edit mode
+                    return;
+                }
                 // Hide sidebar with animation
                 if (sidebar) sidebar.classList.add('hide-sidebar');
                 if (chatContainer) chatContainer.classList.add('expand-chat-area');
