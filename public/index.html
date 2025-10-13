@@ -1804,8 +1804,8 @@ if (chatgptRefBtn) {
                     // Ensure we only render the bubble, with no container fill
                     Object.assign(ghost.style, {
                         position: 'fixed',
-                        top: '0px',
-                        left: '0px',
+                        top: '-10000px',
+                        left: '-10000px',
                         width: rect.width + 'px',
                         height: rect.height + 'px',
                         boxSizing: 'border-box',
@@ -1819,7 +1819,7 @@ if (chatgptRefBtn) {
                         boxShadow: '0 6px 14px rgba(0,0,0,0.18)',
                         pointerEvents: 'none',
                         zIndex: 9999,
-                        opacity: '0.95',
+                        opacity: '1',
                         overflow: 'hidden',
                         backgroundClip: 'padding-box'
                     });
