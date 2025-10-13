@@ -214,6 +214,20 @@ body {
     box-sizing: border-box;
 }
 
+/* Subtle lock indicator for integrity-locked assistant messages */
+.message.assistant.edit-locked::after {
+    content: '🔒';
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    font-size: 14px;
+    opacity: 0.7;
+    z-index: 12; /* above .message-assistant-overlay (z-index:10) */
+    pointer-events: none; /* don’t block clicks */
+}
+/* extra padding so content doesn't collide with lock */
+.message.assistant.edit-locked { padding-right: 26px; }
+
 /* Row wrapper to align assistant and feedback side-by-side */
 .message-row {
     display: grid;
