@@ -15,7 +15,9 @@ const openai = new OpenAI({
 const app = express();
 const port = 3000;
 
-app.use(express.json());
+// Allow large HTML payloads that include base64-encoded images from Turing Mode
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(cookieParser());
 
 function checkAuth(req, res, next) {
@@ -287,6 +289,7 @@ app.post('/save-feedback', (req, res) => {
 app.post('/update-message', (req, res) => {
     const { message_id, content } = req.body;
     if (!message_id) return res.json({ success: false, message: 'message_id required' });
+    // Save raw content (may include HTML to preserve images/formatting)
     updateMessageContent(message_id, content ?? '', (err) => {
         if (err) return res.json({ success: false, message: 'Could not update message' });
         res.json({ success: true });

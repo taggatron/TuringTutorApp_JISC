@@ -159,13 +159,26 @@
         }
 
         /* Turing Mode styles */
+        /* Make the header buttons share equal horizontal space */
+        .sidebar-header { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         .turing-mode-button { 
-            border: 1px solid #cfd6dd; background:#fff; color:#2d3e50; border-radius:6px; padding:6px 10px; margin-right:6px; cursor:pointer;
+            border: 1px solid #86efac; /* light green border */
+            background:#a7f3d0; /* light green background */
+            color:#fff;
+            border-radius:5px; padding:5px; cursor:pointer;
+            display:flex; align-items:center; justify-content:center; gap:6px; width:100%; height:38px;
+            transition: background-color 0.15s ease, box-shadow 0.15s ease;
         }
-        .turing-session { background:#eaffea; border-left:4px solid #22c55e; display:flex; align-items:center; gap:6px; }
+        .turing-mode-button:hover { background:#86efac; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+        .turing-mode-button:active { background:#6ee7b7; }
+        .turing-mode-button img.turing-mode-icon { display:block; width:22px; height:22px; object-fit:contain; filter: drop-shadow(0 0 0 rgba(0,0,0,0)); }
+        .turing-mode-button .plus { color:#fff; font-weight:700; font-size:20px; line-height:1; display:inline-block; }
+    .turing-session { background:#eaffea; border-left:4px solid #22c55e; display:flex; align-items:center; gap:6px; }
         .turing-session .turing-name { outline:none; display:inline-block; }
         .sidebar-section-title { margin: 8px 0 6px; font-size: 14px; color:#374151; }
         #turing-mode-container { margin-bottom: 8px; display:flex; flex-direction:column; gap:6px; }
+    /* Reusable icon size for Turing logos in sidebar items */
+    img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inline-block; }
     </style>
 </head>
 <body>
@@ -175,7 +188,10 @@
     <div class="container">
         <div class="sidebar">
             <div class="sidebar-header">
-                <button class="turing-mode-button" id="turing-mode-button" title="Start Turing Mode (editor)" onclick="startTuringMode()">⌨️</button>
+                <button class="turing-mode-button" id="turing-mode-button" title="Start Turing Mode (editor)" aria-label="Start Turing Mode" onclick="startTuringMode()">
+                    <span class="plus">+</span>
+                    <img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt="">
+                </button>
                 <button class="new-chat-button" id="new-chat-button" onclick="startNewChat()">+ 💬</button>
                 <button class="new-group-button" id="new-group-button" onclick="createNewGroup()">+ 📁</button>
             </div>
@@ -761,7 +777,7 @@ async function loadChatHistory(messages) {
                             btn.className = 'session-button turing-session';
                             const name = session.session_name || 'Turing Mode';
                             btn.id = `session-${session.id}`;
-                            btn.innerHTML = `⌨️ <span class="turing-name" contenteditable="true">${name}</span>`;
+                            btn.innerHTML = `<img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt=""> <span class=\"turing-name\" contenteditable=\"true\">${name}</span>`;
                             btn.onclick = () => {
                                 loadSessionHistory(session.id).then(() => {
                                     highlightCurrentSession(session.id);
@@ -901,9 +917,25 @@ async function loadChatHistory(messages) {
                         assistantMessageDiv.dataset.messageId = msg.message_id;
                         const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
                         if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
+                        const __isHtml = /<\w+[\s\S]*?>[\s\S]*<\/\w+>/i.test(msg.content || '');
                         assistantMessageDiv.innerHTML = `
-                            <div class=\"message-content\">${msg.content.replace(/\n/g, '<br>')}</div>
+                            <div class=\"message-content\">${__isHtml ? (msg.content || '') : (msg.content || '').replace(/\n/g, '<br>')}</div>
                             <div class=\"message-assistant-overlay\" style=\"${showOverlay ? 'display:flex;' : 'display:none;'}\">\n                                <span>Copying or directly using this response breaches academic integrity guidelines</span>\n                                <button class=\"close-overlay-btn\" type=\"button\">×</button>\n                            </div>\n                        `;
+                // If content contains recognizable section headings, tag them for dedupe later
+                const contentDiv2 = assistantMessageDiv.querySelector('.message-content');
+                if (contentDiv2) {
+                    const walker = document.createTreeWalker(contentDiv2, NodeFilter.SHOW_ELEMENT, null);
+                    while (walker.nextNode()) {
+                        const n = walker.currentNode;
+                        const t = (n.textContent || '').trim().toLowerCase();
+                        if (!n.getAttribute) continue;
+                        if (!n.getAttribute('data-section') && (t === 'references' || t.startsWith('references'))) {
+                            n.setAttribute('data-section', 'references');
+                        } else if (!n.getAttribute('data-section') && (t === 'prompts' || t.startsWith('prompts'))) {
+                            n.setAttribute('data-section', 'prompts');
+                        }
+                    }
+                }
                 // Add close button event listener
                 const overlay = assistantMessageDiv.querySelector('.message-assistant-overlay');
                 const closeBtn = assistantMessageDiv.querySelector('.close-overlay-btn');
@@ -2132,39 +2164,95 @@ async function turingInsertReferenceAndPromptImage(editableEl, promptText, promp
             document.head.appendChild(s);
         });
     }
-    // 1) Ensure References section exists (or Citations/Bibliography), then append reference line
-    const headingSelectors = ['References','Citations','Bibliography'];
-    let refHeading = Array.from(editableEl.querySelectorAll('strong, b, h1, h2, h3, h4, h5, h6, p'))
-        .find(n => headingSelectors.some(h => (n.textContent || '').trim().toLowerCase().startsWith(h.toLowerCase())));
-    if (!refHeading) {
-        const p = document.createElement('p');
-        const strong = document.createElement('strong');
-        strong.textContent = 'References ';
-        p.appendChild(strong);
-        editableEl.appendChild(p);
-        refHeading = p;
-    }
-    const refText = buildChatGPTReferenceTextFromPrompt(promptText);
-    const refP = document.createElement('p');
-    refP.textContent = refText;
-    // Insert after the heading (or at end if heading is last)
-    if (refHeading.nextSibling) {
-        refHeading.parentNode.insertBefore(refP, refHeading.nextSibling);
-    } else {
-        editableEl.appendChild(refP);
+    // Canonical footer container enforced at the bottom
+    function ensureFooter(el) {
+        let footer = el.querySelector('[data-section="turing-footer"]');
+        if (!footer) {
+            footer = document.createElement('div');
+            footer.setAttribute('data-section', 'turing-footer');
+            footer.style.marginTop = '16px';
+            // Spacer before footer if needed
+            if (el.lastChild) el.appendChild(document.createElement('br'));
+            el.appendChild(footer);
+        }
+        // Always keep footer as the last child
+        if (footer !== el.lastChild) {
+            el.appendChild(footer);
+        }
+        return footer;
     }
 
-    // 2) Ensure Prompts section exists, then append image of prompt+assistant pair
-    let promptsHeading = Array.from(editableEl.querySelectorAll('strong, b, h1, h2, h3, h4, h5, h6, p'))
-        .find(n => (n.textContent || '').trim().toLowerCase().startsWith('prompts'));
-    if (!promptsHeading) {
-        const p2 = document.createElement('p');
-        const s2 = document.createElement('strong');
-        s2.textContent = 'Prompts';
-        p2.appendChild(s2);
-        editableEl.appendChild(p2);
-        promptsHeading = p2;
+    function ensureSection(footer, key, titleText) {
+        let section = footer.querySelector(`[data-section="${key}-section"]`);
+        if (!section) {
+            section = document.createElement('div');
+            section.setAttribute('data-section', `${key}-section`);
+            const headingP = document.createElement('p');
+            const strong = document.createElement('strong');
+            strong.textContent = titleText;
+            headingP.appendChild(strong);
+            const body = document.createElement('div');
+            body.setAttribute('data-section', `${key}-body`);
+            body.style.marginTop = '6px';
+            section.appendChild(headingP);
+            section.appendChild(body);
+            // Spacer between sections
+            if (footer.lastChild) footer.appendChild(document.createElement('br'));
+            footer.appendChild(section);
+        }
+        return section;
     }
+
+    function getBody(section, key) {
+        let body = section.querySelector(`[data-section="${key}-body"]`);
+        if (!body) {
+            body = document.createElement('div');
+            body.setAttribute('data-section', `${key}-body`);
+            section.appendChild(body);
+        }
+        return body;
+    }
+
+    function moveOldSectionContentToFooter(el, key, titles, destBody) {
+        // Find any headings matching titles not already in the footer
+        const headings = Array.from(el.querySelectorAll('strong, b, h1, h2, h3, h4, h5, h6, p')).filter(n => {
+            if (n.closest('[data-section="turing-footer"]')) return false; // ignore footer
+            const txt = (n.textContent || '').trim().toLowerCase();
+            return titles.some(t => txt.startsWith(t.toLowerCase()));
+        });
+        headings.forEach(h => {
+            // Move all siblings after heading until next heading or footer
+            let cursor = h.nextSibling;
+            const toMove = [];
+            while (cursor && !(cursor.nodeType === 1 && /^(STRONG|B|H1|H2|H3|H4|H5|H6|P)$/.test(cursor.nodeName) &&
+                    titles.concat(['references','prompts']).some(t => ((cursor.textContent||'').trim().toLowerCase().startsWith(t.toLowerCase())))) &&
+                   !cursor.closest?.('[data-section="turing-footer"]')) {
+                const next = cursor.nextSibling;
+                toMove.push(cursor);
+                cursor = next;
+            }
+            toMove.forEach(node => destBody.appendChild(node));
+            // Remove the old heading itself
+            h.remove();
+        });
+    }
+
+    const footer = ensureFooter(editableEl);
+    const refsSection = ensureSection(footer, 'references', 'References');
+    const promptsSection = ensureSection(footer, 'prompts', 'Prompts');
+    const refsBody = getBody(refsSection, 'references');
+    const promptsBody = getBody(promptsSection, 'prompts');
+
+    // Sweep: if editor already contains headings earlier, move their content to the footer bodies
+    moveOldSectionContentToFooter(editableEl, 'references', ['References','Citations','Bibliography'], refsBody);
+    moveOldSectionContentToFooter(editableEl, 'prompts', ['Prompts'], promptsBody);
+
+    // 1) Append reference line into the references body
+    const refText = buildChatGPTReferenceTextFromPrompt(promptText);
+    const refP = document.createElement('p');
+    refP.className = 'reference-item';
+    refP.textContent = refText;
+    refsBody.appendChild(refP);
 
     // Generate an image (PNG) from the dropped prompt + paired assistant
     const pair = turingFindPairFromPromptEl(promptEl) || turingFindDefaultPair();
@@ -2184,12 +2272,8 @@ async function turingInsertReferenceAndPromptImage(editableEl, promptText, promp
         img.style.maxWidth = '100%';
         img.style.border = '1px solid #e5e7eb';
         img.style.borderRadius = '8px';
-        // Insert below the Prompts heading
-        if (promptsHeading.nextSibling) {
-            promptsHeading.parentNode.insertBefore(img, promptsHeading.nextSibling);
-        } else {
-            editableEl.appendChild(img);
-        }
+        // Always append images at the bottom of prompts body
+        promptsBody.appendChild(img);
     } finally {
         container.remove();
     }
@@ -2491,15 +2575,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Remove contenteditable
                         const contentDiv = assistantMsg.querySelector('.message-content');
                         if (contentDiv) {
-                            // Persist edited content to server if changed
+                            // Persist edited content to server (keep full HTML to preserve images/formatting)
                             const newHtml = contentDiv.innerHTML || '';
-                            const newText = newHtml.replace(/<br\s*\/?>(?=\n)/g,'').replace(/<br\s*\/?>(?!\n)/g,'\n').replace(/<[^>]+>/g,'');
                             const mid = assistantMsg.dataset.messageId;
                             if (mid) {
                                 fetch('/update-message', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message_id: mid, content: newText })
+                                    body: JSON.stringify({ message_id: mid, content: newHtml })
                                 }).catch(err => console.error('Failed to update message:', err));
                             }
                             contentDiv.contentEditable = 'false';
@@ -2526,11 +2609,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             const mid = assistantMsg.dataset.messageId;
                             if (!mid) return;
                             const html = contentDiv.innerHTML || '';
-                            const text = html.replace(/<br\s*\/?>(?=\n)/g,'').replace(/<br\s*\/?>(?!\n)/g,'\n').replace(/<[^>]+>/g,'');
                             fetch('/update-message', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ message_id: mid, content: text })
+                                body: JSON.stringify({ message_id: mid, content: html })
                             }).catch(err => console.error('Failed to update message:', err));
                         }, 600);
                     });
