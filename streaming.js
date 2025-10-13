@@ -4,7 +4,7 @@ import path from 'path';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
-import { registerUser, getUser, createSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup,getUserGroups,updateSessionGroup, renameGroup, saveMessageWithScaleLevel } from './database.js';
+import { registerUser, getUser, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup,getUserGroups,updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, saveMessageWithScaleLevel } from './database.js';
 
 dotenv.config({ path: './APIkey.env' });
 
@@ -63,6 +63,16 @@ app.post('/login', (req, res) => {
     });
 });
 
+// Rename a session
+app.post('/rename-session', (req, res) => {
+    const { session_id, session_name } = req.body;
+    if (!session_id || !session_name) return res.json({ success: false, message: 'Missing fields' });
+    renameSession(session_id, session_name, (err) => {
+        if (err) return res.json({ success: false, message: 'Could not rename session' });
+        res.json({ success: true });
+    });
+});
+
 app.get('/sessions', (req, res) => {
     const username = req.cookies.username;
     getUser(username, (err, user) => {
@@ -103,16 +113,20 @@ app.get('/messages', (req, res) => {
                 // Aggregate unique scale levels
                 const scaleLevels = [...new Set(rows.map(row => row.scale_level))];
 
-                // Return messages with their own scale_level and collapsed state
-                res.json({
-                    success: true,
-                    messages: messages.map(m => ({
-                        ...m,
-                        scale_level: m.scale_level || 1,
-                        collapsed: m.collapsed || 0
-                    })),
-                    feedbackData,
-                    scale_levels: scaleLevels,
+                // Get the session record to include is_turing
+                getSessionById(session_id, (sErr, sess) => {
+                    // Return messages with their own scale_level and collapsed state
+                    res.json({
+                        success: true,
+                        is_turing: sess?.is_turing === 1 || sess?.is_turing === true ? 1 : 0,
+                        messages: messages.map(m => ({
+                            ...m,
+                            scale_level: m.scale_level || 1,
+                            collapsed: m.collapsed || 0
+                        })),
+                        feedbackData,
+                        scale_levels: scaleLevels,
+                    });
                 });
             });
         });
@@ -169,6 +183,25 @@ app.post('/start-session', (req, res) => {
             console.error('Error fetching next session ID:', error);
             res.json({ success: false, message: 'Error starting a new session' });
         }
+    });
+});
+
+// Start a Turing Mode session: create special session + a blank assistant message to edit
+app.post('/start-turing', (req, res) => {
+    const username = req.cookies.username;
+    if (!username) {
+        return res.json({ success: false, message: 'Username not found in cookies. Please log in again.' });
+    }
+    getUser(username, (err, user) => {
+        if (err || !user) return res.json({ success: false, message: 'User not found' });
+        createTuringSession(user.id, username, 'Turing Mode', (err, sessionId) => {
+            if (err) return res.json({ success: false, message: 'Could not start Turing session' });
+            // Create an initial blank assistant message for editing
+            saveMessageWithScaleLevel(sessionId, username, 'assistant', '', 0, 1, (err, messageId) => {
+                if (err) return res.json({ success: false, message: 'Could not seed Turing message' });
+                res.json({ success: true, session_id: sessionId, message_id: messageId });
+            });
+        });
     });
 });
 
@@ -246,6 +279,16 @@ app.post('/save-feedback', (req, res) => {
             console.error('Error saving feedback:', err);
             return res.json({ success: false, message: 'Error saving feedback data' });
         }
+        res.json({ success: true });
+    });
+});
+
+// Update message content (used by Turing Mode autosave/close)
+app.post('/update-message', (req, res) => {
+    const { message_id, content } = req.body;
+    if (!message_id) return res.json({ success: false, message: 'message_id required' });
+    updateMessageContent(message_id, content ?? '', (err) => {
+        if (err) return res.json({ success: false, message: 'Could not update message' });
         res.json({ success: true });
     });
 });

@@ -157,6 +157,15 @@
             0%, 100% { background-color: #6c757d; }
             50% { background-color: #2d8cff; }
         }
+
+        /* Turing Mode styles */
+        .turing-mode-button { 
+            border: 1px solid #cfd6dd; background:#fff; color:#2d3e50; border-radius:6px; padding:6px 10px; margin-right:6px; cursor:pointer;
+        }
+        .turing-session { background:#eaffea; border-left:4px solid #22c55e; display:flex; align-items:center; gap:6px; }
+        .turing-session .turing-name { outline:none; display:inline-block; }
+        .sidebar-section-title { margin: 8px 0 6px; font-size: 14px; color:#374151; }
+        #turing-mode-container { margin-bottom: 8px; display:flex; flex-direction:column; gap:6px; }
     </style>
 </head>
 <body>
@@ -166,11 +175,14 @@
     <div class="container">
         <div class="sidebar">
             <div class="sidebar-header">
-                <h3>Chat Sessions</h3>
+                <button class="turing-mode-button" id="turing-mode-button" title="Start Turing Mode (editor)" onclick="startTuringMode()">⌨️</button>
                 <button class="new-chat-button" id="new-chat-button" onclick="startNewChat()">+ 💬</button>
                 <button class="new-group-button" id="new-group-button" onclick="createNewGroup()">+ 📁</button>
             </div>
             <div class="sidebar-content">
+                <h3 class="sidebar-section-title">Chat Sessions</h3>
+                <!-- Turing Mode placeholder lives above sessions -->
+                <div id="turing-mode-container"></div>
                 <!-- Replace the existing groups in the sidebar with this structure -->
                 <div id="session-groups">
                     <!-- Groups will be added here dynamically -->
@@ -294,6 +306,7 @@
         const chatMessages = document.getElementById('chat-messages');
         const sessionList = document.getElementById('session-list');
         let session_id = null;
+    let __turingInitialMessageId = null; // for newly created turing sessions
         let botMessageDiv = null;
         let activeLevels = new Set(); // To track all active levels
         let feedbackMapping = []; // Array to map message elements to feedback containers
@@ -732,6 +745,8 @@ async function loadChatHistory(messages) {
             // Clear previous session lists
             document.querySelectorAll('.session-list').forEach(list => list.innerHTML = '');
             document.getElementById('new-chats').innerHTML = ''; // Clear new chats container
+            const turingContainer = document.getElementById('turing-mode-container');
+            if (turingContainer) turingContainer.innerHTML = '';
         
             try {
                 const response = await fetch('/sessions');
@@ -740,6 +755,33 @@ async function loadChatHistory(messages) {
                     data.sessions.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
         
                     data.sessions.forEach((session, index) => {
+                        // Render Turing Mode sessions in their own area
+                        if (Number(session.is_turing) === 1) {
+                            const btn = document.createElement('button');
+                            btn.className = 'session-button turing-session';
+                            const name = session.session_name || 'Turing Mode';
+                            btn.id = `session-${session.id}`;
+                            btn.innerHTML = `⌨️ <span class="turing-name" contenteditable="true">${name}</span>`;
+                            btn.onclick = () => {
+                                loadSessionHistory(session.id).then(() => {
+                                    highlightCurrentSession(session.id);
+                                    // Try to auto-enter edit mode on the first assistant message
+                                    setTimeout(() => {
+                                        const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+                                        if (firstAssistant && !firstAssistant.classList.contains('edit-locked')) {
+                                            firstAssistant.click();
+                                        }
+                                    }, 50);
+                                });
+                            };
+                            // Persist name changes on blur
+                            btn.querySelector('.turing-name').addEventListener('blur', (e) => {
+                                const newName = (e.target.textContent || '').trim() || 'Turing Mode';
+                                renameSessionOnServer(session.id, newName);
+                            });
+                            turingContainer.appendChild(btn);
+                            return; // continue to next session
+                        }
                         const button = document.createElement('button');
                         button.className = 'session-button';
                         button.textContent = `Session ${index + 1}`;
@@ -797,10 +839,11 @@ async function loadChatHistory(messages) {
             if (data.success) {
                 // Clear chat messages
                 chatMessages.innerHTML = '';
+                const isTuring = Number(data.is_turing) === 1;
                 // Create a lookup map of message IDs with feedback
                 const messagesWithFeedback = new Set();
                 const feedbackByMessageId = new Map();
-                if (data.feedbackData && data.feedbackData.length > 0) {
+                if (!isTuring && data.feedbackData && data.feedbackData.length > 0) {
                     data.feedbackData.forEach(feedback => {
                         messagesWithFeedback.add(String(feedback.messageId));
                         feedbackByMessageId.set(String(feedback.messageId), feedback);
@@ -809,7 +852,15 @@ async function loadChatHistory(messages) {
                 let prevMsg = null;
                 let prevAssistantHadFeedback = false;
                 let prevAssistantFeedbackMargin = 0;
-                data.messages.forEach((msg, idx) => {
+                // If Turing Mode and no assistant message exists, synthesize one empty assistant message for editing
+                const msgs = Array.isArray(data.messages) ? data.messages.slice() : [];
+                if (isTuring) {
+                    const hasAssistant = msgs.some(m => m.role === 'assistant');
+                    if (!hasAssistant) {
+                        msgs.push({ role: 'assistant', content: '', message_id: 'turing-seed', collapsed: 0, scale_level: 1 });
+                    }
+                }
+                msgs.forEach((msg, idx) => {
                     console.log(`[loadSessionHistory] Rendering message #${idx}:`, msg);
                     if (msg.role === 'user') {
                         const userMessageDiv = document.createElement('div');
@@ -842,11 +893,11 @@ async function loadChatHistory(messages) {
                     } else if (msg.role === 'assistant') {
                         const assistantMessageDiv = document.createElement('div');
                         assistantMessageDiv.className = 'message assistant with-feedback';
-                        // Persist lock based on DB state or feedback presence
-                        const shouldLock = (Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id));
+                        // In Turing Mode we never lock the message and we never show overlays
+                        const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
                         if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
                         assistantMessageDiv.dataset.messageId = msg.message_id;
-                        const showOverlay = messagesWithFeedback.has(String(msg.message_id));
+                        const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
                         if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
                         assistantMessageDiv.innerHTML = `
                             <div class=\"message-content\">${msg.content.replace(/\n/g, '<br>')}</div>
@@ -876,7 +927,7 @@ async function loadChatHistory(messages) {
                 chatMessages.appendChild(assistantMessageDiv);
             }
             // Track for next iteration
-            if (msg.role === 'assistant' && feedbackByMessageId.has(String(msg.message_id))) {
+            if (!isTuring && msg.role === 'assistant' && feedbackByMessageId.has(String(msg.message_id))) {
                 prevAssistantHadFeedback = true;
                 prevAssistantFeedbackMargin = feedbackByMessageId.get(String(msg.message_id)).feedbackMargin;
             } else {
@@ -885,6 +936,11 @@ async function loadChatHistory(messages) {
             }
             prevMsg = msg;
         });
+        // Auto-open the (first) assistant message for editing in Turing Mode
+        if (isTuring) {
+            const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+            if (firstAssistant) setTimeout(() => { if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click(); }, 10);
+        }
         // Adjust margin if the last user message had feedback
         const userMessages = chatMessages.querySelectorAll('.message.user');
         const lastUserMessage = userMessages[userMessages.length - 1];
@@ -908,11 +964,11 @@ async function loadChatHistory(messages) {
             lastUserMessage.style.marginBottom = '';
         }
         chatMessages.scrollTop = chatMessages.scrollHeight;
-    window.__lastFeedbackData = data.feedbackData || [];
-    // Server-provided feedback preferred
-    if (window.__lastFeedbackData.length) {
+    window.__lastFeedbackData = isTuring ? [] : (data.feedbackData || []);
+    // Server-provided feedback preferred (skip entirely for Turing)
+    if (!isTuring && window.__lastFeedbackData.length) {
         showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
-    } else if (sessionFeedback[sessionId] && sessionFeedback[sessionId].length) {
+    } else if (!isTuring && sessionFeedback[sessionId] && sessionFeedback[sessionId].length) {
         // Fallback: restore locally stored feedback to most recent assistant message(s)
         const assistantMessages = Array.from(chatMessages.querySelectorAll('.message.assistant'));
         if (assistantMessages.length) {
@@ -1084,6 +1140,45 @@ async function loadChatHistory(messages) {
             } catch (error) {
                 console.error('Error starting a new session:', error);
             }
+        }
+
+        // Start Turing Mode (creates a special session + blank assistant message and opens edit mode)
+        async function startTuringMode() {
+            try {
+                const res = await fetch('/start-turing', { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) { alert('Failed to start Turing Mode'); return; }
+                session_id = data.session_id;
+                __turingInitialMessageId = data.message_id || null;
+                // Refresh session lists to show the Turing placeholder
+                await loadSessions();
+                highlightCurrentSession(session_id);
+                // Load the Turing session and auto-open the blank assistant message in edit mode
+                await loadSessionHistory(session_id);
+                setTimeout(() => {
+                    const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+                    if (firstAssistant) {
+                        // Ensure the DOM knows the message id (from DB render)
+                        if (!firstAssistant.dataset.messageId && __turingInitialMessageId) {
+                            firstAssistant.dataset.messageId = String(__turingInitialMessageId);
+                        }
+                        if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click();
+                    }
+                }, 50);
+            } catch (e) {
+                console.error('Error starting Turing Mode:', e);
+            }
+        }
+
+        // Rename session helper
+        function renameSessionOnServer(id, name) {
+            fetch('/rename-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: id, session_name: name })
+            }).then(r => r.json()).then(d => {
+                if (!d.success) console.error('Failed to rename session:', d.message);
+            }).catch(err => console.error('Rename session error:', err));
         }
 
         // Removed obsolete showFeedbackForSession (absolute positioning) in favor of inline feedback rendering
@@ -2238,6 +2333,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Remove contenteditable
                         const contentDiv = assistantMsg.querySelector('.message-content');
                         if (contentDiv) {
+                            // Persist edited content to server if changed
+                            const newHtml = contentDiv.innerHTML || '';
+                            const newText = newHtml.replace(/<br\s*\/?>(?=\n)/g,'').replace(/<br\s*\/?>(?!\n)/g,'\n').replace(/<[^>]+>/g,'');
+                            const mid = assistantMsg.dataset.messageId;
+                            if (mid) {
+                                fetch('/update-message', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ message_id: mid, content: newText })
+                                }).catch(err => console.error('Failed to update message:', err));
+                            }
                             contentDiv.contentEditable = 'false';
                             contentDiv.classList.remove('assistant-editable-content');
                         }
@@ -2254,6 +2360,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     contentDiv.contentEditable = 'true';
                     contentDiv.classList.add('assistant-editable-content');
                     contentDiv.focus();
+                    // Debounced autosave while editing
+                    let __saveTimer = null;
+                    contentDiv.addEventListener('input', () => {
+                        if (__saveTimer) clearTimeout(__saveTimer);
+                        __saveTimer = setTimeout(() => {
+                            const mid = assistantMsg.dataset.messageId;
+                            if (!mid) return;
+                            const html = contentDiv.innerHTML || '';
+                            const text = html.replace(/<br\s*\/?>(?=\n)/g,'').replace(/<br\s*\/?>(?!\n)/g,'\n').replace(/<[^>]+>/g,'');
+                            fetch('/update-message', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ message_id: mid, content: text })
+                            }).catch(err => console.error('Failed to update message:', err));
+                        }, 600);
+                    });
                 }
                 assistantMsg._toolbarObserver = waitForOverlayDismiss(assistantMsg);
                 // Compute dynamic height so bottom aligns above AI assessment scale

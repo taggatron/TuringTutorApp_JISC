@@ -22,6 +22,7 @@ db.serialize(() => {
     username TEXT,
     session_name TEXT,
     group_id INTEGER DEFAULT NULL,
+    is_turing INTEGER DEFAULT 0,
     FOREIGN KEY(user_id) REFERENCES users(id)
   )`);
 
@@ -78,6 +79,13 @@ db.serialize(() => {
   db.run(`ALTER TABLE sessions ADD COLUMN username TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column')) {
       console.error('Error adding username column to sessions table:', err);
+    }
+  });
+
+  // Add is_turing column to sessions table if it doesn't exist
+  db.run(`ALTER TABLE sessions ADD COLUMN is_turing INTEGER DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column')) {
+      console.error('Error adding is_turing column to sessions table:', err);
     }
   });
 
@@ -158,6 +166,26 @@ const createSession = (user_id, username, session_name, callback) => {
     db.run(scaleLevelSql, [sessionId, username, 1], function(scaleErr) {
       if (scaleErr) {
         console.error('Error in createSession (inserting initial scale level):', scaleErr.message);
+      }
+      cb(null, sessionId);
+    });
+  });
+};
+
+// Create a new session flagged as Turing Mode
+const createTuringSession = (user_id, username, session_name = 'Turing Mode', callback) => {
+  const cb = typeof callback === 'function' ? callback : () => {};
+  const sql = `INSERT INTO sessions (user_id, username, session_name, is_turing) VALUES (?, ?, ?, 1)`;
+  db.run(sql, [user_id, username, session_name], function(err) {
+    if (err) {
+      console.error('Error in createTuringSession:', err.message);
+      return cb(err);
+    }
+    const sessionId = this.lastID;
+    const scaleLevelSql = `INSERT INTO scale_levels (session_id, username, scale_level) VALUES (?, ?, ?)`;
+    db.run(scaleLevelSql, [sessionId, username, 1], function(scaleErr) {
+      if (scaleErr) {
+        console.error('Error in createTuringSession (inserting initial scale level):', scaleErr.message);
       }
       cb(null, sessionId);
     });
@@ -386,6 +414,17 @@ const renameGroup = (group_id, group_name, callback) => {
   });
 };
 
+// Rename a session
+const renameSession = (session_id, session_name, callback) => {
+  db.run(`UPDATE sessions SET session_name = ? WHERE id = ?`, [session_name, session_id], function(err){
+    if (err) {
+      console.error('Error in renameSession:', err.message);
+      return callback(err);
+    }
+    callback(null);
+  });
+};
+
 // Function to get all scale levels for a session
 const getScaleLevels = (session_id, callback) => {
   const sql = `SELECT scale_level FROM scale_levels WHERE session_id = ?`;
@@ -422,6 +461,17 @@ const getMessageByContent = (session_id, content, callback) => {
   });
 };
 
+// Update message content
+const updateMessageContent = (message_id, content, callback) => {
+  db.run(`UPDATE messages SET content = ? WHERE message_id = ?`, [content, message_id], function(err){
+    if (err) {
+      console.error('Error in updateMessageContent:', err.message);
+      return callback(err);
+    }
+    callback(null);
+  });
+};
+
 // Function to save a scale level for a session
 const saveScaleLevel = (session_id, username, scale_level, callback) => {
   const cb = typeof callback === 'function' ? callback : () => {};
@@ -435,11 +485,23 @@ const saveScaleLevel = (session_id, username, scale_level, callback) => {
   });
 };
 
+// Get a single session by id
+const getSessionById = (session_id, callback) => {
+  db.get(`SELECT * FROM sessions WHERE id = ?`, [session_id], (err, row) => {
+    if (err) {
+      console.error('Error in getSessionById:', err.message);
+      return callback(err);
+    }
+    callback(null, row);
+  });
+};
+
 // Exporting the functions
 export {
   registerUser,
   getUser,
   createSession,
+  createTuringSession,
   saveMessage,
   saveFeedback,
   getSessions,
@@ -456,6 +518,9 @@ export {
   getUserGroups,
   updateSessionGroup,
   renameGroup,
+  renameSession,
+  updateMessageContent,
+  getSessionById,
   saveMessageWithScaleLevel
 };
 
