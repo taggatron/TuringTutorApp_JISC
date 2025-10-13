@@ -173,10 +173,13 @@
         .turing-mode-button:active { background:#6ee7b7; }
         .turing-mode-button img.turing-mode-icon { display:block; width:22px; height:22px; object-fit:contain; filter: drop-shadow(0 0 0 rgba(0,0,0,0)); }
         .turing-mode-button .plus { color:#fff; font-weight:700; font-size:20px; line-height:1; display:inline-block; }
-    .turing-session { background:#eaffea; border-left:4px solid #22c55e; display:flex; align-items:center; gap:6px; }
+    .turing-session { background:#eaffea; border-left:4px solid #22c55e; display:flex; align-items:center; gap:6px; /* ensure text sits right of icon */ position: relative; justify-content:flex-start; }
+        /* Ensure the editable name sits immediately to the right of the icon and is left-aligned */
+        .turing-session .turing-name { outline:none; display:inline-block; flex:1 1 auto; text-align:left; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:28px; }
+        .turing-session .turing-left { display:flex; align-items:center; gap:6px; flex:1 1 auto; min-width:0; }
         .turing-session .turing-name { outline:none; display:inline-block; }
         .sidebar-section-title { margin: 8px 0 6px; font-size: 14px; color:#374151; }
-        #turing-mode-container { margin-bottom: 8px; display:flex; flex-direction:column; gap:6px; }
+    #turing-mode-container { margin-bottom: 8px; display:flex; flex-direction:column; gap:6px; }
     /* Reusable icon size for Turing logos in sidebar items */
     img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inline-block; }
     </style>
@@ -777,7 +780,13 @@ async function loadChatHistory(messages) {
                             btn.className = 'session-button turing-session';
                             const name = session.session_name || 'Turing Mode';
                             btn.id = `session-${session.id}`;
-                            btn.innerHTML = `<img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt=""> <span class=\"turing-name\" contenteditable=\"true\">${name}</span>`;
+                            btn.innerHTML = `
+                                <div class="turing-left">
+                                    <img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt="">
+                                    <span class="turing-name" contenteditable="true">${name}</span>
+                                </div>
+                                <span class="delete-icon" title="Delete">🗑</span>
+                            `;
                             btn.onclick = () => {
                                 loadSessionHistory(session.id).then(() => {
                                     highlightCurrentSession(session.id);
@@ -795,6 +804,12 @@ async function loadChatHistory(messages) {
                                 const newName = (e.target.textContent || '').trim() || 'Turing Mode';
                                 renameSessionOnServer(session.id, newName);
                             });
+                            // Delete icon behavior (show on hover via CSS)
+                            const del = btn.querySelector('.delete-icon');
+                            del.onclick = (event) => {
+                                event.stopPropagation();
+                                deleteSession(session.id, btn.parentElement.id);
+                            };
                             turingContainer.appendChild(btn);
                             return; // continue to next session
                         }

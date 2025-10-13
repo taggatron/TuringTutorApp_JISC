@@ -291,6 +291,12 @@ body {
     pointer-events: auto;
 }
 
+/* Ensure the Turing session inherits the same hover delete behavior */
+.turing-session:hover .delete-icon { opacity: 1; pointer-events: auto; }
+
+/* Make sure icon sits left and text starts immediately after for Turing sessions */
+.turing-session { justify-content: flex-start; }
+
 .delete-icon {
     margin-left: 10px;
     color: red;
