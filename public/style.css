@@ -980,7 +980,7 @@ body {
 }
 
 .send-message-button {
-    position: absolute;
+    position: sticky;
     right: 14px;
     background-color: #007bff;
     color: #fff;
@@ -997,18 +997,18 @@ body {
     height: 38px;
     width: 38px;
     top: 50%;
-    transform: translateY(-50%);
+    z-index: 10;
 }
 
 .send-message-button:hover {
     /* Preserve vertical centering (translateY(-50%)) and add a small relative lift so the button doesn't jump. */
-    transform: translateY(calc(-50% - 2px)); /* Small lift on hover while staying centered */
-    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1); /* Enhanced shadow on hover */
+    transform: translateY(calc(-10% + 1px)); /* Small lift on hover while staying centered */
+    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1); /* Enhanced shadow on hover */
 }
 
 .send-message-button:active {
     /* Slight press down from the centered position */
-    transform: translateY(calc(-50% + 1px)); /* Small press on click while staying centered */
+    transform: translateY(calc(-20% + 1px)); /* Small press on click while staying centered */
     box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15); /* Reduced shadow on click */
 }
 
