@@ -1011,7 +1011,7 @@ body {
 }
 
 /* Use a compact icon */
-.send-message-button::before { content: '📤'; margin: 0; }
+.send-message-button::before { content: '📡'; margin: 0; }
 
 /* Remove tooltip for cleaner UI */
 .send-message-button:hover::after { content: none; }
