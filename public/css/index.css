@@ -146,34 +146,31 @@
     animation: refPulse 1.2s ease-in-out infinite, refBgPulse 1.2s ease-in-out infinite;
 }
 /* Overlay visibility classes (CSP-safe) */
-.message-assistant-overlay { display:flex; align-items:center; gap:12px; padding:12px; background: rgba(255,255,255,0.95); border-radius:8px; border:1px solid #f3c6c6; color:#8b1e1e; }
+.message.assistant { position: relative; }
+/* Make assistant overlay fill the assistant message box, use red background with white text */
+.message-assistant-overlay {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    padding:12px;
+    box-sizing: border-box;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #b91c1c; /* red-700 */
+    color: #ffffff; /* white text */
+    border-radius: inherit;
+    border: 1px solid rgba(0,0,0,0.06);
+}
 .message-assistant-overlay.overlay-hidden { display: none !important; }
 .message-assistant-overlay.overlay-shown { display: flex !important; }
 .overlay-active > .message-assistant-overlay { display:flex !important; }
 
 /* animated text used in AI Assessment scale */
 #animated-text.animated-text { min-height:36px; font-size:0.95rem; color:#374151; padding:6px 12px; }
-
-/* Typing caret for animated text: smaller, less tall than full line height */
-#animated-text.typing::after {
-    content: '';
-    display: inline-block;
-    width: 1.5px;
-    height: 0.65em; /* shorter caret */
-    background: currentColor;
-    margin-left: 6px;
-    vertical-align: baseline;
-    transform: translateY(0.12em); /* nudge down slightly to sit on baseline */
-    animation: animatedTextBlink 1s steps(1) infinite;
-    opacity: 0.95;
-}
-@keyframes animatedTextBlink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-}
-
-/* Hide any native caret for the animated text element so only the custom caret shows */
-#animated-text { caret-color: transparent; }
 /* Scale items (simple horizontal pill layout) */
 .ai-assessment-scale { display:flex; gap:8px; align-items:center; padding:8px 12px; }
 .scale-item { padding:8px 12px; border-radius:20px; background:#f3f4f6; color:#374151; font-size:0.85rem; cursor:default; user-select:none; border:1px solid transparent; }
