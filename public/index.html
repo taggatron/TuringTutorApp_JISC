@@ -94,9 +94,12 @@
         <div id="scale-3" class="scale-item inactive" role="radio" aria-checked="false">AI Editing</div>
         <div id="scale-2" class="scale-item inactive" role="radio" aria-checked="false">Ideas and Structure</div>
         <div id="scale-1" class="scale-item inactive" role="radio" aria-checked="false">No AI</div>
-        <!-- animated text used by the scale descriptions -->
+        <!-- scale items only; animated description lives in a separate container below -->
+    </div>
+
+    <!-- animated text used by the scale descriptions; placed in its own container below the scale -->
+    <div id="ai-assessment-desc" class="ai-assessment-desc">
         <div id="animated-text" class="animated-text" aria-live="polite"></div>
-        <!-- moved inline scripts to /js/index.js -->
     </div>
 
     <!-- favicon (explicit link avoids extra /favicon.ico fetch) -->
