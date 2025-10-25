@@ -25,6 +25,11 @@
     overflow: hidden; /* child will scroll */
     padding-top: 88px; /* space for toolbar + close button */
 }
+
+/* Hide DOM template elements that were previously controlled inline */
+#feedback-container-template {
+     display: none;
+}
 @keyframes expandAssistantMsg {
     from { transform: scale(0.95); opacity: 0.7; }
     to { transform: scale(1); opacity: 1; }

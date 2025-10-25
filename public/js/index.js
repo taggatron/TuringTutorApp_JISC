@@ -2,12 +2,12 @@
 
 // Inject html2canvas for client-side screenshot export
 (function ensureHtml2Canvas() {
-  if (!window.html2canvas) {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-    s.defer = true;
-    document.head.appendChild(s);
-  }
+    if (!window.html2canvas) {
+      const s = document.createElement('script');
+      s.src = '/vendor/html2canvas.min.js';
+      s.defer = true;
+      document.head.appendChild(s);
+    }
 })();
 
 const popup = document.getElementById('scale-popup');
@@ -901,7 +901,7 @@ function buildChatGPTReferenceTextFromPrompt(promptText) {
 async function turingInsertReferenceAndPromptImage(editableEl, promptText, promptEl) {
   if (!editableEl) return;
   if (!window.html2canvas) {
-    await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'; s.defer = true; s.onload = () => resolve(); s.onerror = () => reject(new Error('Failed to load html2canvas')); document.head.appendChild(s); });
+  await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = '/vendor/html2canvas.min.js'; s.defer = true; s.onload = () => resolve(); s.onerror = () => reject(new Error('Failed to load html2canvas')); document.head.appendChild(s); });
   }
   function ensureFooter(el) { let footer = el.querySelector('[data-section="turing-footer"]'); if (!footer) { footer = document.createElement('div'); footer.setAttribute('data-section', 'turing-footer'); footer.style.marginTop = '16px'; if (el.lastChild) el.appendChild(document.createElement('br')); el.appendChild(footer); } if (footer !== el.lastChild) { el.appendChild(footer); } return footer; }
   function ensureSection(footer, key, titleText) { let section = footer.querySelector(`[data-section="${key}-section"]`); if (!section) { section = document.createElement('div'); section.setAttribute('data-section', `${key}-section`); const headingP = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = titleText; headingP.appendChild(strong); const body = document.createElement('div'); body.setAttribute('data-section', `${key}-body`); body.style.marginTop = '6px'; section.appendChild(headingP); section.appendChild(body); if (footer.lastChild) footer.appendChild(document.createElement('br')); footer.appendChild(section); } return section; }

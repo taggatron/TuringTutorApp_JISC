@@ -83,33 +83,16 @@
         </div>
     </div>
 
-    <div id="feedback-container-template" class="feedback-container" style="display: none;">
+    <div id="feedback-container-template" class="feedback-container">
         <p class="feedback-message"></p>
     </div>
 
     <!-- AI Assessment Scale -->
     <div class="ai-assessment-scale" id="ai-assessment-scale">
         <!-- moved inline scripts to /js/index.js -->
-        <script defer src="/js/index.js"></script>
-            if (!activeEditable) return;
-            if ((e.metaKey || e.ctrlKey) && ['b','i','u'].includes(e.key.toLowerCase())) {
-                e.preventDefault();
-                const map = { b: 'bold', i: 'italic', u: 'underline' };
-                document.execCommand(map[e.key.toLowerCase()], false, null);
-            }
-        });
+    </div>
 
-        // Recalculate edit height on resize if in edit mode
-        window.addEventListener('resize', () => {
-            const active = document.querySelector('.assistant-edit-mode');
-            if (!active) return;
-            const scale = document.querySelector('.ai-assessment-scale');
-            if (scale) {
-                const scaleTop = scale.getBoundingClientRect().top;
-                document.documentElement.style.setProperty('--assistant-edit-height', (scaleTop - 8) + 'px');
-            }
-        });
-    });
-    </script>
+    <!-- Load main client script -->
+    <script defer src="/js/index.js"></script>
 </body>
 </html>
