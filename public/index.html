@@ -88,7 +88,12 @@
     </div>
 
     <!-- AI Assessment Scale -->
-    <div class="ai-assessment-scale" id="ai-assessment-scale">
+    <div class="ai-assessment-scale" id="ai-assessment-scale" role="radiogroup" aria-label="AI assessment scale">
+        <div id="scale-5" class="scale-item inactive" role="radio" aria-checked="false">Full AI</div>
+        <div id="scale-4" class="scale-item inactive" role="radio" aria-checked="false">AI + Human Evaluation</div>
+        <div id="scale-3" class="scale-item inactive" role="radio" aria-checked="false">AI Editing</div>
+        <div id="scale-2" class="scale-item inactive" role="radio" aria-checked="false">Ideas and Structure</div>
+        <div id="scale-1" class="scale-item inactive" role="radio" aria-checked="false">No AI</div>
         <!-- animated text used by the scale descriptions -->
         <div id="animated-text" class="animated-text" aria-live="polite"></div>
         <!-- moved inline scripts to /js/index.js -->
