@@ -23,7 +23,8 @@ const openai = new OpenAI({
 });
 
 const app = express();
-const port = 3000;
+// Allow overriding the port via env; default to 3000
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Allow large HTML payloads that include base64-encoded images from Turing Mode
 app.use(express.json({ limit: '100mb' }));
@@ -623,10 +624,32 @@ if (process.env.HTTPS_ENABLED === 'true') {
     server = http.createServer(app);
 }
 
-server.listen(port, () => {
-    const proto = (process.env.HTTPS_ENABLED === 'true') ? 'https' : 'http';
-    console.log(`Server running at ${proto}://localhost:${port}`);
-});
+// Try to listen on the requested port; if taken, try the next port(s) to be developer-friendly
+function tryListen(p, attemptsLeft = 10) {
+    server.once('error', (err) => {
+        if (err && err.code === 'EADDRINUSE') {
+            console.warn(`Port ${p} is in use. Attempting port ${p + 1}...`);
+            if (attemptsLeft <= 0) {
+                console.error('No available ports found after multiple attempts. Exiting.');
+                process.exit(1);
+            }
+            // Small delay before retrying
+            setTimeout(() => tryListen(p + 1, attemptsLeft - 1), 200);
+        } else {
+            console.error('Server failed to start:', err);
+            process.exit(1);
+        }
+    });
+
+    server.listen(p, () => {
+        // Remove the temporary error handler set for this listen attempt
+        server.removeAllListeners('error');
+        const proto = (process.env.HTTPS_ENABLED === 'true') ? 'https' : 'http';
+        console.log(`Server running at ${proto}://localhost:${p}`);
+    });
+}
+
+tryListen(port, 50);
 
 const wss = new WebSocketServer({ server });
 
