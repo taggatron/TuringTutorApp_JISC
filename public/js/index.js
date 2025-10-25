@@ -78,14 +78,20 @@ ws.onmessage = (event) => {
         botMessageDiv = document.createElement('div');
         botMessageDiv.className = 'message assistant with-feedback';
         botMessageDiv.dataset.messageId = 'streaming';
-        botMessageDiv.innerHTML = `
-          <div class="message-content"></div>
-          <div class="message-assistant-overlay" style="display:none;"></div>`;
+        // create content and overlay without inline style attributes to satisfy CSP
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        const overlayDiv = document.createElement('div');
+        overlayDiv.className = 'message-assistant-overlay overlay-hidden';
+        botMessageDiv.appendChild(contentDiv);
+        botMessageDiv.appendChild(overlayDiv);
         row.appendChild(botMessageDiv);
         chatMessages.appendChild(row);
       }
-      const contentDiv = botMessageDiv.querySelector('.message-content');
-      contentDiv.innerHTML += (message.content || '').replace(/\n/g, '<br>');
+  const contentDiv = botMessageDiv.querySelector('.message-content');
+  // append content safely
+  const newHtml = (message.content || '').replace(/\n/g, '<br>');
+  contentDiv.innerHTML += newHtml;
       chatMessages.scrollTop = chatMessages.scrollHeight;
     } else if (message.type === 'scale') {
       updateScale(message.data);
@@ -97,11 +103,15 @@ ws.onmessage = (event) => {
             const oldOverlay = lastAssistant.querySelector('.message-assistant-overlay');
             if (oldOverlay) oldOverlay.remove();
             const overlay = document.createElement('div');
-            overlay.className = 'message-assistant-overlay';
-            overlay.innerHTML = `
-              <span>Copying or directly using this response breaches academic integrity guidelines</span>
-              <button class="close-overlay-btn" title="Remove warning">&times;</button>
-            `;
+            overlay.className = 'message-assistant-overlay overlay-shown';
+            const span = document.createElement('span');
+            span.textContent = 'Copying or directly using this response breaches academic integrity guidelines';
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'close-overlay-btn';
+            closeBtn.title = 'Remove warning';
+            closeBtn.innerHTML = '&times;';
+            overlay.appendChild(span);
+            overlay.appendChild(closeBtn);
             overlay.addEventListener('click', function(e) {
               e.stopPropagation();
               overlay.parentElement?.classList.remove('overlay-active');
@@ -307,9 +317,16 @@ async function loadChatHistory(messages) {
       const shouldLock = (Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || feedbackByMessageId.has(String(msg.message_id));
       if (shouldLock) messageElement.classList.add('edit-locked');
       messageElement.dataset.messageId = msg.message_id;
-      const showOverlay = feedbackByMessageId.has(String(msg.message_id));
-      if (showOverlay) messageElement.classList.add('overlay-active');
-      messageElement.innerHTML = `<div class=\"message-content\">${(msg.content||'').replace(/\n/g,'<br>')}</div><div class=\"message-assistant-overlay\" style=\"display:${showOverlay ? 'flex':'none'}\"></div>`;
+  const showOverlay = feedbackByMessageId.has(String(msg.message_id));
+  if (showOverlay) messageElement.classList.add('overlay-active');
+  // build content and overlay nodes without inline style attributes (CSP-safe)
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'message-content';
+  contentDiv.innerHTML = (msg.content||'').replace(/\n/g,'<br>');
+  const overlayDiv = document.createElement('div');
+  overlayDiv.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
+  messageElement.appendChild(contentDiv);
+  messageElement.appendChild(overlayDiv);
       row.appendChild(messageElement);
       const fb = feedbackByMessageId.get(String(msg.message_id));
       if (fb) { const fbContainer = createFeedbackContainer(fb.feedbackContent); row.appendChild(fbContainer); }
@@ -440,20 +457,26 @@ async function loadSessionHistory(sessionId) {
         const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
         if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
         const __isHtml = /<\w+[\s\S]*?>[\s\S]*<\/\w+>/i.test(msg.content || '');
-        assistantMessageDiv.innerHTML = `
-          <div class="message-content">${__isHtml ? (msg.content || '') : (msg.content || '').replace(/\n/g, '<br>')}</div>
-          <div class="message-assistant-overlay" style="${showOverlay ? 'display:flex;' : 'display:none;'}">
-            <span>Copying or directly using this response breaches academic integrity guidelines</span>
-            <button class="close-overlay-btn" type="button">×</button>
-          </div>`;
-        const overlay = assistantMessageDiv.querySelector('.message-assistant-overlay');
-        const closeBtn = assistantMessageDiv.querySelector('.close-overlay-btn');
-        const contentDiv = assistantMessageDiv.querySelector('.message-content');
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.innerHTML = __isHtml ? (msg.content || '') : (msg.content || '').replace(/\n/g, '<br>');
+        const overlay = document.createElement('div');
+        overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
+        const overlayText = document.createElement('span');
+        overlayText.textContent = 'Copying or directly using this response breaches academic integrity guidelines';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'close-overlay-btn';
+        closeBtn.type = 'button';
+        closeBtn.textContent = '×';
+        overlay.appendChild(overlayText);
+        overlay.appendChild(closeBtn);
+        assistantMessageDiv.appendChild(contentDiv);
+        assistantMessageDiv.appendChild(overlay);
         if (closeBtn && overlay && contentDiv) {
           closeBtn.addEventListener('click', function(e) {
-            e.stopPropagation(); overlay.style.display = 'none'; assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto';
+            e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto';
           });
-          overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.style.display = 'none'; assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto'; });
+          overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto'; });
         }
         chatMessages.appendChild(assistantMessageDiv);
       }

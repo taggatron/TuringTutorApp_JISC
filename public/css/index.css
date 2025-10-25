@@ -145,6 +145,14 @@
     transition: box-shadow 120ms ease, border-color 120ms ease;
     animation: refPulse 1.2s ease-in-out infinite, refBgPulse 1.2s ease-in-out infinite;
 }
+/* Overlay visibility classes (CSP-safe) */
+.message-assistant-overlay { display:flex; align-items:center; gap:12px; padding:12px; background: rgba(255,255,255,0.95); border-radius:8px; border:1px solid #f3c6c6; color:#8b1e1e; }
+.message-assistant-overlay.overlay-hidden { display: none !important; }
+.message-assistant-overlay.overlay-shown { display: flex !important; }
+.overlay-active > .message-assistant-overlay { display:flex !important; }
+
+/* animated text used in AI Assessment scale */
+#animated-text.animated-text { min-height:36px; font-size:0.95rem; color:#374151; padding:6px 12px; }
 @keyframes refPulse {
     0%, 100% { filter: drop-shadow(0 0 0 rgba(45,140,255,0)); }
     50% { filter: drop-shadow(0 0 8px rgba(45,140,255,0.55)); }

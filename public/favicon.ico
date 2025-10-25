@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fallback favicon: using existing SVG content to avoid 404s. For best results generate a proper .ico or .png and replace this file. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 789 100">
+<style>.st0{fill:#582C83}</style>
+<g>
+	<polygon class="st0" points="62.5,0 62.5,12.5 87.5,12.5 87.5,87.5 62.5,87.5 62.5,100 100,100 100,0"/>
+	<polygon class="st0" points="0,0 0,100 37.5,100 37.5,87.5 12.5,87.5 12.5,12.5 37.5,12.5 37.5,0"/>
+</g>
+</svg>
