@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import helmet from 'helmet';
+import csrf from 'csurf';
+import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcrypt';
 import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup,getUserGroups,updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel } from './database.js';
@@ -27,6 +29,16 @@ app.use(cookieParser());
 
 // Basic security headers (CSP disabled to avoid breaking inline scripts/styles)
 app.use(helmet({ contentSecurityPolicy: false }));
+
+// CSRF protection (cookie-based tokens)
+const csrfProtection = csrf({
+    cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production'
+    }
+});
+app.use(csrfProtection);
 
 // Sessions (used server-side); keep legacy cookies for compatibility
 app.use(session({
@@ -51,14 +63,39 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(path.resolve(), 'public', 'home.html'));
 });
 
-app.use('/login.html', express.static(path.join(path.resolve(), 'public/login.html')));
-app.use('/register.html', express.static(path.join(path.resolve(), 'public/register.html')));
-
-app.post('/register', authLimiter, (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-        return res.json({ success: false, message: 'Username and password are required' });
+// Tight CSP for public HTML that we refactored to remove inline JS/CSS
+const cspStrict = helmet.contentSecurityPolicy({
+    useDefaults: true,
+    directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", 'https://maxcdn.bootstrapcdn.com'],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'", 'ws://localhost:3000'],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"]
     }
+});
+
+app.get('/login.html', cspStrict, (req, res) => {
+    res.sendFile(path.join(path.resolve(), 'public', 'login.html'));
+});
+
+app.get('/register.html', cspStrict, (req, res) => {
+    res.sendFile(path.join(path.resolve(), 'public', 'register.html'));
+});
+
+app.post('/register', authLimiter,
+    [
+        body('username').trim().isLength({ min: 3, max: 32 }).isAlphanumeric().withMessage('Username must be 3-32 chars, alphanumeric'),
+        body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+    ],
+    (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.json({ success: false, message: errors.array()[0].msg });
+    }
+    const { username, password } = req.body;
     registerUser(username, password, (err) => {
         if (err) {
             if (err.message.includes('UNIQUE constraint failed')) {
@@ -71,11 +108,17 @@ app.post('/register', authLimiter, (req, res) => {
     });
 });
 
-app.post('/login', authLimiter, (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
+app.post('/login', authLimiter,
+    [
+        body('username').trim().isLength({ min: 3, max: 32 }).isAlphanumeric(),
+        body('password').isLength({ min: 8 })
+    ],
+    (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
         return res.json({ success: false, message: 'Invalid credentials' });
     }
+    const { username, password } = req.body;
     getUser(username, (err, user) => {
         if (err || !user) {
             return res.json({ success: false, message: 'Invalid credentials' });
@@ -116,6 +159,18 @@ app.post('/logout', (req, res) => {
         res.clearCookie('username');
         res.json({ success: true });
     });
+});
+
+// CSRF token endpoint for client to retrieve and attach to state-changing requests
+app.get('/csrf-token', (req, res) => {
+    try {
+        const token = req.csrfToken();
+        // Provide a readable cookie for frameworks that auto-read it
+        res.cookie('XSRF-TOKEN', token, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+        res.json({ csrfToken: token });
+    } catch (e) {
+        res.status(500).json({ error: 'Could not generate CSRF token' });
+    }
 });
 
 // Rename a session
@@ -512,6 +567,14 @@ app.post('/rename-group', checkAuth, (req, res) => {
 
 app.use(checkAuth);
 app.use(express.static(path.join(path.resolve(), 'public')));
+
+// CSRF error handler
+app.use((err, req, res, next) => {
+    if (err && err.code === 'EBADCSRFTOKEN') {
+        return res.status(403).json({ success: false, message: 'Invalid CSRF token' });
+    }
+    return next(err);
+});
 
 const server = app.listen(port, () => {
     console.log(`HTTP server running at http://localhost:${port}`);
