@@ -1,12 +1,16 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcrypt';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, 'users.db');
 const db = new sqlite3.Database(dbPath);
+
+// Enforce foreign key constraints
+db.exec('PRAGMA foreign_keys = ON');
 
 // Modify the schema to add the feedback table and message table if they don't exist
 db.serialize(() => {
@@ -128,16 +132,29 @@ db.serialize(() => {
       console.error('Error adding username column to groups table:', err);
     }
   });
+
+  // Helpful indexes
+  db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_feedback_session_id ON feedback(session_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_scale_levels_session_id ON scale_levels(session_id)`);
 });
 
 // Function to register a new user
 const registerUser = (username, password, callback) => {
-  db.run(`INSERT INTO users (username, password) VALUES (?, ?)`, [username, password], function (err) {
-    if (err) {
-      console.error('Error in registerUser:', err.message);
-      return callback(err);
+  const saltRounds = 12;
+  bcrypt.hash(password, saltRounds, (hashErr, hash) => {
+    if (hashErr) {
+      console.error('Error hashing password in registerUser:', hashErr.message);
+      return callback(hashErr);
     }
-    callback(null, this.lastID);
+    db.run(`INSERT INTO users (username, password) VALUES (?, ?)`, [username, hash], function (err) {
+      if (err) {
+        console.error('Error in registerUser:', err.message);
+        return callback(err);
+      }
+      callback(null, this.lastID);
+    });
   });
 };
 
@@ -149,6 +166,17 @@ const getUser = (username, callback) => {
       return callback(err);
     }
     callback(null, row);
+  });
+};
+
+// Update a user's password hash (used for migrating plaintext passwords on login)
+const updateUserPassword = (username, newHashedPassword, callback) => {
+  db.run(`UPDATE users SET password = ? WHERE username = ?`, [newHashedPassword, username], function(err){
+    if (err) {
+      console.error('Error in updateUserPassword:', err.message);
+      return callback(err);
+    }
+    callback(null);
   });
 };
 
@@ -496,10 +524,23 @@ const getSessionById = (session_id, callback) => {
   });
 };
 
+// Helper: get session (including username) for a given message_id
+const getSessionByMessageId = (message_id, callback) => {
+  const sql = `SELECT s.* FROM sessions s INNER JOIN messages m ON m.session_id = s.id WHERE m.message_id = ? LIMIT 1`;
+  db.get(sql, [message_id], (err, row) => {
+    if (err) {
+      console.error('Error in getSessionByMessageId:', err.message);
+      return callback(err);
+    }
+    callback(null, row);
+  });
+};
+
 // Exporting the functions
 export {
   registerUser,
   getUser,
+  updateUserPassword,
   createSession,
   createTuringSession,
   saveMessage,
@@ -521,6 +562,7 @@ export {
   renameSession,
   updateMessageContent,
   getSessionById,
+  getSessionByMessageId,
   saveMessageWithScaleLevel
 };
 

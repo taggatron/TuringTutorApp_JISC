@@ -4,7 +4,12 @@ import path from 'path';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
-import { registerUser, getUser, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup,getUserGroups,updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, saveMessageWithScaleLevel } from './database.js';
+import session from 'express-session';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import bcrypt from 'bcrypt';
+import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup,getUserGroups,updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel } from './database.js';
+import { checkAuth } from './server/middleware/auth.js';
 
 dotenv.config({ path: './APIkey.env' });
 
@@ -20,17 +25,27 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(cookieParser());
 
-function checkAuth(req, res, next) {
-    if (req.cookies.logged_in) {
-        next();
-    } else {
-        if (req.path === '/' || req.path === '/login.html' || req.path === '/register.html') {
-            next();
-        } else {
-            res.redirect('/');
-        }
+// Basic security headers (CSP disabled to avoid breaking inline scripts/styles)
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// Sessions (used server-side); keep legacy cookies for compatibility
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'change-me-in-env',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production'
     }
-}
+}));
+
+// Rate limiting
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+const generalLimiter = rateLimit({ windowMs: 1 * 60 * 1000, max: 300 });
+app.use(generalLimiter);
+
+// checkAuth moved to server/middleware/auth.js
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(path.resolve(), 'public', 'home.html'));
@@ -39,8 +54,11 @@ app.get('/', (req, res) => {
 app.use('/login.html', express.static(path.join(path.resolve(), 'public/login.html')));
 app.use('/register.html', express.static(path.join(path.resolve(), 'public/register.html')));
 
-app.post('/register', (req, res) => {
+app.post('/register', authLimiter, (req, res) => {
     const { username, password } = req.body;
+    if (!username || !password) {
+        return res.json({ success: false, message: 'Username and password are required' });
+    }
     registerUser(username, password, (err) => {
         if (err) {
             if (err.message.includes('UNIQUE constraint failed')) {
@@ -53,14 +71,49 @@ app.post('/register', (req, res) => {
     });
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', authLimiter, (req, res) => {
     const { username, password } = req.body;
+    if (!username || !password) {
+        return res.json({ success: false, message: 'Invalid credentials' });
+    }
     getUser(username, (err, user) => {
-        if (err || !user || user.password !== password) {
+        if (err || !user) {
             return res.json({ success: false, message: 'Invalid credentials' });
         }
-        res.cookie('logged_in', true, { httpOnly: true });
-        res.cookie('username', username, { httpOnly: true });
+        const stored = user.password || '';
+        const isHashed = typeof stored === 'string' && stored.startsWith('$2');
+        const onSuccess = () => {
+            // Establish server-side session and legacy cookies
+            req.session.user = { id: user.id, username: user.username };
+            res.cookie('logged_in', true, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+            res.cookie('username', username, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+            res.json({ success: true });
+        };
+        if (isHashed) {
+            bcrypt.compare(password, stored, (cmpErr, ok) => {
+                if (cmpErr || !ok) return res.json({ success: false, message: 'Invalid credentials' });
+                onSuccess();
+            });
+        } else {
+            // Legacy plaintext stored; migrate on correct login
+            if (stored === password) {
+                bcrypt.hash(password, 12, (hErr, hash) => {
+                    if (!hErr && hash) {
+                        updateUserPassword(username, hash, () => {});
+                    }
+                    onSuccess();
+                });
+            } else {
+                return res.json({ success: false, message: 'Invalid credentials' });
+            }
+        }
+    });
+});
+
+app.post('/logout', (req, res) => {
+    req.session.destroy(() => {
+        res.clearCookie('logged_in');
+        res.clearCookie('username');
         res.json({ success: true });
     });
 });
@@ -93,31 +146,36 @@ app.get('/sessions', (req, res) => {
 app.get('/messages', (req, res) => {
     const session_id = req.query.session_id;
 
-    getMessages(session_id, (err, messages) => {
-        if (err) {
-            console.error('Error fetching messages:', err);
-            return res.json({ success: false, message: 'Error fetching messages' });
+    // Verify session belongs to current user
+    const username = req.cookies.username;
+    getSessionById(session_id, (sessErr, sess) => {
+        if (sessErr || !sess || sess.username !== username) {
+            return res.json({ success: false, message: 'Not authorized for this session' });
         }
 
-        getFeedback(session_id, (err, feedbackData) => {
+        getMessages(session_id, (err, messages) => {
             if (err) {
-                console.error('Error fetching feedback:', err);
-                return res.json({ success: false, message: 'Error fetching feedback' });
+                console.error('Error fetching messages:', err);
+                return res.json({ success: false, message: 'Error fetching messages' });
             }
 
-            // Fetch all scale levels for this session using getScaleLevels
-            getScaleLevels(session_id, (err, rows) => {
+            getFeedback(session_id, (err, feedbackData) => {
                 if (err) {
-                    console.error('Error fetching scale levels:', err);
-                    return res.json({ success: false, message: 'Error fetching scale levels' });
+                    console.error('Error fetching feedback:', err);
+                    return res.json({ success: false, message: 'Error fetching feedback' });
                 }
 
-                // Aggregate unique scale levels
-                const scaleLevels = [...new Set(rows.map(row => row.scale_level))];
+                // Fetch all scale levels for this session using getScaleLevels
+                getScaleLevels(session_id, (err, rows) => {
+                    if (err) {
+                        console.error('Error fetching scale levels:', err);
+                        return res.json({ success: false, message: 'Error fetching scale levels' });
+                    }
 
-                // Get the session record to include is_turing
-                getSessionById(session_id, (sErr, sess) => {
-                    // Return messages with their own scale_level and collapsed state
+                    // Aggregate unique scale levels
+                    const scaleLevels = [...new Set(rows.map(row => row.scale_level))];
+
+                    // Use sess from the initial ownership check to include is_turing
                     res.json({
                         success: true,
                         is_turing: sess?.is_turing === 1 || sess?.is_turing === true ? 1 : 0,
@@ -212,6 +270,12 @@ app.post('/save-session', (req, res) => {
     const { session_id, messages, feedbackData } = req.body;
     const username = req.cookies.username;
 
+    // Ownership check
+    getSessionById(session_id, (sErr, sess) => {
+        if (sErr || !sess || sess.username !== username) {
+            return res.json({ success: false, message: 'Not authorized for this session' });
+        }
+
     messages.forEach((message, index) => {
         // First check if the message with the same content already exists in the database
         getMessageByContent(session_id, message.content, (err, existingMessage) => {
@@ -251,16 +315,23 @@ app.post('/save-session', (req, res) => {
     });
 
     res.json({ success: true });
+    });
 });
 
 app.delete('/delete-session', (req, res) => {
     const session_id = req.query.session_id;
-    deleteSession(session_id, (err) => {
+    const username = req.cookies.username;
+    getSessionById(session_id, (sErr, sess) => {
+        if (sErr || !sess || sess.username !== username) {
+            return res.json({ success: false, message: 'Not authorized for this session' });
+        }
+        deleteSession(session_id, (err) => {
         if (err) {
             console.error('Error deleting session:', err);
             return res.json({ success: false, message: 'Could not delete session' });
         }
         res.json({ success: true, message: 'Session deleted successfully' });
+        });
     });
 });
 
@@ -268,6 +339,11 @@ app.post('/save-feedback', (req, res) => {
     const { session_id, feedbackContent, message_id } = req.body;
     const username = req.cookies.username;
 
+    // Ownership check
+    getSessionById(session_id, (sErr, sess) => {
+        if (sErr || !sess || sess.username !== username) {
+            return res.json({ success: false, message: 'Not authorized for this session' });
+        }
     console.log('[POST /save-feedback] Incoming (simplified):', {
         session_id,
         feedbackContent,
@@ -283,6 +359,7 @@ app.post('/save-feedback', (req, res) => {
         }
         res.json({ success: true });
     });
+    });
 });
 
 // Update message content (used by Turing Mode autosave/close)
@@ -290,9 +367,16 @@ app.post('/update-message', (req, res) => {
     const { message_id, content } = req.body;
     if (!message_id) return res.json({ success: false, message: 'message_id required' });
     // Save raw content (may include HTML to preserve images/formatting)
-    updateMessageContent(message_id, content ?? '', (err) => {
-        if (err) return res.json({ success: false, message: 'Could not update message' });
-        res.json({ success: true });
+    // Fetch session by joining messages->sessions to check ownership
+    const username = req.cookies.username;
+    getSessionIdForMessage(message_id, (mErr, sess) => {
+        if (mErr || !sess || sess.username !== username) {
+            return res.json({ success: false, message: 'Not authorized for this message' });
+        }
+        updateMessageContent(message_id, content ?? '', (err) => {
+            if (err) return res.json({ success: false, message: 'Could not update message' });
+            res.json({ success: true });
+        });
     });
 });
 
@@ -301,12 +385,18 @@ app.post('/update-message', (req, res) => {
 app.post('/update-message-collapsed', (req, res) => {
     const { message_id, collapsed } = req.body;
     
-    updateMessageCollapsedState(message_id, collapsed, (err) => {
+    const username = req.cookies.username;
+    getSessionIdForMessage(message_id, (mErr, sess) => {
+        if (mErr || !sess || sess.username !== username) {
+            return res.json({ success: false, message: 'Not authorized for this message' });
+        }
+        updateMessageCollapsedState(message_id, collapsed, (err) => {
         if (err) {
             console.error('Error updating message collapsed state:', err);
             return res.json({ success: false, message: 'Error updating message collapsed state' });
         }
         res.json({ success: true });
+        });
     });
 });
 
@@ -335,14 +425,24 @@ app.post('/create-group', (req, res) => {
 // Endpoint to delete a group
 app.delete('/delete-group', (req, res) => {
   const group_id = req.query.group_id;
+    const username = req.cookies.username;
+    // Ensure group belongs to current user
+    getUser(username, (err, user) => {
+        if (err || !user) return res.json({ success: false, message: 'User not found' });
+        getUserGroups(user.id, (gErr, groups) => {
+            if (gErr) return res.json({ success: false, message: 'Could not retrieve groups' });
+            const owns = groups.some(g => String(g.id) === String(group_id));
+            if (!owns) return res.json({ success: false, message: 'Not authorized for this group' });
   
-  deleteGroup(group_id, (err) => {
+    deleteGroup(group_id, (err) => {
     if (err) {
       console.error('Error deleting group:', err);
       return res.json({ success: false, message: 'Could not delete group' });
     }
     res.json({ success: true, message: 'Group deleted successfully' });
+    });
   });
+    });
 });
 
 // Endpoint to get all groups for a user
@@ -367,14 +467,30 @@ app.get('/groups', (req, res) => {
 // Endpoint to update a session's group
 app.post('/update-session-group', (req, res) => {
   const { session_id, group_id } = req.body;
+    const username = req.cookies.username;
+    // Verify session ownership and group ownership
+    getSessionById(session_id, (sErr, sess) => {
+        if (sErr || !sess || sess.username !== username) {
+            return res.json({ success: false, message: 'Not authorized for this session' });
+        }
+        getUser(username, (uErr, user) => {
+            if (uErr || !user) return res.json({ success: false, message: 'User not found' });
+            getUserGroups(user.id, (gErr, groups) => {
+                if (gErr) return res.json({ success: false, message: 'Could not retrieve groups' });
+                if (group_id !== null && group_id !== undefined && group_id !== '' && !groups.some(g => String(g.id) === String(group_id))) {
+                    return res.json({ success: false, message: 'Not authorized for this group' });
+                }
   
-  updateSessionGroup(session_id, group_id, (err) => {
+    updateSessionGroup(session_id, group_id || null, (err) => {
     if (err) {
       console.error('Error updating session group:', err);
       return res.json({ success: false, message: 'Could not update session group' });
     }
     res.json({ success: true });
+    });
   });
+    });
+});
 });
 
 // Add this alongside the other group endpoints
@@ -566,8 +682,8 @@ wss.on('connection', (ws, req) => {
     let session_id = null;
     let conversationHistory = [];
 
-    const cookies = req.headers.cookie;
-    const username = cookies.split(';').find(c => c.trim().startsWith('username=')).split('=')[1];
+    const cookies = req.headers.cookie || '';
+    const username = (cookies.split(';').find(c => c.trim().startsWith('username=')) || '').split('=')[1];
 
     if (!username) {
         console.error('Username not found in cookies. Cannot proceed with session.');
@@ -654,4 +770,9 @@ async function loadSessionHistory(session_id) {
             resolve(messages);
         });
     });
+}
+
+// Helper to get session ownership from a message id
+function getSessionIdForMessage(message_id, callback) {
+    getSessionByMessageId(message_id, callback);
 }
