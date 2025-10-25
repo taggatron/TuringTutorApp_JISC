@@ -1029,6 +1029,113 @@ function highlightCurrentSession(sessionId) {
   });
 }
 
+// Assistant edit-mode: open an assistant message in a focused overlay for editing
+function enterAssistantEditMode(targetAssistant) {
+  if (!targetAssistant) return null;
+  if (targetAssistant.classList.contains('edit-locked')) return null;
+  // If an edit-mode overlay already exists, remove it first
+  const existing = document.querySelector('.assistant-edit-mode');
+  if (existing) existing.remove();
+
+  // Build overlay
+  const wrapper = document.createElement('div');
+  wrapper.className = 'assistant-edit-mode';
+  wrapper.setAttribute('role', 'dialog');
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'assistant-edit-close';
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Close editor');
+  closeBtn.innerHTML = '×';
+  closeBtn.addEventListener('click', () => exitAssistantEditMode(wrapper, false, targetAssistant));
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'assistant-edit-toolbar';
+  // Simple toolbar: Save / Cancel
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.textContent = 'Save';
+  saveBtn.addEventListener('click', () => saveEdit());
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => exitAssistantEditMode(wrapper, false, targetAssistant));
+  toolbar.appendChild(saveBtn);
+  toolbar.appendChild(cancelBtn);
+
+  const editable = document.createElement('div');
+  editable.className = 'assistant-editable-content';
+  editable.contentEditable = 'true';
+  // Populate with the message content (preserve basic markup)
+  const contentEl = targetAssistant.querySelector('.message-content');
+  editable.innerHTML = contentEl ? contentEl.innerHTML : '';
+
+  wrapper.appendChild(closeBtn);
+  wrapper.appendChild(toolbar);
+  wrapper.appendChild(editable);
+  document.body.appendChild(wrapper);
+
+  // Apply layout helpers to expand chat and hide sidebar while editing
+  document.querySelector('.sidebar')?.classList.add('hide-sidebar');
+  document.querySelector('.chat-container')?.classList.add('expand-chat-area');
+  document.querySelector('.meta-container')?.classList.add('expand-meta-container');
+
+  // Focus editable
+  setTimeout(() => { editable.focus(); }, 10);
+
+  // Save handler
+  async function saveEdit() {
+    // Copy edited HTML back into the target assistant element
+    try {
+      if (contentEl) contentEl.innerHTML = editable.innerHTML;
+      targetAssistant.dataset.edited = '1';
+      // Attempt to persist change to the server if message_id present
+      const messageId = targetAssistant.dataset.messageId;
+      if (messageId) {
+        try {
+          await fetch('/update-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message_id: messageId, content: editable.innerHTML, session_id })
+          });
+        } catch (err) { console.warn('Failed to persist edited message:', err); }
+      }
+    } finally {
+      exitAssistantEditMode(wrapper, true, targetAssistant);
+    }
+  }
+
+  return wrapper;
+}
+
+function exitAssistantEditMode(wrapper, saved, targetAssistant) {
+  if (!wrapper) return;
+  wrapper.remove();
+  // restore layout
+  document.querySelector('.sidebar')?.classList.remove('hide-sidebar');
+  document.querySelector('.chat-container')?.classList.remove('expand-chat-area');
+  document.querySelector('.meta-container')?.classList.remove('expand-meta-container');
+  // If saving, optionally emit an input event on the assistant to notify other handlers
+  if (saved && targetAssistant) {
+    const contentEl = targetAssistant.querySelector('.message-content');
+    if (contentEl) contentEl.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+// Delegate clicks on assistant messages to enter edit mode (unless locked)
+document.addEventListener('click', (e) => {
+  const el = e.target.closest && e.target.closest('.message.assistant');
+  if (!el) return;
+  // prevent triggering when clicking inside editor UI if it exists
+  if (document.querySelector('.assistant-edit-mode')) return;
+  if (el.classList.contains('edit-locked')) return;
+  // Only respond to primary button clicks
+  if (e.button !== 0) return;
+  // don't trigger when click originates from a control inside the message (e.g., overlay buttons)
+  if (e.target.closest && e.target.closest('.message-assistant-overlay')) return;
+  enterAssistantEditMode(el);
+});
+
 const popupOverlay = document.getElementById('popup-overlay');
 if (popupOverlay) {
   popupOverlay.addEventListener('click', function () { hidePromptPopup(); hideReferencePopup(); });
