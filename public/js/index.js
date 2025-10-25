@@ -15,20 +15,32 @@ let fadeTimeout;
 
 // Function to show the pop-up with information
 function showPopup(element, message) {
+  if (!popup) {
+    console.warn('showPopup: scale-popup element not present');
+    return;
+  }
   clearTimeout(fadeTimeout);
   popup.textContent = message;
-  const rect = element.getBoundingClientRect();
-  popup.style.top = `${rect.top - popup.offsetHeight - 10}px`;
-  popup.style.left = `${window.innerWidth / 2 - popup.offsetWidth / 2}px`;
-  popup.style.zIndex = 2010 + parseInt(element.id.split('-')[1]);
+  try {
+    const rect = element.getBoundingClientRect();
+    popup.style.top = `${rect.top - popup.offsetHeight - 10}px`;
+    popup.style.left = `${window.innerWidth / 2 - popup.offsetWidth / 2}px`;
+    // safe z-index calculation: only if element id follows expected pattern
+    try { popup.style.zIndex = String(2010 + (parseInt((element.id||'').split('-')[1]) || 0)); } catch(_) {}
+  } catch (e) {
+    // If element is not positioned or missing, fall back to centered location
+    popup.style.top = '';
+    popup.style.left = '';
+  }
   popup.classList.add('visible');
   popup.classList.remove('fade-out');
 }
 
 function hidePopup() {
+  if (!popup) return;
   popup.classList.add('fade-out');
   fadeTimeout = setTimeout(() => {
-    popup.classList.remove('visible');
+    if (popup) popup.classList.remove('visible');
   }, 4000);
 }
 
@@ -796,8 +808,12 @@ function setMessageInput(text) {
 function showPromptPopup(type) {
   const popup = document.getElementById('prompt-popup');
   const overlay = document.getElementById('popup-overlay');
-  const content = document.querySelector('#prompt-popup .popup-content');
+  const content = popup ? popup.querySelector('.popup-content') : null;
   const promptContent = document.getElementById('prompt-content');
+  if (!popup || !overlay || !content || !promptContent) {
+    console.warn('showPromptPopup: required DOM nodes missing', { popup: !!popup, overlay: !!overlay, content: !!content, promptContent: !!promptContent });
+    return;
+  }
   content.querySelectorAll('.close-button').forEach(btn => btn.remove());
   promptContent.innerHTML = '';
   const closeBtn = document.createElement('span');
@@ -840,8 +856,8 @@ function showPromptPopup(type) {
 function hidePromptPopup() {
   const popup = document.getElementById('prompt-popup');
   const overlay = document.getElementById('popup-overlay');
-  popup.style.display = 'none';
-  overlay.classList.remove('visible');
+  if (popup) popup.style.display = 'none';
+  if (overlay) overlay.classList.remove('visible');
 }
 
 function showChatGPTReferencePopup() {
@@ -855,16 +871,25 @@ function showChatGPTReferencePopup() {
   const safePrompt = droppedPrompt ? droppedPrompt.replace(/\s+/g, ' ').slice(0, 2000) : '';
   const promptLine = droppedPrompt ? ` Response generated to the prompt: "${safePrompt}".` : '';
   const reference = `OpenAI (2025) ChatGPT [AI language model].${promptLine} Available at: https://chat.openai.com/ (Accessed: ${formattedDate}).`;
-  document.getElementById('reference-content').textContent = reference;
-  const popup = document.getElementById('reference-popup'); popup.style.display = 'block';
-  const overlay = document.getElementById('popup-overlay'); overlay.classList.add('visible');
+  const refEl = document.getElementById('reference-content');
+  const popup = document.getElementById('reference-popup');
+  const overlay = document.getElementById('popup-overlay');
+  if (!refEl || !popup || !overlay) {
+    console.warn('showChatGPTReferencePopup: missing DOM elements', { referenceContent: !!refEl, popup: !!popup, overlay: !!overlay });
+    // still copy reference to clipboard even if UI popup is absent
+    navigator.clipboard.writeText(reference).catch(err => console.error('Error copying reference:', err));
+    return;
+  }
+  refEl.textContent = reference;
+  popup.style.display = 'block';
+  overlay.classList.add('visible');
   navigator.clipboard.writeText(reference).catch(err => console.error('Error copying reference:', err));
   setupReferenceImageActions();
 }
 
 function hideReferencePopup() {
-  const popup = document.getElementById('reference-popup'); popup.style.display = 'none';
-  const overlay = document.getElementById('popup-overlay'); overlay.classList.remove('visible');
+  const popup = document.getElementById('reference-popup'); if (popup) popup.style.display = 'none';
+  const overlay = document.getElementById('popup-overlay'); if (overlay) overlay.classList.remove('visible');
 }
 
 const chatgptRefBtn = document.querySelector('.create-reference-button');

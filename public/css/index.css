@@ -153,6 +153,13 @@
 
 /* animated text used in AI Assessment scale */
 #animated-text.animated-text { min-height:36px; font-size:0.95rem; color:#374151; padding:6px 12px; }
+/* Popup overlay and popups */
+.popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 2500; display: none; }
+.popup-overlay.visible { display: block; }
+.prompt-popup, .reference-popup { display: none; position: fixed; z-index: 2600; left: 50%; top: 20%; transform: translateX(-50%); max-width: 700px; width: calc(100% - 48px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); border-radius: 10px; background: #fff; }
+.prompt-popup .popup-content, .reference-popup .popup-content { padding: 18px; }
+.prompt-popup.visible, .reference-popup.visible { display: block; }
+.prompt-popup .close-button, .reference-popup .close-button { position: absolute; top: 8px; right: 12px; font-size: 1.4rem; cursor: pointer; }
 @keyframes refPulse {
     0%, 100% { filter: drop-shadow(0 0 0 rgba(45,140,255,0)); }
     50% { filter: drop-shadow(0 0 8px rgba(45,140,255,0.55)); }
