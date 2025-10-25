@@ -631,9 +631,11 @@ function typeWriter(elementId, text, speed, callback) {
     if (callback) callback();
     return;
   }
+  // mark as typing to show a smaller blinking caret via CSS
+  targetEl.classList.add('typing');
   function type() {
     if (i < text.length) { targetEl.textContent += text.charAt(i); i++; setTimeout(type, speed); }
-    else { animating = false; if (callback) callback(); }
+    else { animating = false; targetEl.classList.remove('typing'); if (callback) callback(); }
   }
   type();
 }

@@ -153,6 +153,27 @@
 
 /* animated text used in AI Assessment scale */
 #animated-text.animated-text { min-height:36px; font-size:0.95rem; color:#374151; padding:6px 12px; }
+
+/* Typing caret for animated text: smaller, less tall than full line height */
+#animated-text.typing::after {
+    content: '';
+    display: inline-block;
+    width: 1.5px;
+    height: 0.65em; /* shorter caret */
+    background: currentColor;
+    margin-left: 6px;
+    vertical-align: baseline;
+    transform: translateY(0.12em); /* nudge down slightly to sit on baseline */
+    animation: animatedTextBlink 1s steps(1) infinite;
+    opacity: 0.95;
+}
+@keyframes animatedTextBlink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Hide any native caret for the animated text element so only the custom caret shows */
+#animated-text { caret-color: transparent; }
 /* Scale items (simple horizontal pill layout) */
 .ai-assessment-scale { display:flex; gap:8px; align-items:center; padding:8px 12px; }
 .scale-item { padding:8px 12px; border-radius:20px; background:#f3f4f6; color:#374151; font-size:0.85rem; cursor:default; user-select:none; border:1px solid transparent; }
