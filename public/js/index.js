@@ -589,8 +589,15 @@ let index = 0; const defaultSpeed = 150; const scaleSpeed = 40; let animating = 
 function isAnimating() { return animating; }
 function typeWriter(elementId, text, speed, callback) {
   let i = 0; animating = true;
+  const targetEl = document.getElementById(elementId);
+  if (!targetEl) {
+    console.warn(`typeWriter: element with id "${elementId}" not found`);
+    animating = false;
+    if (callback) callback();
+    return;
+  }
   function type() {
-    if (i < text.length) { document.getElementById(elementId).textContent += text.charAt(i); i++; setTimeout(type, speed); }
+    if (i < text.length) { targetEl.textContent += text.charAt(i); i++; setTimeout(type, speed); }
     else { animating = false; if (callback) callback(); }
   }
   type();
@@ -613,13 +620,20 @@ document.querySelectorAll('.scale-item').forEach(item => {
       if (!isAnimating()) {
         const description = scaleDescriptions[item.id];
         const wasActiveBeforeHover = item.classList.contains('active');
-        document.getElementById('animated-text').textContent = '';
+  const animatedEl = document.getElementById('animated-text');
+  if (animatedEl) animatedEl.textContent = '';
         document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'none');
         item.classList.add('active');
         typeWriter('animated-text', description, scaleSpeed, () => {
           setTimeout(() => {
-            document.getElementById('animated-text').textContent = '';
-            typeWriter('animated-text', text, defaultSpeed);
+            const animatedEl2 = document.getElementById('animated-text');
+            if (animatedEl2) {
+              animatedEl2.textContent = '';
+              typeWriter('animated-text', text, defaultSpeed);
+            } else {
+              // If the element is gone, ensure we re-enable pointer events
+              document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'auto');
+            }
             document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'auto');
             if (!wasActiveBeforeHover) item.classList.remove('active');
           }, 3500);

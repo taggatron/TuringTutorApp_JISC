@@ -588,8 +588,11 @@ app.post('/rename-group', checkAuth, (req, res) => {
 });
 
 
-app.use(checkAuth);
+// Serve static assets first so public files (CSS/JS/images) are reachable
 app.use(express.static(path.join(path.resolve(), 'public')));
+
+// Then enforce auth for protected routes
+app.use(checkAuth);
 
 // CSRF error handler
 app.use((err, req, res, next) => {
