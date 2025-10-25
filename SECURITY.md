@@ -22,7 +22,7 @@ SQLite does not support Row-Level Security. For multi-tenant security guarantees
 
 ### Example Postgres schema (sketch)
 
-```
+```sql
 CREATE TABLE app_user (
   id serial PRIMARY KEY,
   username text UNIQUE NOT NULL,
@@ -62,11 +62,11 @@ CREATE TABLE scale_level (
   scale_level int NOT NULL,
   created_at timestamptz DEFAULT now()
 );
-```
+```sql
 
 ### Enable RLS
 
-```
+```sql
 ALTER TABLE session ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message ENABLE ROW LEVEL SECURITY;
 ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
@@ -84,7 +84,7 @@ CREATE POLICY message_session_owner ON message
 
 In your application, set the current user context on each request (per pooled connection) before queries:
 
-```
+```sql
 SELECT set_config('app.user_id', $1::text, true);
 ```
 

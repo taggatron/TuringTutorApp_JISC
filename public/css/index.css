@@ -1,0 +1,176 @@
+/* Extracted styles from index.html */
+/* ...existing styles... */
+.prompt-buttons {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    display: none; /* shown via JS */
+}
+/* Assistant message edit mode styles */
+.assistant-edit-mode {
+    position: fixed !important;
+    top: 0; /* Start at very top, above AI assessment bar */
+    left: var(--sidebar-left, 0px); /* Align with sidebar */
+    width: 100vw !important;
+    height: var(--assistant-edit-height, calc(100vh - 120px)) !important; /* dynamic height */
+    z-index: 3000;
+    background: #fff;
+    box-shadow: 0 0 40px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* top align */
+    align-items: center;
+    animation: expandAssistantMsg 0.4s cubic-bezier(.4,2,.6,1) forwards;
+    overflow: hidden; /* child will scroll */
+    padding-top: 88px; /* space for toolbar + close button */
+}
+@keyframes expandAssistantMsg {
+    from { transform: scale(0.95); opacity: 0.7; }
+    to { transform: scale(1); opacity: 1; }
+}
+.assistant-edit-close {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    font-size: 2rem;
+    color: #888;
+    background: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    z-index: 3100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: background 0.2s;
+}
+.assistant-edit-close:hover {
+    background: #f2f2f2;
+}
+.assistant-editable-content {
+    outline: 2px solid #2d8cff;
+    background: #fafbfc;
+    border-radius: 10px;
+    min-height: 60px;
+    padding: 24px;
+    margin-top: 0;
+    width: 100%;
+    max-width: 900px;
+    box-sizing: border-box;
+    font-size: 1.0rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    transition: box-shadow 0.2s;
+    flex: 1 1 auto; /* allow to fill remaining height */
+    overflow-y: auto; /* scroll inner content, prevent overflow */
+}
+
+/* Sticky formatting toolbar */
+.assistant-edit-toolbar {
+    position: absolute;
+    top: 40px; /* below close button area */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    background: linear-gradient(180deg,#ffffff 0%,#f7f9fb 100%);
+    border: 1px solid #d9dfe5;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    box-sizing: border-box;
+    z-index: 3050;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+}
+.assistant-edit-mode > .assistant-edit-toolbar { opacity:1; pointer-events:auto; }
+.assistant-edit-toolbar button {
+    background: #fff;
+    border: 1px solid #cfd6dd;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #2d3e50;
+    line-height: 1;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.assistant-edit-toolbar button:hover { background:#f0f4f7; }
+.assistant-edit-toolbar button:active { background:#e2e8ec; }
+.assistant-edit-toolbar button.active { background:#2d8cff; color:#fff; border-color:#2d8cff; }
+.assistant-edit-toolbar button[disabled] { opacity:0.4; cursor:default; }
+
+.assistant-edit-toolbar .spacer { flex:1; }
+.assistant-edit-toolbar .label { font-weight:600; margin-right:4px; }
+.hide-sidebar {
+    animation: hideSidebar 0.4s cubic-bezier(.4,2,.6,1) forwards;
+}
+@keyframes hideSidebar {
+    from { width: 260px; opacity: 1; }
+    to { width: 0; opacity: 0; }
+}
+.expand-chat-area {
+    animation: expandChatArea 0.4s cubic-bezier(.4,2,.6,1) forwards;
+}
+@keyframes expandChatArea {
+    from { width: calc(100vw - 260px); }
+    to { width: 100vw; }
+}
+.expand-meta-container {
+    animation: expandMetaContainer 0.4s cubic-bezier(.4,2,.6,1) forwards;
+}
+@keyframes expandMetaContainer {
+    from { width: calc(100vw - 260px); }
+    to { width: 100vw; }
+}
+.hide-user-message { display: none !important; }
+
+/* Visual cue when ChatGPT Reference is a drop target */
+.create-reference-button.drop-target {
+    box-shadow: 0 0 0 3px rgba(45,140,255,0.35), 0 0 0 10px rgba(45,140,255,0.18);
+    border-color: #2d8cff !important;
+    outline: none;
+    transition: box-shadow 120ms ease, border-color 120ms ease;
+    animation: refPulse 1.2s ease-in-out infinite, refBgPulse 1.2s ease-in-out infinite;
+}
+@keyframes refPulse {
+    0%, 100% { filter: drop-shadow(0 0 0 rgba(45,140,255,0)); }
+    50% { filter: drop-shadow(0 0 8px rgba(45,140,255,0.55)); }
+}
+/* Pulse the button background to the same blue as the border glow */
+@keyframes refBgPulse {
+    0%, 100% { background-color: #6c757d; }
+    50% { background-color: #2d8cff; }
+}
+
+/* Turing Mode styles */
+/* Make the header buttons share equal horizontal space */
+.sidebar-header { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.turing-mode-button { 
+    border: 1px solid #86efac; /* light green border */
+    background:#a7f3d0; /* light green background */
+    color:#fff;
+    border-radius:5px; padding:5px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px; width:100%; height:38px;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.turing-mode-button:hover { background:#86efac; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.turing-mode-button:active { background:#6ee7b7; }
+.turing-mode-button img.turing-mode-icon { display:block; width:22px; height:22px; object-fit:contain; filter: drop-shadow(0 0 0 rgba(0,0,0,0)); }
+.turing-mode-button .plus { color:#fff; font-weight:700; font-size:20px; line-height:1; display:inline-block; }
+.turing-session { background:#eaffea; border-left:4px solid #22c55e; display:flex; align-items:center; gap:6px; /* ensure text sits right of icon */ position: relative; justify-content:flex-start; }
+/* Ensure the editable name sits immediately to the right of the icon and is left-aligned */
+.turing-session .turing-name { outline:none; display:inline-block; flex:1 1 auto; text-align:left; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:28px; }
+.turing-session .turing-left { display:flex; align-items:center; gap:6px; flex:1 1 auto; min-width:0; }
+.turing-session .turing-name { outline:none; display:inline-block; }
+.sidebar-section-title { margin: 8px 0 6px; font-size: 14px; color:#374151; }
+#turing-mode-container { margin-bottom: 8px; display:flex; flex-direction:column; gap:6px; }
+/* Reusable icon size for Turing logos in sidebar items */
+img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inline-block; }

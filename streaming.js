@@ -10,6 +10,9 @@ import csrf from 'csurf';
 import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcrypt';
+import fs from 'fs';
+import http from 'http';
+import https from 'https';
 import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup,getUserGroups,updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel } from './database.js';
 import { checkAuth } from './server/middleware/auth.js';
 
@@ -69,9 +72,9 @@ const cspStrict = helmet.contentSecurityPolicy({
     directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'", 'https://maxcdn.bootstrapcdn.com'],
+        styleSrc: ["'self'"],
         imgSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'", 'ws://localhost:3000'],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"]
     }
@@ -83,6 +86,25 @@ app.get('/login.html', cspStrict, (req, res) => {
 
 app.get('/register.html', cspStrict, (req, res) => {
     res.sendFile(path.join(path.resolve(), 'public', 'register.html'));
+});
+
+// CSP for main app (index.html): allow local scripts/styles and jsdelivr for html2canvas while we migrate to local vendor copy
+const cspIndex = helmet.contentSecurityPolicy({
+    useDefaults: true,
+    directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"]
+    }
+});
+
+app.get('/index.html', cspIndex, (req, res) => {
+    res.sendFile(path.join(path.resolve(), 'public', 'index.html'));
 });
 
 app.post('/register', authLimiter,
@@ -576,8 +598,34 @@ app.use((err, req, res, next) => {
     return next(err);
 });
 
-const server = app.listen(port, () => {
-    console.log(`HTTP server running at http://localhost:${port}`);
+// Create HTTP or HTTPS server based on env flags
+let server;
+if (process.env.HTTPS_ENABLED === 'true') {
+    try {
+        const keyPath = process.env.SSL_KEY_PATH;
+        const certPath = process.env.SSL_CERT_PATH;
+        if (!keyPath || !certPath) {
+            console.warn('HTTPS_ENABLED is true but SSL_KEY_PATH/SSL_CERT_PATH not set. Falling back to HTTP.');
+            server = http.createServer(app);
+        } else {
+            const credentials = {
+                key: fs.readFileSync(keyPath),
+                cert: fs.readFileSync(certPath)
+            };
+            server = https.createServer(credentials, app);
+            console.log('HTTPS is enabled');
+        }
+    } catch (e) {
+        console.warn('Failed to initialize HTTPS; falling back to HTTP:', e?.message || e);
+        server = http.createServer(app);
+    }
+} else {
+    server = http.createServer(app);
+}
+
+server.listen(port, () => {
+    const proto = (process.env.HTTPS_ENABLED === 'true') ? 'https' : 'http';
+    console.log(`Server running at ${proto}://localhost:${port}`);
 });
 
 const wss = new WebSocketServer({ server });
@@ -819,7 +867,7 @@ wss.on('connection', (ws, req) => {
 });
 
 
-console.log('WebSocket server running with HTTP server on ws://localhost:3000');
+console.log('WebSocket server attached to the same HTTP/HTTPS server');
 
 async function loadSessionHistory(session_id) {
     return new Promise((resolve, reject) => {
