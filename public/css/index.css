@@ -181,6 +181,11 @@
 /* Separate container for the animated description text shown below the scale */
 .ai-assessment-desc { margin-top: 10px; padding: 0 12px; }
 .ai-assessment-desc #animated-text { max-width: 900px; }
+/* Constrain and wrap content inside capture containers used for screenshots */
+.turing-capture-container { max-width: 760px; box-sizing: border-box; }
+.turing-capture-container * { box-sizing: border-box; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+.turing-capture-container img { max-width: 100%; height: auto; display: block; }
+.turing-capture-container .message-content, .turing-capture-container .assistant-editable-content { white-space: normal; }
 /* Popup overlay and popups */
 .popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 2500; display: none; }
 .popup-overlay.visible { display: block; }
@@ -222,3 +227,28 @@
 #turing-mode-container { margin-bottom: 8px; display:flex; flex-direction:column; gap:6px; }
 /* Reusable icon size for Turing logos in sidebar items */
 img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inline-block; }
+
+/* Replace border-right blinking caret with a pseudo-element so its height exactly matches the text */
+/* This overrides older rules that used `border-right` and could yield a taller caret due to padding. */
+#animated-text {
+    border-right: none !important;
+    display: inline-block;
+    position: relative;
+    line-height: 1; /* keep caret height tied to font-size */
+}
+
+@keyframes blink-caret {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+}
+
+#animated-text::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1em; /* match the computed font-size of the element */
+    background: purple;
+    vertical-align: middle; /* align caret to the text's midline */
+    margin-left: 6px;
+    animation: blink-caret 1s step-end infinite;
+}
