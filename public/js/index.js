@@ -164,7 +164,6 @@ async function isLastAssistantMessageDB(messageId, sessionId) {
     return false;
   }
 }
-
 function resizeInput(event) {
   const textarea = event.target;
   const max = parseInt(getComputedStyle(textarea).maxHeight || 0, 10) || 0;
@@ -975,7 +974,24 @@ async function turingInsertReferenceAndPromptImage(editableEl, promptText, promp
   const refText = buildChatGPTReferenceTextFromPrompt(promptText); const refP = document.createElement('p'); refP.className = 'reference-item'; refP.textContent = refText; refsBody.appendChild(refP);
   const pair = turingFindPairFromPromptEl(promptEl) || turingFindDefaultPair(); if (!pair) return;
   const container = turingBuildCaptureContainer(pair); container.style.position = 'fixed'; container.style.left = '-10000px'; container.style.top = '0'; document.body.appendChild(container);
-  try { await new Promise(r => setTimeout(r, 50)); const canvas = await window.html2canvas(container, { backgroundColor: '#ffffff', scale: window.devicePixelRatio || 2 }); const dataUrl = canvas.toDataURL('image/png'); const img = document.createElement('img'); img.src = dataUrl; img.alt = 'Prompt and AI excerpt'; img.style.maxWidth = '100%'; img.style.border = '1px solid #e5e7eb'; img.style.borderRadius = '8px'; promptsBody.appendChild(img); } finally { container.remove(); }
+  try {
+    await new Promise(r => setTimeout(r, 50));
+    const canvas = await window.html2canvas(container, { backgroundColor: '#ffffff', scale: window.devicePixelRatio || 2 });
+    const dataUrl = canvas.toDataURL('image/png');
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.alt = 'Prompt and AI excerpt';
+    img.style.maxWidth = '100%';
+    img.style.border = '1px solid #e5e7eb';
+    img.style.borderRadius = '8px';
+    // wrap the image in a constrained wrapper so it cannot push out the layout
+    const wrapper = document.createElement('div');
+    wrapper.className = 'reference-image-wrapper';
+    wrapper.appendChild(img);
+    promptsBody.appendChild(wrapper);
+  } finally {
+    container.remove();
+  }
   editableEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
 

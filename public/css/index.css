@@ -186,6 +186,29 @@
 .turing-capture-container * { box-sizing: border-box; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
 .turing-capture-container img { max-width: 100%; height: auto; display: block; }
 .turing-capture-container .message-content, .turing-capture-container .assistant-editable-content { white-space: normal; }
+
+/* Ensure any images inserted into assistant messages or the editable editor are constrained
+   so they don't expand the chat layout and squish the sidebar. Use a sane max-width and
+   ensure images are block-level and scale responsively. */
+.message .message-content img,
+.message.assistant img,
+.assistant-editable-content img,
+.message-row img {
+    max-width: 100%; /* can't exceed parent width */
+    height: auto !important;
+    display: block;
+    margin: 8px 0;
+    object-fit: contain;
+}
+
+/* Add a wrapper class for persistent reference images to cap their width inside messages */
+.reference-image-wrapper {
+    max-width: 760px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.reference-image-wrapper img { width: 100%; height: auto; display: block; }
 /* Popup overlay and popups */
 .popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 2500; display: none; }
 .popup-overlay.visible { display: block; }
