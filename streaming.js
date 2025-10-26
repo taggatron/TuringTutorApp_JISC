@@ -9,6 +9,7 @@ import helmet from 'helmet';
 import csrf from 'csurf';
 import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
+import authRouter from './server/routes/auth.js';
 import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
@@ -108,93 +109,8 @@ app.get('/index.html', cspIndex, (req, res) => {
     res.sendFile(path.join(path.resolve(), 'public', 'index.html'));
 });
 
-app.post('/register', authLimiter,
-    [
-        body('username').trim().isLength({ min: 3, max: 32 }).isAlphanumeric().withMessage('Username must be 3-32 chars, alphanumeric'),
-        body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
-    ],
-    (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.json({ success: false, message: errors.array()[0].msg });
-    }
-    const { username, password } = req.body;
-    registerUser(username, password, (err) => {
-        if (err) {
-            if (err.message.includes('UNIQUE constraint failed')) {
-                return res.json({ success: false, message: 'Username already exists' });
-            } else {
-                return res.json({ success: false, message: 'Registration failed' });
-            }
-        }
-        res.json({ success: true });
-    });
-});
-
-app.post('/login', authLimiter,
-    [
-        body('username').trim().isLength({ min: 3, max: 32 }).isAlphanumeric(),
-        body('password').isLength({ min: 8 })
-    ],
-    (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.json({ success: false, message: 'Invalid credentials' });
-    }
-    const { username, password } = req.body;
-    getUser(username, (err, user) => {
-        if (err || !user) {
-            return res.json({ success: false, message: 'Invalid credentials' });
-        }
-        const stored = user.password || '';
-        const isHashed = typeof stored === 'string' && stored.startsWith('$2');
-        const onSuccess = () => {
-            // Establish server-side session and legacy cookies
-            req.session.user = { id: user.id, username: user.username };
-            res.cookie('logged_in', true, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
-            res.cookie('username', username, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
-            res.json({ success: true });
-        };
-        if (isHashed) {
-            bcrypt.compare(password, stored, (cmpErr, ok) => {
-                if (cmpErr || !ok) return res.json({ success: false, message: 'Invalid credentials' });
-                onSuccess();
-            });
-        } else {
-            // Legacy plaintext stored; migrate on correct login
-            if (stored === password) {
-                bcrypt.hash(password, 12, (hErr, hash) => {
-                    if (!hErr && hash) {
-                        updateUserPassword(username, hash, () => {});
-                    }
-                    onSuccess();
-                });
-            } else {
-                return res.json({ success: false, message: 'Invalid credentials' });
-            }
-        }
-    });
-});
-
-app.post('/logout', (req, res) => {
-    req.session.destroy(() => {
-        res.clearCookie('logged_in');
-        res.clearCookie('username');
-        res.json({ success: true });
-    });
-});
-
-// CSRF token endpoint for client to retrieve and attach to state-changing requests
-app.get('/csrf-token', (req, res) => {
-    try {
-        const token = req.csrfToken();
-        // Provide a readable cookie for frameworks that auto-read it
-        res.cookie('XSRF-TOKEN', token, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
-        res.json({ csrfToken: token });
-    } catch (e) {
-        res.status(500).json({ error: 'Could not generate CSRF token' });
-    }
-});
+// Mount auth routes (register, login, logout, csrf-token)
+app.use('/', authRouter);
 
 // Rename a session
 app.post('/rename-session', (req, res) => {
