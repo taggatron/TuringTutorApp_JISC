@@ -2,7 +2,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
-import { registerUser, getUser, updateUserPassword } from '../../database.js';
+import * as pgdb from '../db/postgres.js';
 
 const router = express.Router();
 
@@ -20,16 +20,19 @@ router.post('/register', authLimiter,
     if (!errors.isEmpty()) {
       return res.json({ success: false, message: errors.array()[0].msg });
     }
-    const { username, password } = req.body;
-    registerUser(username, password, (err) => {
-      if (err) {
-        if (err.message && err.message.includes('UNIQUE constraint failed')) {
-          return res.json({ success: false, message: 'Username already exists' });
-        }
+    (async () => {
+      try {
+        const { username, password } = req.body;
+        // Check existing
+        const existing = await pgdb.getUser(username);
+        if (existing) return res.json({ success: false, message: 'Username already exists' });
+        await pgdb.registerUser(username, password);
+        return res.json({ success: true });
+      } catch (err) {
+        console.error('Registration error:', err);
         return res.json({ success: false, message: 'Registration failed' });
       }
-      res.json({ success: true });
-    });
+    })();
   }
 );
 
@@ -44,36 +47,33 @@ router.post('/login', authLimiter,
     if (!errors.isEmpty()) {
       return res.json({ success: false, message: 'Invalid credentials' });
     }
-    const { username, password } = req.body;
-    getUser(username, (err, user) => {
-      if (err || !user) return res.json({ success: false, message: 'Invalid credentials' });
-      const stored = user.password || '';
-      const isHashed = typeof stored === 'string' && stored.startsWith('$2');
-      const onSuccess = () => {
+    (async () => {
+      try {
+        const { username, password } = req.body;
+        const user = await pgdb.getUser(username);
+        if (!user) return res.json({ success: false, message: 'Invalid credentials' });
+        const stored = user.password || '';
+        const isHashed = typeof stored === 'string' && stored.startsWith('$2');
+
+        if (isHashed) {
+          const ok = await bcrypt.compare(password, stored);
+          if (!ok) return res.json({ success: false, message: 'Invalid credentials' });
+        } else {
+          // legacy plaintext: verify and migrate
+          if (stored !== password) return res.json({ success: false, message: 'Invalid credentials' });
+          const newHash = await bcrypt.hash(password, 12);
+          await pgdb.updateUserPassword(username, newHash);
+        }
+
         req.session.user = { id: user.id, username: user.username };
         res.cookie('logged_in', true, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
         res.cookie('username', username, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
-        res.json({ success: true });
-      };
-      if (isHashed) {
-        bcrypt.compare(password, stored, (cmpErr, ok) => {
-          if (cmpErr || !ok) return res.json({ success: false, message: 'Invalid credentials' });
-          onSuccess();
-        });
-      } else {
-        // Legacy plaintext stored; migrate on correct login
-        if (stored === password) {
-          bcrypt.hash(password, 12, (hErr, hash) => {
-            if (!hErr && hash) {
-              updateUserPassword(username, hash, () => {});
-            }
-            onSuccess();
-          });
-        } else {
-          return res.json({ success: false, message: 'Invalid credentials' });
-        }
+        return res.json({ success: true });
+      } catch (err) {
+        console.error('Login error:', err);
+        return res.json({ success: false, message: 'Invalid credentials' });
       }
-    });
+    })();
   }
 );
 

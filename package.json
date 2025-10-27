@@ -5,7 +5,8 @@
   "main": "streaming.js",
   "type": "module",
   "scripts": {
-    "start": "node streaming.js"
+    "start": "node streaming.js",
+    "migrate:sqlite-to-postgres": "node migrations/sqlite_to_postgres.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
