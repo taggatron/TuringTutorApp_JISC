@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  pgsql:
+    image: postgres:15
+    container_name: turing_pgsql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PGUSER:-turing}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-turingpass}
+      POSTGRES_DB: ${PGDATABASE:-turingdb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-turing} -d ${PGDATABASE:-turingdb}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
