@@ -1,4 +1,4 @@
-import { getUser } from '../../database.js';
+import { getUser } from '../db/postgres.js';
 
 // Enhanced authentication check
 // - Prefer server-side session (`req.session.user`).
@@ -24,12 +24,13 @@ export function checkAuth(req, res, next) {
   }
 
   // Validate username exists in DB and restore session
-  getUser(username, (err, user) => {
-    if (err || !user) {
-      return res.redirect('/');
-    }
+  getUser(username).then((user) => {
+    if (!user) return res.redirect('/');
     // Rehydrate minimal server-side session securely
     req.session.user = { id: user.id, username: user.username };
     return next();
+  }).catch((e) => {
+    console.error('Auth middleware DB error', e);
+    return res.redirect('/');
   });
 }

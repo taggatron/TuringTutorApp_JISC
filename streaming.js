@@ -14,7 +14,7 @@ import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
-import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup,getUserGroups,updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel } from './database.js';
+import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel } from './server/db/postgres.js';
 import { checkAuth } from './server/middleware/auth.js';
 
 dotenv.config({ path: './APIkey.env' });
