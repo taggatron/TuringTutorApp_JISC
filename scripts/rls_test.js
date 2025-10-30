@@ -8,7 +8,18 @@ const { Client } = pkg;
 // then verifies that SET ROLE app_admin sees all rows, and finally rolls back.
 
 async function run() {
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  const conn = process.env.DATABASE_URL;
+  if (!conn) {
+    console.error('ERROR: DATABASE_URL environment variable is not set. Set it to your Postgres connection string, e.g. postgresql://user:pass@host:port/dbname');
+    process.exit(2);
+  }
+  // print a masked form of the connection string for debugging (hide credentials)
+  try {
+    const masked = conn.replace(/:\/\/(.*?):(.*?)@/, '//<user>:<pw>@');
+    console.log('Using DATABASE_URL:', masked);
+  } catch (e) { /* ignore */ }
+
+  const client = new Client({ connectionString: conn });
   await client.connect();
   try {
     await client.query('BEGIN');
