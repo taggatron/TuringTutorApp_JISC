@@ -301,13 +301,35 @@ app.post('/save-feedback', async (req, res) => {
 
 // Update message content (used by Turing Mode autosave/close)
 app.post('/update-message', async (req, res) => {
-    const { message_id, content } = req.body;
-    if (!message_id) return res.json({ success: false, message: 'message_id required' });
+    const { message_id, content, session_id } = req.body;
     const username = req.cookies.username;
+
+    if (!message_id && !session_id) {
+        return res.json({ success: false, message: 'message_id or session_id required' });
+    }
+
     try {
-        const sess = await getSessionIdForMessage(message_id);
-        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
-        await updateMessageContent(message_id, content ?? '');
+        let targetMessageId = null;
+
+        if (message_id) {
+            // validate message_id
+            const parsed = parseInt(message_id, 10);
+            if (Number.isNaN(parsed)) return res.json({ success: false, message: 'message_id must be an integer' });
+            targetMessageId = parsed;
+            const sess = await getSessionIdForMessage(targetMessageId);
+            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+        } else {
+            // session_id provided: update the most recent message for that session
+            const sess = await getSessionById(session_id);
+            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+            const messages = await getMessages(session_id);
+            if (!messages || messages.length === 0) return res.json({ success: false, message: 'No messages found for session' });
+            const last = messages[messages.length - 1];
+            targetMessageId = last.id || last.message_id;
+            if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
+        }
+
+        await updateMessageContent(targetMessageId, content ?? '');
         res.json({ success: true });
     } catch (err) {
         console.error('Could not update message:', err);
