@@ -16,7 +16,10 @@ async function query(text, params = []) {
     const uid = store && store.userId ? String(store.userId) : null;
     if (uid) {
       // set per-connection variable used by RLS policies
-      await client.query("SELECT set_config('app.current_user_id', $1, true)", [uid]);
+      // Use is_local = false so the setting persists for the session (across subsequent queries)
+      // set_config(..., true) only applies to the current transaction, which is not suitable
+      // when each query runs in its own transaction (autocommit).
+      await client.query("SELECT set_config('app.current_user_id', $1, false)", [uid]);
     }
     const res = await client.query(text, params);
     return res;

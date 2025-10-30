@@ -37,8 +37,15 @@ async function run() {
   const s2 = await client.query('INSERT INTO session (user_id, session_name) VALUES ($1,$2) RETURNING id', [id2, 'testsession2']);
     const sid2 = s2.rows[0].id;
 
+    // print backend pid to ensure subsequent queries run on same server connection
+    const pidRes = await client.query('SELECT pg_backend_pid() AS pid');
+    console.log('DEBUG backend_pid before set_config:', pidRes.rows[0].pid);
+
     // Set app.current_user_id to id1 and verify we only see userA's session
-    await client.query("SELECT set_config('app.current_user_id', $1, true)", [String(id1)]);
+    // persist the setting for the session so subsequent queries in this client see it
+    await client.query("SELECT set_config('app.current_user_id', $1, false)", [String(id1)]);
+    const pidAfterSet = await client.query('SELECT pg_backend_pid() AS pid');
+    console.log('DEBUG backend_pid after set_config:', pidAfterSet.rows[0].pid);
   const currentSetting = await client.query("SELECT current_setting('app.current_user_id', true) AS val");
   const currentRole = await client.query('SELECT current_role AS role');
   console.log('DEBUG current_setting:', currentSetting.rows[0]);
