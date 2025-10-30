@@ -10,7 +10,7 @@ import csrf from 'csurf';
 import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import authRouter from './server/routes/auth.js';
-import { attachDbUser } from './server/db/postgres.js';
+import { attachDbUser, setCurrentUserId } from './server/db/postgres.js';
 import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
@@ -639,7 +639,7 @@ Please return only the number and category (e.g., '5. Full AI') that the user's 
     }
 }
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', async (ws, req) => {
     let session_id = null;
     let conversationHistory = [];
 
@@ -652,8 +652,36 @@ wss.on('connection', (ws, req) => {
         return;
     }
 
+    // Resolve user for this WS connection so we can set DB context for each message
+    let wsUser = null;
+    try {
+        wsUser = await getUser(username);
+        if (!wsUser) {
+            console.error('WebSocket connection: user not found for username:', username);
+            ws.close();
+            return;
+        }
+    } catch (err) {
+        console.error('Error fetching user for WebSocket connection:', err);
+        ws.close();
+        return;
+    }
+
     ws.on('message', async (message) => {
-        const userMessage = JSON.parse(message);
+        // Ensure AsyncLocalStorage contains current user id for DB RLS checks
+        try {
+            setCurrentUserId(wsUser.id);
+        } catch (e) {
+            console.error('Could not set DB context for WebSocket message:', e);
+        }
+        let userMessage;
+        try {
+            userMessage = JSON.parse(message);
+        } catch (parseErr) {
+            console.error('Invalid JSON in WS message:', parseErr);
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+            return;
+        }
 
         if (userMessage.action === "generateFeedback") {
             // Generate feedback without saving the user message again
@@ -667,13 +695,13 @@ wss.on('connection', (ws, req) => {
             if (userMessage.session_id) {
                 session_id = userMessage.session_id;
                 conversationHistory = await loadSessionHistory(session_id);
-                if (userMessage.content) {
+                    if (userMessage.content) {
                     const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
-                    processor.addUserMessage(userMessage);
+                    await processor.addUserMessage(userMessage);
                     await processor.processUserMessage(userMessage);
                 } else {
                     // Send a richer history payload including DB-backed messages, feedback and scale levels
-                    const [messages, feedbackData, scaleRows] = await Promise.all([
+                        const [messages, feedbackData, scaleRows] = await Promise.all([
                         getMessages(session_id),
                         getFeedback(session_id),
                         getScaleLevels(session_id)
@@ -742,5 +770,12 @@ async function loadSessionHistory(session_id) {
 
 // Helper to get session ownership from a message id
 async function getSessionIdForMessage(message_id) {
-    return await getSessionByMessageId(message_id);
+    if (message_id === undefined || message_id === null) {
+        throw new Error('message_id is required');
+    }
+    const id = parseInt(message_id, 10);
+    if (Number.isNaN(id)) {
+        throw new Error('message_id must be an integer');
+    }
+    return await getSessionByMessageId(id);
 }
