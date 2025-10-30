@@ -5,7 +5,7 @@ import { getUser, setCurrentUserId } from '../db/postgres.js';
 // - Fallback: if an identifying `username` cookie exists, validate it against the DB
 //   and rehydrate the server session. This prevents treating an unauthenticated
 //   client-side cookie as proof of authentication.
-export function checkAuth(req, res, next) {
+export async function checkAuth(req, res, next) {
   // Allow access to public pages without auth
   const publicPaths = new Set(['/', '/login.html', '/register.html']);
   if (publicPaths.has(req.path)) return next();
@@ -24,7 +24,8 @@ export function checkAuth(req, res, next) {
   }
 
   // Validate username exists in DB and restore session
-  getUser(username).then((user) => {
+  try {
+    const user = await getUser(username);
     if (!user) return res.redirect('/');
     // Rehydrate minimal server-side session securely
     req.session.user = { id: user.id, username: user.username };
@@ -36,8 +37,8 @@ export function checkAuth(req, res, next) {
       console.error('Could not set DB context for user', e);
     }
     return next();
-  }).catch((e) => {
+  } catch (e) {
     console.error('Auth middleware DB error', e);
     return res.redirect('/');
-  });
+  }
 }

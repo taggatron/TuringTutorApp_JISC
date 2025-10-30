@@ -119,78 +119,60 @@ app.get('/index.html', cspIndex, (req, res) => {
 app.use('/', authRouter);
 
 // Rename a session
-app.post('/rename-session', (req, res) => {
+app.post('/rename-session', async (req, res) => {
     const { session_id, session_name } = req.body;
     if (!session_id || !session_name) return res.json({ success: false, message: 'Missing fields' });
-    renameSession(session_id, session_name, (err) => {
-        if (err) return res.json({ success: false, message: 'Could not rename session' });
+    try {
+        await renameSession(session_id, session_name);
         res.json({ success: true });
-    });
+    } catch (err) {
+        console.error('Error renaming session:', err);
+        res.json({ success: false, message: 'Could not rename session' });
+    }
 });
 
-app.get('/sessions', (req, res) => {
+app.get('/sessions', async (req, res) => {
     const username = req.cookies.username;
-    getUser(username, (err, user) => {
-        if (err || !user) {
-            return res.json({ success: false, message: 'User not found' });
-        }
-        getSessions(user.id, (err, sessions) => {
-            if (err) {
-                return res.json({ success: false, message: 'Could not retrieve sessions' });
-            }
-            res.json({ success: true, sessions });
-        });
-    });
+    try {
+        const user = await getUser(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        const sessions = await getSessions(user.id);
+        res.json({ success: true, sessions });
+    } catch (err) {
+        console.error('Error fetching sessions:', err);
+        res.json({ success: false, message: 'Could not retrieve sessions' });
+    }
 });
 
-app.get('/messages', (req, res) => {
+app.get('/messages', async (req, res) => {
     const session_id = req.query.session_id;
-
-    // Verify session belongs to current user
     const username = req.cookies.username;
-    getSessionById(session_id, (sessErr, sess) => {
-        if (sessErr || !sess || sess.username !== username) {
-            return res.json({ success: false, message: 'Not authorized for this session' });
-        }
+    try {
+        const sess = await getSessionById(session_id);
+        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        const [messages, feedbackData, scaleRows] = await Promise.all([
+            getMessages(session_id),
+            getFeedback(session_id),
+            getScaleLevels(session_id)
+        ]);
 
-        getMessages(session_id, (err, messages) => {
-            if (err) {
-                console.error('Error fetching messages:', err);
-                return res.json({ success: false, message: 'Error fetching messages' });
-            }
+        const scaleLevels = [...new Set(scaleRows.map(row => row.scale_level))];
 
-            getFeedback(session_id, (err, feedbackData) => {
-                if (err) {
-                    console.error('Error fetching feedback:', err);
-                    return res.json({ success: false, message: 'Error fetching feedback' });
-                }
-
-                // Fetch all scale levels for this session using getScaleLevels
-                getScaleLevels(session_id, (err, rows) => {
-                    if (err) {
-                        console.error('Error fetching scale levels:', err);
-                        return res.json({ success: false, message: 'Error fetching scale levels' });
-                    }
-
-                    // Aggregate unique scale levels
-                    const scaleLevels = [...new Set(rows.map(row => row.scale_level))];
-
-                    // Use sess from the initial ownership check to include is_turing
-                    res.json({
-                        success: true,
-                        is_turing: sess?.is_turing === 1 || sess?.is_turing === true ? 1 : 0,
-                        messages: messages.map(m => ({
-                            ...m,
-                            scale_level: m.scale_level || 1,
-                            collapsed: m.collapsed || 0
-                        })),
-                        feedbackData,
-                        scale_levels: scaleLevels,
-                    });
-                });
-            });
+        res.json({
+            success: true,
+            is_turing: sess?.is_turing === 1 || sess?.is_turing === true ? 1 : 0,
+            messages: messages.map(m => ({
+                ...m,
+                scale_level: m.scale_level || 1,
+                collapsed: m.collapsed || 0
+            })),
+            feedbackData,
+            scale_levels: scaleLevels,
         });
-    });
+    } catch (err) {
+        console.error('Error fetching messages payload:', err);
+        res.json({ success: false, message: 'Error fetching messages' });
+    }
 });
 
 
@@ -248,247 +230,191 @@ app.post('/start-turing', async (req, res) => {
 });
 
 
-app.post('/save-session', (req, res) => {
+app.post('/save-session', async (req, res) => {
     const { session_id, messages, feedbackData } = req.body;
     const username = req.cookies.username;
 
-    // Ownership check
-    getSessionById(session_id, (sErr, sess) => {
-        if (sErr || !sess || sess.username !== username) {
-            return res.json({ success: false, message: 'Not authorized for this session' });
-        }
+    try {
+        const sess = await getSessionById(session_id);
+        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
 
-    messages.forEach((message, index) => {
-        // First check if the message with the same content already exists in the database
-        getMessageByContent(session_id, message.content, (err, existingMessage) => {
-            if (err) {
-                console.error('Error checking if message exists:', err);
-                return res.json({ success: false, message: 'Error checking for existing messages' });
-            }
-
-            if (!existingMessage) {
-                // If message doesn't exist, proceed to save it
-                saveMessage(session_id, username, message.role, message.content, message.collapsed || 0, (err, messageId) => {
-                    if (err) {
-                        console.error('Error saving message:', err);
-                        return res.json({ success: false, message: 'Error saving session data' });
-                    }
-
+        for (const message of messages) {
+            try {
+                const existingMessage = await getMessageByContent(session_id, message.content);
+                if (!existingMessage) {
+                    const messageId = await saveMessage(session_id, username, message.role, message.content, message.collapsed || 0);
                     console.log(`Message saved with ID: ${messageId}`);
 
-                    // Save associated feedback, if any
-                    const feedback = feedbackData.find(fb => fb.messageId === message.id);
-
+                    const feedback = (feedbackData || []).find(fb => fb.messageId === message.id);
                     if (feedback) {
-                        console.log(`Saving feedback for message ID: ${messageId}`);
-                        saveFeedback(session_id, messageId, username, feedback.feedbackContent, feedback.feedbackPosition, (err) => {
-                            if (err) {
-                                console.error('Error saving feedback:', err);
-                                return res.json({ success: false, message: 'Error saving feedback data' });
-                            }
+                        try {
+                            console.log(`Saving feedback for message ID: ${messageId}`);
+                            await saveFeedback(session_id, messageId, username, feedback.feedbackContent, feedback.feedbackPosition);
                             console.log(`Feedback saved for message ID: ${messageId}`);
-                        });
+                        } catch (fErr) {
+                            console.error('Error saving feedback:', fErr);
+                        }
                     }
-                });
-            } else {
-                console.log(`Message already exists with content: ${message.content}, skipping save.`);
+                } else {
+                    console.log(`Message already exists with content: ${message.content}, skipping save.`);
+                }
+            } catch (mErr) {
+                console.error('Error checking/saving message:', mErr);
             }
-        });
-    });
+        }
 
-    res.json({ success: true });
-    });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error saving session payload:', err);
+        res.json({ success: false, message: 'Error saving session data' });
+    }
 });
 
-app.delete('/delete-session', (req, res) => {
+app.delete('/delete-session', async (req, res) => {
     const session_id = req.query.session_id;
     const username = req.cookies.username;
-    getSessionById(session_id, (sErr, sess) => {
-        if (sErr || !sess || sess.username !== username) {
-            return res.json({ success: false, message: 'Not authorized for this session' });
-        }
-        deleteSession(session_id, (err) => {
-        if (err) {
-            console.error('Error deleting session:', err);
-            return res.json({ success: false, message: 'Could not delete session' });
-        }
+    try {
+        const sess = await getSessionById(session_id);
+        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        await deleteSession(session_id);
         res.json({ success: true, message: 'Session deleted successfully' });
-        });
-    });
+    } catch (err) {
+        console.error('Error deleting session:', err);
+        res.json({ success: false, message: 'Could not delete session' });
+    }
 });
 
-app.post('/save-feedback', (req, res) => {
+app.post('/save-feedback', async (req, res) => {
     const { session_id, feedbackContent, message_id } = req.body;
     const username = req.cookies.username;
-
-    // Ownership check
-    getSessionById(session_id, (sErr, sess) => {
-        if (sErr || !sess || sess.username !== username) {
-            return res.json({ success: false, message: 'Not authorized for this session' });
-        }
-    console.log('[POST /save-feedback] Incoming (simplified):', {
-        session_id,
-        feedbackContent,
-        message_id,
-        username
-    });
-
-    // Store feedback linked to latest message if message_id not provided
-    saveFeedback(session_id, message_id || null, username, feedbackContent, null, (err) => {
-        if (err) {
-            console.error('Error saving feedback:', err);
-            return res.json({ success: false, message: 'Error saving feedback data' });
-        }
+    try {
+        const sess = await getSessionById(session_id);
+        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        console.log('[POST /save-feedback] Incoming (simplified):', { session_id, feedbackContent, message_id, username });
+        await saveFeedback(session_id, message_id || null, username, feedbackContent, null);
         res.json({ success: true });
-    });
-    });
+    } catch (err) {
+        console.error('Error saving feedback:', err);
+        res.json({ success: false, message: 'Error saving feedback data' });
+    }
 });
 
 // Update message content (used by Turing Mode autosave/close)
-app.post('/update-message', (req, res) => {
+app.post('/update-message', async (req, res) => {
     const { message_id, content } = req.body;
     if (!message_id) return res.json({ success: false, message: 'message_id required' });
-    // Save raw content (may include HTML to preserve images/formatting)
-    // Fetch session by joining messages->sessions to check ownership
     const username = req.cookies.username;
-    getSessionIdForMessage(message_id, (mErr, sess) => {
-        if (mErr || !sess || sess.username !== username) {
-            return res.json({ success: false, message: 'Not authorized for this message' });
-        }
-        updateMessageContent(message_id, content ?? '', (err) => {
-            if (err) return res.json({ success: false, message: 'Could not update message' });
-            res.json({ success: true });
-        });
-    });
+    try {
+        const sess = await getSessionIdForMessage(message_id);
+        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+        await updateMessageContent(message_id, content ?? '');
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Could not update message:', err);
+        res.json({ success: false, message: 'Could not update message' });
+    }
 });
 
 // Add this new endpoint before the WebSocket server setup
 
-app.post('/update-message-collapsed', (req, res) => {
+app.post('/update-message-collapsed', async (req, res) => {
     const { message_id, collapsed } = req.body;
-    
     const username = req.cookies.username;
-    getSessionIdForMessage(message_id, (mErr, sess) => {
-        if (mErr || !sess || sess.username !== username) {
-            return res.json({ success: false, message: 'Not authorized for this message' });
-        }
-        updateMessageCollapsedState(message_id, collapsed, (err) => {
-        if (err) {
-            console.error('Error updating message collapsed state:', err);
-            return res.json({ success: false, message: 'Error updating message collapsed state' });
-        }
+    try {
+        const sess = await getSessionIdForMessage(message_id);
+        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+        await updateMessageCollapsedState(message_id, collapsed);
         res.json({ success: true });
-        });
-    });
+    } catch (err) {
+        console.error('Error updating message collapsed state:', err);
+        res.json({ success: false, message: 'Error updating message collapsed state' });
+    }
 });
 
 // Add these before the WebSocketServer setup
 
 // Endpoint to create a new group
-app.post('/create-group', (req, res) => {
-  const { group_name } = req.body;
-  const username = req.cookies.username;
-  
-  getUser(username, (err, user) => {
-    if (err || !user) {
-      return res.json({ success: false, message: 'User not found' });
-    }
-    
-    createGroup(user.id, username, group_name, (err, groupId) => {
-      if (err) {
+app.post('/create-group', async (req, res) => {
+    const { group_name } = req.body;
+    const username = req.cookies.username;
+    try {
+        const user = await getUser(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        const groupId = await createGroup(user.id, username, group_name);
+        res.json({ success: true, group_id: groupId });
+    } catch (err) {
         console.error('Error creating group:', err);
-        return res.json({ success: false, message: 'Could not create group' });
-      }
-      res.json({ success: true, group_id: groupId });
-    });
-  });
+        res.json({ success: false, message: 'Could not create group' });
+    }
 });
 
 // Endpoint to delete a group
-app.delete('/delete-group', (req, res) => {
-  const group_id = req.query.group_id;
+app.delete('/delete-group', async (req, res) => {
+    const group_id = req.query.group_id;
     const username = req.cookies.username;
-    // Ensure group belongs to current user
-    getUser(username, (err, user) => {
-        if (err || !user) return res.json({ success: false, message: 'User not found' });
-        getUserGroups(user.id, (gErr, groups) => {
-            if (gErr) return res.json({ success: false, message: 'Could not retrieve groups' });
-            const owns = groups.some(g => String(g.id) === String(group_id));
-            if (!owns) return res.json({ success: false, message: 'Not authorized for this group' });
-  
-    deleteGroup(group_id, (err) => {
-    if (err) {
-      console.error('Error deleting group:', err);
-      return res.json({ success: false, message: 'Could not delete group' });
+    try {
+        const user = await getUser(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        const groups = await getUserGroups(user.id);
+        const owns = groups.some(g => String(g.id) === String(group_id));
+        if (!owns) return res.json({ success: false, message: 'Not authorized for this group' });
+        await deleteGroup(group_id);
+        res.json({ success: true, message: 'Group deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting group:', err);
+        res.json({ success: false, message: 'Could not delete group' });
     }
-    res.json({ success: true, message: 'Group deleted successfully' });
-    });
-  });
-    });
 });
 
 // Endpoint to get all groups for a user
-app.get('/groups', (req, res) => {
-  const username = req.cookies.username;
-  
-  getUser(username, (err, user) => {
-    if (err || !user) {
-      return res.json({ success: false, message: 'User not found' });
-    }
-    
-    getUserGroups(user.id, (err, groups) => {
-      if (err) {
+app.get('/groups', async (req, res) => {
+    const username = req.cookies.username;
+    try {
+        const user = await getUser(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        const groups = await getUserGroups(user.id);
+        res.json({ success: true, groups });
+    } catch (err) {
         console.error('Error fetching groups:', err);
-        return res.json({ success: false, message: 'Could not retrieve groups' });
-      }
-      res.json({ success: true, groups });
-    });
-  });
+        res.json({ success: false, message: 'Could not retrieve groups' });
+    }
 });
 
 // Endpoint to update a session's group
-app.post('/update-session-group', (req, res) => {
-  const { session_id, group_id } = req.body;
+app.post('/update-session-group', async (req, res) => {
+    const { session_id, group_id } = req.body;
     const username = req.cookies.username;
-    // Verify session ownership and group ownership
-    getSessionById(session_id, (sErr, sess) => {
-        if (sErr || !sess || sess.username !== username) {
-            return res.json({ success: false, message: 'Not authorized for this session' });
+    try {
+        const sess = await getSessionById(session_id);
+        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        const user = await getUser(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        const groups = await getUserGroups(user.id);
+        if (group_id !== null && group_id !== undefined && group_id !== '' && !groups.some(g => String(g.id) === String(group_id))) {
+            return res.json({ success: false, message: 'Not authorized for this group' });
         }
-        getUser(username, (uErr, user) => {
-            if (uErr || !user) return res.json({ success: false, message: 'User not found' });
-            getUserGroups(user.id, (gErr, groups) => {
-                if (gErr) return res.json({ success: false, message: 'Could not retrieve groups' });
-                if (group_id !== null && group_id !== undefined && group_id !== '' && !groups.some(g => String(g.id) === String(group_id))) {
-                    return res.json({ success: false, message: 'Not authorized for this group' });
-                }
-  
-    updateSessionGroup(session_id, group_id || null, (err) => {
-    if (err) {
-      console.error('Error updating session group:', err);
-      return res.json({ success: false, message: 'Could not update session group' });
+        await updateSessionGroup(session_id, group_id || null);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error updating session group:', err);
+        res.json({ success: false, message: 'Could not update session group' });
     }
-    res.json({ success: true });
-    });
-  });
-    });
 });
-});
+ 
 
 // Add this alongside the other group endpoints
 
 // Endpoint to rename a group
 // Add checkAuth specifically to this endpoint
-app.post('/rename-group', checkAuth, (req, res) => {
-  const { group_id, group_name } = req.body;
-  
-  renameGroup(group_id, group_name, (err) => {
-    if (err) {
-      console.error('Error renaming group:', err);
-      return res.json({ success: false, message: 'Could not rename group' });
+app.post('/rename-group', checkAuth, async (req, res) => {
+    const { group_id, group_name } = req.body;
+    try {
+        await renameGroup(group_id, group_name);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error renaming group:', err);
+        res.json({ success: false, message: 'Could not rename group' });
     }
-    res.json({ success: true });
-  });
 });
 
 
@@ -598,40 +524,34 @@ class ChatGPTProcessor {
             const shouldCollapse = scaleLevel >= 3 ? 1 : 0;
 
             // Save the assistant message first to get its message_id, then (optionally) generate/send feedback with that id
-            await new Promise((resolve) => {
-                saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', botMessageContent, shouldCollapse, scaleLevel, async (err, messageId) => {
-                    if (err) {
-                        console.error('Error saving bot message:', err);
-                        resolve();
-                        return;
-                    }
-                    console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
+            try {
+                const messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', botMessageContent, shouldCollapse, scaleLevel);
+                console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
 
-                    // Step 4: Generate feedback if scale level is 3 or above, now including message_id
-                    if (scaleLevels.some(level => level >= 3)) {
-                        const feedback = await this.generateFeedback(userMessage.content);
-                        if (feedback) {
-                            this.ws.send(JSON.stringify({ type: 'feedback', content: feedback, message_id: messageId }));
-                        }
+                // Step 4: Generate feedback if scale level is 3 or above, now including message_id
+                if (scaleLevels.some(level => level >= 3)) {
+                    const feedback = await this.generateFeedback(userMessage.content);
+                    if (feedback) {
+                        this.ws.send(JSON.stringify({ type: 'feedback', content: feedback, message_id: messageId }));
                     }
-                    resolve();
-                });
-            });
+                }
+            } catch (saveErr) {
+                console.error('Error saving bot message:', saveErr);
+            }
         } catch (error) {
             console.error('Error during OpenAI API call or streaming:', error);
         }
     }
 
-    addUserMessage(userMessage) {
-        if (userMessage.content) {
+    async addUserMessage(userMessage) {
+            if (userMessage.content) {
             this.conversationHistory.push({ role: "user", content: userMessage.content });
-            saveMessageWithScaleLevel(this.session_id, this.username, 'user', userMessage.content, 0, 1, (err) => {
-                if (err) {
-                    console.error('Error saving user message:', err);
-                } else {
-                    console.log(`User message saved to session ID: ${this.session_id}`);
-                }
-            });
+            try {
+                const id = await saveMessageWithScaleLevel(this.session_id, this.username, 'user', userMessage.content, 0, 1);
+                console.log(`User message saved to session ID: ${this.session_id} id=${id}`);
+            } catch (err) {
+                console.error('Error saving user message:', err);
+            }
         } else {
             console.warn("Received an empty or null message content, skipping processing.");
         }
@@ -673,11 +593,11 @@ Please return only the number and category (e.g., '5. Full AI') that the user's 
             scaleLevels.push(scaleLevel);
 
             // Save each scale level to the database
-            saveScaleLevel(this.session_id, this.username, scaleLevel, (err) => {
-                if (err) {
-                    console.error('Error saving scale level:', err);
-                }
-            });
+            try {
+                await saveScaleLevel(this.session_id, this.username, scaleLevel);
+            } catch (err) {
+                console.error('Error saving scale level:', err);
+            }
         } else {
             console.error('Invalid assessment result:', assessmentResult);
         }
@@ -754,9 +674,9 @@ wss.on('connection', (ws, req) => {
                 } else {
                     // Send a richer history payload including DB-backed messages, feedback and scale levels
                     const [messages, feedbackData, scaleRows] = await Promise.all([
-                        new Promise((res) => getMessages(session_id, (e, rows) => res(e ? [] : rows))),
-                        new Promise((res) => getFeedback(session_id, (e, rows) => res(e ? [] : rows))),
-                        new Promise((res) => getScaleLevels(session_id, (e, rows) => res(e ? [] : rows)))
+                        getMessages(session_id),
+                        getFeedback(session_id),
+                        getScaleLevels(session_id)
                     ]);
                     const scaleLevels = [...new Set(scaleRows.map(r => r.scale_level))];
                     ws.send(JSON.stringify({
@@ -809,20 +729,18 @@ wss.on('connection', (ws, req) => {
 console.log('WebSocket server attached to the same HTTP/HTTPS server');
 
 async function loadSessionHistory(session_id) {
-    return new Promise((resolve, reject) => {
+    try {
         console.log('Loading session history for session_id:', session_id);
-        getMessages(session_id, (err, messages) => {
-            if (err) {
-                console.error('Error loading session history:', err);
-                return reject(err);
-            }
-            console.log('Messages retrieved:', messages);
-            resolve(messages);
-        });
-    });
+        const messages = await getMessages(session_id);
+        console.log('Messages retrieved:', messages);
+        return messages;
+    } catch (err) {
+        console.error('Error loading session history:', err);
+        throw err;
+    }
 }
 
 // Helper to get session ownership from a message id
-function getSessionIdForMessage(message_id, callback) {
-    getSessionByMessageId(message_id, callback);
+async function getSessionIdForMessage(message_id) {
+    return await getSessionByMessageId(message_id);
 }
