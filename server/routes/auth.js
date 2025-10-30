@@ -52,12 +52,15 @@ router.post('/login', authLimiter,
       try {
         const { username, password } = req.body;
         const user = await pgdb.getUser(username);
-        if (!user) return res.json({ success: false, message: 'Invalid credentials' });
+        if (!user) {
+          console.error('login: user not found for username=', username);
+          return res.json({ success: false, message: 'Invalid credentials' });
+        }
         const stored = user.password || '';
         const isHashed = typeof stored === 'string' && stored.startsWith('$2');
-
         if (isHashed) {
           const ok = await bcrypt.compare(password, stored);
+          console.debug(`login: user=${username} isHashed=true bcrypt_ok=${ok}`);
           if (!ok) return res.json({ success: false, message: 'Invalid credentials' });
         } else {
           // legacy plaintext: verify and migrate
