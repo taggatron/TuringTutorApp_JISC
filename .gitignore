@@ -3,6 +3,8 @@ node_modules/
 
 # Environment variables
 APIkey.env
+.env.sample
+.env.example
 
 # Logs
 npm-debug.log*
