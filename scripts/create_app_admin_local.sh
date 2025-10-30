@@ -9,7 +9,11 @@ set -euo pipefail
 PGHOST=${PGHOST:-localhost}
 PGPORT=${PGPORT:-5432}
 PGDATABASE=${PGDATABASE:-turingdb}
-PGSUPERUSER=${PGSUPERUSER:-postgres}
+# Default superuser: prefer the current OS user when available (common for
+# local Postgres installations), otherwise fall back to 'postgres'. You can
+# still override by setting PGSUPERUSER in the environment when invoking the
+# script.
+PGSUPERUSER=${PGSUPERUSER:-$(whoami)}
 PGUSER_TO_GRANT=${PGUSER:-turing}
 
 echo "Using DB host=${PGHOST} port=${PGPORT} db=${PGDATABASE} grant-to-user=${PGUSER_TO_GRANT} superuser=${PGSUPERUSER}"
