@@ -196,7 +196,7 @@ app.get('/messages', (req, res) => {
 
 
 // Handle starting a new chat session
-app.post('/start-session', (req, res) => {
+app.post('/start-session', async (req, res) => {
     const username = req.cookies.username;
 
     if (!username) {
@@ -206,63 +206,45 @@ app.post('/start-session', (req, res) => {
 
     console.log(`Starting a new session for user: ${username}`);
 
-    getUser(username, async (err, user) => {
-        if (err) {
-            console.error('Error fetching user:', err);
-            return res.json({ success: false, message: 'Error fetching user data' });
-        }
-
+    try {
+        const user = await getUser(username);
         if (!user) {
             console.error('User not found in database.');
             return res.json({ success: false, message: 'User not found' });
         }
 
-        try {
-            // Ensure we get the next session ID to avoid conflicts
-            const nextSessionId = await getNextSessionId();
-            createSession(user.id, username, `Session ${Date.now()}`, (err, sessionId) => {
-                if (err) {
-                    console.error('Error creating session:', err);
-                    return res.json({ success: false, message: 'Could not start new session' });
-                }
+        // Ensure we get the next session ID to avoid conflicts
+        const nextSessionId = await getNextSessionId();
+        const sessionId = await createSession(user.id, username, `Session ${Date.now()}`);
+        console.log(`Session created with ID: ${sessionId}`);
 
-                console.log(`Session created with ID: ${sessionId}`);
-
-                // Automatically insert the default scale_level
-                saveScaleLevel(sessionId, username, 1, (scaleErr) => {
-                    if (scaleErr) {
-                        console.error('Error initializing scale level:', scaleErr);
-                        return res.json({ success: false, message: 'Error initializing scale level' });
-                    }
-
-                    console.log(`Default scale level initialized for session ID: ${sessionId}`);
-                    res.json({ success: true, session_id: sessionId });
-                });
-            });
-        } catch (error) {
-            console.error('Error fetching next session ID:', error);
-            res.json({ success: false, message: 'Error starting a new session' });
-        }
-    });
+        // Automatically insert the default scale_level
+        await saveScaleLevel(sessionId, username, 1);
+        console.log(`Default scale level initialized for session ID: ${sessionId}`);
+        res.json({ success: true, session_id: sessionId });
+    } catch (err) {
+        console.error('Error starting a new session:', err);
+        res.json({ success: false, message: 'Could not start new session' });
+    }
 });
 
 // Start a Turing Mode session: create special session + a blank assistant message to edit
-app.post('/start-turing', (req, res) => {
+app.post('/start-turing', async (req, res) => {
     const username = req.cookies.username;
     if (!username) {
         return res.json({ success: false, message: 'Username not found in cookies. Please log in again.' });
     }
-    getUser(username, (err, user) => {
-        if (err || !user) return res.json({ success: false, message: 'User not found' });
-        createTuringSession(user.id, username, 'Turing Mode', (err, sessionId) => {
-            if (err) return res.json({ success: false, message: 'Could not start Turing session' });
-            // Create an initial blank assistant message for editing
-            saveMessageWithScaleLevel(sessionId, username, 'assistant', '', 0, 1, (err, messageId) => {
-                if (err) return res.json({ success: false, message: 'Could not seed Turing message' });
-                res.json({ success: true, session_id: sessionId, message_id: messageId });
-            });
-        });
-    });
+    try {
+        const user = await getUser(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        const sessionId = await createTuringSession(user.id, username, 'Turing Mode');
+        // Create an initial blank assistant message for editing
+        const messageId = await saveMessageWithScaleLevel(sessionId, username, 'assistant', '', 0, 1);
+        res.json({ success: true, session_id: sessionId, message_id: messageId });
+    } catch (err) {
+        console.error('Could not start Turing session:', err);
+        res.json({ success: false, message: 'Could not start Turing session' });
+    }
 });
 
 
