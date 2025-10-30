@@ -39,17 +39,21 @@ async function registerUser(username, password) {
   const client = await pool.connect();
   try {
     try {
+      console.debug('registerUser: attempting insert using SET LOCAL ROLE app_admin');
       // Use a transaction so SET LOCAL ROLE only affects this transaction
       await client.query('BEGIN');
       await client.query("SET LOCAL ROLE app_admin");
       const res = await client.query('INSERT INTO app_user (username, password_hash) VALUES ($1, $2) RETURNING id', [username, hash]);
       await client.query('COMMIT');
+      console.debug('registerUser: insert under app_admin succeeded, id=', res.rows[0].id);
       return res.rows[0].id;
     } catch (e) {
+      console.error('registerUser: SET LOCAL ROLE app_admin path failed, will attempt fallback insert. Error:', e && e.message ? e.message : e);
       // If we couldn't SET ROLE (insufficient privilege or role missing),
       // rollback the transaction and try the plain insert as a fallback.
       try { await client.query('ROLLBACK'); } catch (_) {}
       const res = await client.query('INSERT INTO app_user (username, password_hash) VALUES ($1, $2) RETURNING id', [username, hash]);
+      console.debug('registerUser: fallback insert result id=', res.rows[0].id);
       return res.rows[0].id;
     }
   } finally {
