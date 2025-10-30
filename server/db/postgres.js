@@ -171,14 +171,19 @@ async function renameSession(session_id, session_name) {
 // Middleware to attach current user id into AsyncLocalStorage for each request
 function attachDbUser(req, res, next) {
   const uid = req && req.session && req.session.user ? String(req.session.user.id) : '0';
-  // enterWith sets the store for the current execution context
-  als.enterWith({ userId: uid });
-  next();
+  // Use als.run to create an execution context that will be propagated
+  // to all downstream async operations started by this request. This is
+  // more reliable than enterWith in some server frameworks where the
+  // continuation may run in a different async scope.
+  als.run({ userId: uid }, () => next());
 }
 
 // Helper to set current user id programmatically for the current execution
 // context (useful immediately after login within the same request)
 function setCurrentUserId(userId) {
+  // enterWith is appropriate for programmatic calls that want to
+  // establish the store for the current async context (for example,
+  // immediately after login within the same request handler).
   als.enterWith({ userId: userId ? String(userId) : '0' });
 }
 
