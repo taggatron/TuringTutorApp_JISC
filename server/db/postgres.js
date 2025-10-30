@@ -1,12 +1,23 @@
 import pkg from 'pg';
 import bcrypt from 'bcrypt';
+import { AsyncLocalStorage } from 'async_hooks';
 const { Pool } = pkg;
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+// AsyncLocalStorage holds the current authenticated user's id for the
+// active request execution context so query() can set a session GUC.
+const als = new AsyncLocalStorage();
+
 async function query(text, params = []) {
   const client = await pool.connect();
   try {
+    const store = als.getStore();
+    const uid = store && store.userId ? String(store.userId) : null;
+    if (uid) {
+      // set per-connection variable used by RLS policies
+      await client.query("SELECT set_config('app.current_user_id', $1, true)", [uid]);
+    }
     const res = await client.query(text, params);
     return res;
   } finally {
@@ -157,6 +168,20 @@ async function renameSession(session_id, session_name) {
   await query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
 }
 
+// Middleware to attach current user id into AsyncLocalStorage for each request
+function attachDbUser(req, res, next) {
+  const uid = req && req.session && req.session.user ? String(req.session.user.id) : '0';
+  // enterWith sets the store for the current execution context
+  als.enterWith({ userId: uid });
+  next();
+}
+
+// Helper to set current user id programmatically for the current execution
+// context (useful immediately after login within the same request)
+function setCurrentUserId(userId) {
+  als.enterWith({ userId: userId ? String(userId) : '0' });
+}
+
 export {
   registerUser,
   getUser,
@@ -185,5 +210,8 @@ export {
   renameGroup,
   renameSession,
   query,
-  pool
+  pool,
+  attachDbUser,
+  setCurrentUserId
 };
+

@@ -1,4 +1,4 @@
-import { getUser } from '../db/postgres.js';
+import { getUser, setCurrentUserId } from '../db/postgres.js';
 
 // Enhanced authentication check
 // - Prefer server-side session (`req.session.user`).
@@ -28,6 +28,13 @@ export function checkAuth(req, res, next) {
     if (!user) return res.redirect('/');
     // Rehydrate minimal server-side session securely
     req.session.user = { id: user.id, username: user.username };
+    // Ensure the DB context for RLS is set for the remainder of this request
+    try {
+      setCurrentUserId(user.id);
+    } catch (e) {
+      // Non-fatal: continue even if context couldn't be set
+      console.error('Could not set DB context for user', e);
+    }
     return next();
   }).catch((e) => {
     console.error('Auth middleware DB error', e);

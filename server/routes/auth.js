@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
 import * as pgdb from '../db/postgres.js';
+import { setCurrentUserId } from '../db/postgres.js';
 
 const router = express.Router();
 
@@ -66,6 +67,12 @@ router.post('/login', authLimiter,
         }
 
         req.session.user = { id: user.id, username: user.username };
+        // Set the DB request-local current_user_id so RLS policies apply immediately
+        try {
+          setCurrentUserId(user.id);
+        } catch (e) {
+          console.error('Could not set DB request context after login', e);
+        }
         res.cookie('logged_in', true, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
         res.cookie('username', username, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
         return res.json({ success: true });

@@ -10,6 +10,7 @@ import csrf from 'csurf';
 import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import authRouter from './server/routes/auth.js';
+import { attachDbUser } from './server/db/postgres.js';
 import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
@@ -56,6 +57,11 @@ app.use(session({
         secure: process.env.NODE_ENV === 'production'
     }
 }));
+
+// Attach DB request context for RLS: this will populate AsyncLocalStorage
+// with the current user id (if present in req.session.user) so DB queries
+// automatically set the session-local app.current_user_id before running.
+app.use(attachDbUser);
 
 // Rate limiting
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
