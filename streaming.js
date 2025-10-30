@@ -790,16 +790,25 @@ wss.on('connection', (ws, req) => {
                 // Handle cases when there's no session_id provided (new session)
                 if (!session_id) {
                     session_id = await getNextSessionId();
-                    createSession(username, username, `Session ${session_id}`, async (err, newSessionId) => {
-                        if (err) {
-                            console.error('Error creating session:', err);
+                    // We only have the username from the WebSocket cookie here —
+                    // look up the user's numeric id before creating the session.
+                    try {
+                        const user = await getUser(username);
+                        if (!user) {
+                            console.error('Could not find user for username when creating session over WS:', username);
+                            ws.send(JSON.stringify({ type: 'error', message: 'User not found' }));
                             return;
                         }
+                        const newSessionId = await createSession(user.id, username, `Session ${session_id}`);
                         session_id = newSessionId;
                         const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
                         processor.addUserMessage(userMessage);
                         await processor.processUserMessage(userMessage);
-                    });
+                    } catch (err) {
+                        console.error('Error creating session over WS:', err);
+                        ws.send(JSON.stringify({ type: 'error', message: 'Could not create session' }));
+                        return;
+                    }
                 } else {
                     const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
                     processor.addUserMessage(userMessage);
