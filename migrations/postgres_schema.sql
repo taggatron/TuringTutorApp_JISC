@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS app_user (
 CREATE TABLE IF NOT EXISTS session (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+  username TEXT,
   session_name TEXT NOT NULL,
   group_id INTEGER,
   is_turing BOOLEAN DEFAULT FALSE
