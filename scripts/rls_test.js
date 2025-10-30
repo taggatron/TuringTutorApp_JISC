@@ -27,14 +27,20 @@ async function run() {
     const userA = 'rls_user_a_' + crypto.randomBytes(4).toString('hex');
     const userB = 'rls_user_b_' + crypto.randomBytes(4).toString('hex');
 
+    // Insert test users as app_admin so WITH CHECK allows creation
+    await client.query("SET ROLE app_admin");
     const r1 = await client.query('INSERT INTO app_user (username, password_hash) VALUES ($1, $2) RETURNING id', [userA, 'x']);
     const id1 = r1.rows[0].id;
     const r2 = await client.query('INSERT INTO app_user (username, password_hash) VALUES ($1, $2) RETURNING id', [userB, 'x']);
     const id2 = r2.rows[0].id;
+    await client.query("RESET ROLE");
 
-  const s1 = await client.query('INSERT INTO session (user_id, session_name) VALUES ($1,$2) RETURNING id', [id1, 'testsession1']);
+    // Insert sessions while setting the session GUC so the WITH CHECK policy allows the insert
+    await client.query("SELECT set_config('app.current_user_id', $1, false)", [String(id1)]);
+    const s1 = await client.query('INSERT INTO session (user_id, session_name) VALUES ($1,$2) RETURNING id', [id1, 'testsession1']);
     const sid1 = s1.rows[0].id;
-  const s2 = await client.query('INSERT INTO session (user_id, session_name) VALUES ($1,$2) RETURNING id', [id2, 'testsession2']);
+    await client.query("SELECT set_config('app.current_user_id', $1, false)", [String(id2)]);
+    const s2 = await client.query('INSERT INTO session (user_id, session_name) VALUES ($1,$2) RETURNING id', [id2, 'testsession2']);
     const sid2 = s2.rows[0].id;
 
     // print backend pid to ensure subsequent queries run on same server connection
