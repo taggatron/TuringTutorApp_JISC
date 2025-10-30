@@ -10,8 +10,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE scale_level TO app_admin;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE groups TO app_admin;
 
 -- Grant sequence privileges for SERIAL/sequence-backed primary keys
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_admin;
+-- Grant sequence privileges for the specific SERIAL sequences used by the
+-- application tables. This is narrower than granting ALL SEQUENCES in the
+-- schema and follows least-privilege principles.
+GRANT USAGE, SELECT ON SEQUENCE app_user_id_seq TO app_admin;
+GRANT USAGE, SELECT ON SEQUENCE session_id_seq TO app_admin;
+GRANT USAGE, SELECT ON SEQUENCE message_id_seq TO app_admin;
+GRANT USAGE, SELECT ON SEQUENCE feedback_id_seq TO app_admin;
+GRANT USAGE, SELECT ON SEQUENCE scale_level_id_seq TO app_admin;
+GRANT USAGE, SELECT ON SEQUENCE groups_id_seq TO app_admin;
 
--- If you have multiple schemas, adjust the schema name above.
+-- If your DB uses different sequence names or multiple schemas, adjust the
+-- sequence names above or run `SELECT sequence_name FROM information_schema.sequences` to confirm.
 
--- Note: this must be run by a superuser or a role that owns the tables.
+-- Note: this script must be run by a superuser or the table owner.
