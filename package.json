@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node streaming.js",
-    "migrate:sqlite-to-postgres": "node migrations/sqlite_to_postgres.js"
+    "migrate:sqlite-to-postgres": "node migrations/sqlite_to_postgres.js",
+    "db:create-app-admin": "bash ./scripts/create_app_admin_local.sh"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -31,8 +31,30 @@ async function query(text, params = []) {
 // Users
 async function registerUser(username, password) {
   const hash = await bcrypt.hash(password, 12);
-  const res = await query('INSERT INTO app_user (username, password_hash) VALUES ($1, $2) RETURNING id', [username, hash]);
-  return res.rows[0].id;
+  // Try to perform the insert using the helper role `app_admin` if available.
+  // This helps when Row-Level Security is enabled and a privileged helper
+  // role is required to perform administrative inserts. If the role is not
+  // available or SET ROLE fails, fall back to a normal insert and let the
+  // database RLS policies decide (which may still fail).
+  const client = await pool.connect();
+  try {
+    try {
+      // Use a transaction so SET LOCAL ROLE only affects this transaction
+      await client.query('BEGIN');
+      await client.query("SET LOCAL ROLE app_admin");
+      const res = await client.query('INSERT INTO app_user (username, password_hash) VALUES ($1, $2) RETURNING id', [username, hash]);
+      await client.query('COMMIT');
+      return res.rows[0].id;
+    } catch (e) {
+      // If we couldn't SET ROLE (insufficient privilege or role missing),
+      // rollback the transaction and try the plain insert as a fallback.
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      const res = await client.query('INSERT INTO app_user (username, password_hash) VALUES ($1, $2) RETURNING id', [username, hash]);
+      return res.rows[0].id;
+    }
+  } finally {
+    client.release();
+  }
 }
 
 async function getUser(username) {
