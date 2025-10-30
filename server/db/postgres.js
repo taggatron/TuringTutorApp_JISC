@@ -62,12 +62,45 @@ async function registerUser(username, password) {
 }
 
 async function getUser(username) {
-  const res = await query('SELECT id, username, password_hash AS password FROM app_user WHERE username = $1 LIMIT 1', [username]);
-  return res.rows[0] || null;
+  // Read user record using the privileged helper role when available so
+  // login (which runs before a session/user id is set) can see the row
+  // even when RLS is enabled. Fall back to a normal query if the SET
+  // ROLE attempt fails.
+  const client = await pool.connect();
+  try {
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL ROLE app_admin");
+      const res = await client.query('SELECT id, username, password_hash AS password FROM app_user WHERE username = $1 LIMIT 1', [username]);
+      await client.query('COMMIT');
+      return res.rows[0] || null;
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      const res = await client.query('SELECT id, username, password_hash AS password FROM app_user WHERE username = $1 LIMIT 1', [username]);
+      return res.rows[0] || null;
+    }
+  } finally {
+    client.release();
+  }
 }
 
 async function updateUserPassword(username, newHashedPassword) {
-  await query('UPDATE app_user SET password_hash = $1 WHERE username = $2', [newHashedPassword, username]);
+  // Perform the password update under the helper role when possible so
+  // migrations from plaintext happen even before the session user id is set.
+  const client = await pool.connect();
+  try {
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL ROLE app_admin");
+      await client.query('UPDATE app_user SET password_hash = $1 WHERE username = $2', [newHashedPassword, username]);
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      await client.query('UPDATE app_user SET password_hash = $1 WHERE username = $2', [newHashedPassword, username]);
+    }
+  } finally {
+    client.release();
+  }
 }
 
 // Sessions
@@ -199,7 +232,11 @@ async function renameSession(session_id, session_name) {
 
 // Middleware to attach current user id into AsyncLocalStorage for each request
 function attachDbUser(req, res, next) {
-  const uid = req && req.session && req.session.user ? String(req.session.user.id) : '0';
+  // Use null when there is no authenticated user so we do not set
+  // the session GUC to '0' (a truthy string). If we set '0' then RLS
+  // policies that COALESCE the setting to '0' will hide rows from
+  // unauthenticated requests. Using null avoids writing the GUC at all.
+  const uid = req && req.session && req.session.user ? String(req.session.user.id) : null;
   // Use als.run to create an execution context that will be propagated
   // to all downstream async operations started by this request. This is
   // more reliable than enterWith in some server frameworks where the
@@ -213,7 +250,10 @@ function setCurrentUserId(userId) {
   // enterWith is appropriate for programmatic calls that want to
   // establish the store for the current async context (for example,
   // immediately after login within the same request handler).
-  als.enterWith({ userId: userId ? String(userId) : '0' });
+  // Use null when clearing the current user so the query() helper
+  // doesn't set the session GUC to '0' which would interfere with
+  // RLS policies that expect the GUC to be absent for anonymous users.
+  als.enterWith({ userId: userId ? String(userId) : null });
 }
 
 export {
