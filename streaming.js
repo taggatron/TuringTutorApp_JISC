@@ -15,7 +15,7 @@ import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
-import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel } from './server/db/postgres.js';
+import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel, getEmptyAssistantMessage } from './server/db/postgres.js';
 import { checkAuth } from './server/middleware/auth.js';
 
 dotenv.config({ path: './APIkey.env' });
@@ -572,8 +572,20 @@ class ChatGPTProcessor {
 
             // Save the assistant message first to get its message_id, then (optionally) generate/send feedback with that id
             try {
-                const messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', botMessageContent, shouldCollapse, scaleLevel);
-                console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
+                // Prefer updating an existing empty assistant row (created when Turing session started)
+                // to avoid inserting a duplicate assistant message. If none exists, insert normally.
+                const empty = await getEmptyAssistantMessage(this.session_id);
+                let messageId;
+                if (empty && empty.id) {
+                    messageId = empty.id;
+                    await updateMessageContent(messageId, botMessageContent);
+                    // Ensure scale level row exists for this session/message
+                    try { await saveScaleLevel(this.session_id, this.username, scaleLevel); } catch (slErr) { /* non-fatal */ }
+                    console.log(`Updated existing empty assistant message id=${messageId} for session ${this.session_id}`);
+                } else {
+                    messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', botMessageContent, shouldCollapse, scaleLevel);
+                    console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
+                }
 
                 // Step 4: Generate feedback if scale level is 3 or above, now including message_id
                 if (scaleLevels.some(level => level >= 3)) {
@@ -582,6 +594,8 @@ class ChatGPTProcessor {
                         this.ws.send(JSON.stringify({ type: 'feedback', content: feedback, message_id: messageId }));
                     }
                 }
+                // Notify client of the saved message id so the UI can reconcile streaming placeholders
+                try { this.ws.send(JSON.stringify({ type: 'message-saved', message_id: messageId })); } catch (notifyErr) { /* ignore */ }
             } catch (saveErr) {
                 console.error('Error saving bot message:', saveErr);
             }

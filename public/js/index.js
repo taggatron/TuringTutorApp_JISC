@@ -144,6 +144,27 @@ ws.onmessage = (event) => {
         console.error('Feedback content is empty');
       }
     }
+    else if (message.type === 'message-saved') {
+      // Server notifies that a streamed assistant message was persisted with a DB id.
+      const mid = message.message_id;
+      if (mid) {
+        // Prefer an element explicitly marked as streaming
+        let el = chatMessages.querySelector('.message.assistant[data-message-id="streaming"]');
+        if (!el) {
+          // Fallback to the last assistant message that doesn't have a numeric id
+          const assistants = Array.from(chatMessages.querySelectorAll('.message.assistant'));
+          for (let i = assistants.length - 1; i >= 0; i--) {
+            const a = assistants[i];
+            const dm = a.dataset.messageId;
+            if (!dm || dm === 'streaming' || Number.isNaN(parseInt(dm, 10))) {
+              el = a;
+              break;
+            }
+          }
+        }
+        if (el) el.dataset.messageId = String(mid);
+      }
+    }
   } catch (e) {
     console.error('Error parsing WebSocket message:', e);
   }

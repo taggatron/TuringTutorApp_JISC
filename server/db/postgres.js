@@ -182,6 +182,14 @@ async function getMessageByContent(session_id, content) {
   return res.rows[0] || null;
 }
 
+// Find an existing assistant message for this session that has empty content.
+// Used by Turing Mode to update the initial blank assistant message instead
+// of inserting a duplicate assistant row when the streamed content completes.
+async function getEmptyAssistantMessage(session_id) {
+  const res = await query("SELECT id FROM message WHERE session_id = $1 AND role = 'assistant' AND (content IS NULL OR content = '') ORDER BY id ASC LIMIT 1", [session_id]);
+  return res.rows[0] || null;
+}
+
 async function updateMessageContent(message_id, content) {
   await query('UPDATE message SET content = $1 WHERE id = $2', [content, message_id]);
 }
@@ -273,6 +281,7 @@ export {
   getSessionById,
   getSessionByMessageId,
   getMessageByContent,
+  getEmptyAssistantMessage,
   updateMessageContent,
   updateMessageCollapsedState,
   deleteSession,
