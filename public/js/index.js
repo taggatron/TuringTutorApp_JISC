@@ -574,6 +574,15 @@ async function startNewChat() {
 function addSessionButton(sessionId) {
   const newChats = document.getElementById('new-chats');
   if (!newChats) { console.error('New chats container not found.'); return; }
+  // If a button for this session already exists, don't create a duplicate.
+  const existing = document.getElementById(`session-${sessionId}`);
+  if (existing) {
+    // Ensure it's placed in the new-chats container (or leave as-is) and return.
+    if (existing.parentElement && existing.parentElement.id !== 'new-chats') {
+      newChats.appendChild(existing);
+    }
+    return;
+  }
   const sessionButtons = document.querySelectorAll('.session-button');
   let highestSessionNumber = 0;
   sessionButtons.forEach(button => {
