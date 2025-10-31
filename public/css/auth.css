@@ -46,3 +46,39 @@ body {
   color: white;
   box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
 }
+
+/* Increase vertical spacing between input groups */
+.form-group {
+  margin-bottom: 18px; /* increased spacing between username and password */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inputs styling consistent with purple theme */
+.form-control {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #9b9b9b;
+  border-radius: 4px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.08s ease;
+  box-sizing: border-box;
+}
+
+/* Hover state: subtle purple hint */
+.form-control:hover {
+  border-color: rgba(128,0,128,0.5);
+}
+
+/* Focus state: stronger purple border and glow */
+.form-control:focus {
+  outline: none;
+  border-color: purple;
+  box-shadow: 0 0 0 4px rgba(128,0,128,0.08);
+  transform: translateY(-1px);
+}
+
+/* Make labels stand slightly apart for readability */
+.form-group label {
+  margin-bottom: 6px;
+  font-weight: 500;
+}
