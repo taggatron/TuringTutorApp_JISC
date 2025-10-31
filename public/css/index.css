@@ -170,7 +170,10 @@
 .overlay-active > .message-assistant-overlay { display:flex !important; }
 
 /* animated text used in AI Assessment scale */
-#animated-text.animated-text { min-height:36px; font-size:0.95rem; color:#374151; padding:6px 12px; }
+/* Ensure the element itself has no animation (some older stylesheet set an animation on the element,
+   which caused the whole text to fade in/out). We only want the caret (::after) to blink. */
+#animated-text { animation: none !important; -webkit-animation: none !important; }
+#animated-text.animated-text { min-height:20px; font-size:0.95rem; color:#374151; padding:4px 12px; line-height:1.15; }
 /* Scale items (simple horizontal pill layout) */
 .ai-assessment-scale { display:flex; gap:8px; align-items:center; padding:8px 12px; }
 .scale-item { padding:8px 12px; border-radius:20px; background:#f3f4f6; color:#374151; font-size:0.85rem; cursor:default; user-select:none; border:1px solid transparent; }
@@ -179,7 +182,7 @@
 .scale-item:hover { transform: translateY(-2px); transition: transform 120ms ease; }
 
 /* Separate container for the animated description text shown below the scale */
-.ai-assessment-desc { margin-top: 10px; padding: 0 12px; }
+.ai-assessment-desc { margin-top: 8px; padding: 0 12px; }
 .ai-assessment-desc #animated-text { max-width: 900px; }
 /* Constrain and wrap content inside capture containers used for screenshots */
 .turing-capture-container { max-width: 760px; box-sizing: border-box; }
