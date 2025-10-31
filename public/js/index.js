@@ -830,8 +830,19 @@ async function loadGroups() {
 
 function setMessageInput(text) {
   const input = document.getElementById('message-input');
+  if (!input) return;
   input.value = text;
+  // Focus the input and place the caret at the end of the inserted text so the
+  // user can continue typing immediately. Use a small timeout to ensure the
+  // browser has processed focus (helps on some mobile browsers).
   input.focus();
+  try {
+    const len = input.value.length;
+    // set selection to the end
+    input.setSelectionRange(len, len);
+  } catch (e) {
+    // Some older browsers or inputs might not support setSelectionRange; ignore.
+  }
 }
 
 function showPromptPopup(type) {
@@ -856,7 +867,12 @@ function showPromptPopup(type) {
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.textContent = label + (label.endsWith('...') ? '' : ' ...');
-    b.addEventListener('click', () => setMessageInput(label));
+    b.addEventListener('click', () => {
+      // insert prompt into chat input and close the prompt popup so the user
+      // immediately sees the prompt in the chat area
+      setMessageInput(label);
+      hidePromptPopup();
+    });
     li.appendChild(b);
     ul.appendChild(li);
   };
@@ -878,14 +894,15 @@ function showPromptPopup(type) {
   }
   promptContent.appendChild(h4);
   promptContent.appendChild(ul);
-  popup.style.display = 'block';
+  // Use classes rather than inline styles so CSS rules are respected
+  popup.classList.add('visible');
   overlay.classList.add('visible');
 }
 
 function hidePromptPopup() {
   const popup = document.getElementById('prompt-popup');
   const overlay = document.getElementById('popup-overlay');
-  if (popup) popup.style.display = 'none';
+  if (popup) popup.classList.remove('visible');
   if (overlay) overlay.classList.remove('visible');
 }
 
@@ -910,14 +927,14 @@ function showChatGPTReferencePopup() {
     return;
   }
   refEl.textContent = reference;
-  popup.style.display = 'block';
+  popup.classList.add('visible');
   overlay.classList.add('visible');
   navigator.clipboard.writeText(reference).catch(err => console.error('Error copying reference:', err));
   setupReferenceImageActions();
 }
 
 function hideReferencePopup() {
-  const popup = document.getElementById('reference-popup'); if (popup) popup.style.display = 'none';
+  const popup = document.getElementById('reference-popup'); if (popup) popup.classList.remove('visible');
   const overlay = document.getElementById('popup-overlay'); if (overlay) overlay.classList.remove('visible');
 }
 
