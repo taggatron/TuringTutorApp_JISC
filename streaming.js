@@ -163,6 +163,7 @@ app.get('/messages', async (req, res) => {
             is_turing: sess?.is_turing === 1 || sess?.is_turing === true ? 1 : 0,
             messages: messages.map(m => ({
                 ...m,
+                message_id: m.id ?? m.message_id,
                 scale_level: m.scale_level || 1,
                 collapsed: m.collapsed || 0
             })),
@@ -312,12 +313,36 @@ app.post('/update-message', async (req, res) => {
         let targetMessageId = null;
 
         if (message_id) {
-            // validate message_id
+            // validate message_id; if it's not an integer, fall back to session_id if provided
             const parsed = parseInt(message_id, 10);
-            if (Number.isNaN(parsed)) return res.json({ success: false, message: 'message_id must be an integer' });
-            targetMessageId = parsed;
-            const sess = await getSessionIdForMessage(targetMessageId);
-            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+            if (Number.isNaN(parsed)) {
+                if (!session_id) return res.json({ success: false, message: 'message_id must be an integer or session_id must be provided' });
+                // fallback to session-based path below
+            } else {
+                targetMessageId = parsed;
+                const sess = await getSessionIdForMessage(targetMessageId);
+                if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+            }
+        }
+
+        if (!targetMessageId && session_id && !message_id) {
+            // session_id provided and no message_id: choose latest message
+            const sess = await getSessionById(session_id);
+            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+            const messages = await getMessages(session_id);
+            if (!messages || messages.length === 0) return res.json({ success: false, message: 'No messages found for session' });
+            const last = messages[messages.length - 1];
+            targetMessageId = last.id || last.message_id;
+            if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
+        } else if (!targetMessageId && session_id && message_id) {
+            // message_id present but non-integer; use session fallback
+            const sess = await getSessionById(session_id);
+            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+            const messages = await getMessages(session_id);
+            if (!messages || messages.length === 0) return res.json({ success: false, message: 'No messages found for session' });
+            const last = messages[messages.length - 1];
+            targetMessageId = last.id || last.message_id;
+            if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
         } else {
             // session_id provided: update the most recent message for that session
             const sess = await getSessionById(session_id);
@@ -732,7 +757,7 @@ wss.on('connection', async (ws, req) => {
                     ws.send(JSON.stringify({
                         type: 'history',
                         data: {
-                            messages: messages.map(m => ({ ...m, scale_level: m.scale_level || 1, collapsed: m.collapsed || 0 })),
+                            messages: messages.map(m => ({ ...m, message_id: m.id ?? m.message_id, scale_level: m.scale_level || 1, collapsed: m.collapsed || 0 })),
                             feedbackData,
                             scale_levels: scaleLevels
                         }
