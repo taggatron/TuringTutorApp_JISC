@@ -1108,15 +1108,17 @@ function enterAssistantEditMode(targetAssistant) {
       targetAssistant.dataset.edited = '1';
       // Attempt to persist change to the server if message_id present
       const messageId = targetAssistant.dataset.messageId;
-      if (messageId) {
-        try {
-          await fetch('/update-message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message_id: messageId, content: editable.innerHTML, session_id })
-          });
-        } catch (err) { console.warn('Failed to persist edited message:', err); }
-      }
+      // Always include session_id for server-side fallback; only send message_id when it's a valid integer
+      const payload = { content: editable.innerHTML, session_id };
+      const parsed = parseInt(messageId, 10);
+      if (!Number.isNaN(parsed)) payload.message_id = parsed;
+      try {
+        await fetch('/update-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } catch (err) { console.warn('Failed to persist edited message:', err); }
     } finally {
       exitAssistantEditMode(wrapper, true, targetAssistant);
     }
