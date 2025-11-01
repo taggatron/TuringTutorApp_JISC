@@ -302,10 +302,14 @@ ws.onmessage = (event) => {
       chatMessages.scrollTop = chatMessages.scrollHeight;
     } else if (message.type === 'scale') {
       updateScale(message.data);
+      // Do not auto-apply overlays in Turing mode (editable assistant seed)
+      if (window.__isTuringFlag) return;
       if (message.data.some(level => level >= 3)) {
         const assistantMessages = document.querySelectorAll('.message.assistant');
         for (let i = assistantMessages.length - 1; i >= 0; i--) {
           const lastAssistant = assistantMessages[i];
+          // Skip the special Turing seed placeholder
+          if (lastAssistant.dataset && String(lastAssistant.dataset.messageId) === 'turing-seed') continue;
           if (!lastAssistant.querySelector('.message-assistant-overlay')) {
             const oldOverlay = lastAssistant.querySelector('.message-assistant-overlay');
             if (oldOverlay) oldOverlay.remove();
@@ -401,8 +405,8 @@ const pendingFeedbackMargins = new Map(); // legacy no-op
 function createFeedbackContainer(feedback) {
   const template = document.getElementById('feedback-container-template');
   const feedbackContainer = template.cloneNode(true);
-  feedbackContainer.style.display = 'block';
-  feedbackContainer.style.position = 'relative';
+  feedbackContainer.classList.add('feedback-visible');
+  feedbackContainer.classList.add('feedback-relative');
   feedbackContainer.querySelector('.feedback-message').textContent = feedback;
   feedbackContainer.addEventListener('click', function() {
     const feedbackText = this.querySelector('.feedback-message').textContent;
@@ -506,16 +510,16 @@ function displayFeedback(feedback, messageId = null) {
   row.appendChild(feedbackContainer);
   const overlay = targetAssistant.querySelector('.message-assistant-overlay');
   if (overlay) {
-    overlay.style.display = 'flex';
+    overlay.classList.add('overlay-shown');
     overlay.innerHTML = `
       <span>Copying or directly using this response breaches academic integrity guidelines</span>
       <button class="close-overlay-btn" title="Remove warning">&times;</button>`;
     overlay.addEventListener('click', function(e){
       e.stopPropagation();
-      overlay.style.display = 'none';
+      overlay.classList.remove('overlay-shown');
       targetAssistant.classList.remove('overlay-active');
       const contentDiv = targetAssistant.querySelector('.message-content');
-      if (contentDiv) { contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto'; }
+      if (contentDiv) { contentDiv.classList.remove('content-dim'); }
     });
     targetAssistant.classList.add('edit-locked');
     targetAssistant.classList.add('overlay-active');
@@ -536,7 +540,7 @@ function showFeedbackForSavedSession(sessionId, feedbackData) {
     const feedbackContainer = createFeedbackContainer(fb.feedbackContent);
     row.appendChild(feedbackContainer);
     const overlay = assistant.querySelector('.message-assistant-overlay');
-    if (overlay) { overlay.style.display = 'flex'; assistant.classList.add('overlay-active'); }
+  if (overlay) { overlay.classList.add('overlay-shown'); assistant.classList.add('overlay-active'); }
     assistant.classList.add('edit-locked');
   });
 }
@@ -733,9 +737,9 @@ async function loadSessionHistory(sessionId) {
           } catch (e) { /* ignore */ }
           if (closeBtn && overlay && contentDiv) {
             closeBtn.addEventListener('click', function(e) {
-              e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto';
+              e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.classList.remove('content-dim');
             });
-            overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto'; });
+            overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.classList.remove('content-dim'); });
           }
           chatMessages.appendChild(assistantMessageDiv);
         }
@@ -775,7 +779,7 @@ async function deleteSession(sessionId, parentElementId) {
     const parentElement = document.getElementById(parentElementId);
     if (parentElement) parentElement.id = parentElementId;
     chatMessages.innerHTML = '';
-    document.querySelectorAll('.feedback-container').forEach(container => { container.style.display = 'none'; });
+  document.querySelectorAll('.feedback-container').forEach(container => { container.classList.add('hidden'); });
   } else {
     alert('Failed to delete the session.');
   }
@@ -871,9 +875,9 @@ function hideAndStoreFeedback(sessionId) {
   if (!sessionId) return;
   const feedbackContainers = document.querySelectorAll('.feedback-container');
   sessionFeedback[sessionId] = [];
-  feedbackContainers.forEach(container => {
+    feedbackContainers.forEach(container => {
     sessionFeedback[sessionId].push({ content: container.querySelector('.feedback-message').textContent });
-    container.style.display = 'none';
+    container.classList.add('hidden');
   });
 }
 
@@ -915,7 +919,7 @@ document.querySelectorAll('.scale-item').forEach(item => {
         const wasActiveBeforeHover = item.classList.contains('active');
   const animatedEl = document.getElementById('animated-text');
   if (animatedEl) animatedEl.textContent = '';
-        document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'none');
+          document.querySelectorAll('.scale-item').forEach(i => i.classList.add('no-pointer'));
         item.classList.add('active');
         typeWriter('animated-text', description, scaleSpeed, () => {
           setTimeout(() => {
@@ -925,9 +929,9 @@ document.querySelectorAll('.scale-item').forEach(item => {
               typeWriter('animated-text', text, defaultSpeed);
             } else {
               // If the element is gone, ensure we re-enable pointer events
-              document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'auto');
+              document.querySelectorAll('.scale-item').forEach(i => i.classList.remove('no-pointer'));
             }
-            document.querySelectorAll('.scale-item').forEach(i => i.style.pointerEvents = 'auto');
+            document.querySelectorAll('.scale-item').forEach(i => i.classList.remove('no-pointer'));
             if (!wasActiveBeforeHover) item.classList.remove('active');
           }, 3500);
         });
@@ -941,9 +945,8 @@ function allowDrop(event) { event.preventDefault(); }
 
 function createNewGroup() {
   const popupContainer = document.createElement('div');
-  popupContainer.className = 'popup-container';
-  Object.assign(popupContainer.style, { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: '2000', backgroundColor: 'white', padding: '20px', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)', borderRadius: '8px' });
-  const heading = document.createElement('h3'); heading.textContent = 'Create a New Group'; heading.style.marginTop = '0'; popupContainer.appendChild(heading);
+  popupContainer.className = 'popup-container popup-modal';
+  const heading = document.createElement('h3'); heading.textContent = 'Create a New Group'; heading.classList.add('no-top-margin'); popupContainer.appendChild(heading);
   const form = document.createElement('form');
   form.onsubmit = (e) => {
     e.preventDefault();
@@ -953,17 +956,17 @@ function createNewGroup() {
       fetch('/create-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_name: groupName }) })
         .then(response => response.json()).then(data => {
           if (data.success) { createGroupInUI(data.group_id, groupName); document.body.removeChild(popupContainer); }
-          else { const p = document.createElement('p'); p.textContent = 'Error: ' + data.message; p.style.color = 'red'; form.appendChild(p); }
-        }).catch(error => { console.error('Error creating group:', error); const p = document.createElement('p'); p.textContent = 'Error creating group. Please try again.'; p.style.color = 'red'; form.appendChild(p); });
+          else { const p = document.createElement('p'); p.textContent = 'Error: ' + data.message; p.classList.add('error-text'); form.appendChild(p); }
+        }).catch(error => { console.error('Error creating group:', error); const p = document.createElement('p'); p.textContent = 'Error creating group. Please try again.'; p.classList.add('error-text'); form.appendChild(p); });
     } else { const p = document.createElement('p'); p.textContent = 'Please enter a group name.'; p.style.color = 'red'; form.appendChild(p); }
   };
-  const inputDiv = document.createElement('div'); inputDiv.style.marginBottom = '15px';
-  const label = document.createElement('label'); label.setAttribute('for', 'group-name-input'); label.textContent = 'Group Name:'; label.style.display = 'block'; label.style.marginBottom = '5px';
-  const input = document.createElement('input'); input.type = 'text'; input.id = 'group-name-input'; input.placeholder = `Group ${document.querySelectorAll('.session-group').length + 1}`; Object.assign(input.style, { width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #ccc' });
+  const inputDiv = document.createElement('div'); inputDiv.classList.add('form-row');
+  const label = document.createElement('label'); label.setAttribute('for', 'group-name-input'); label.textContent = 'Group Name:'; label.classList.add('form-label');
+  const input = document.createElement('input'); input.type = 'text'; input.id = 'group-name-input'; input.placeholder = `Group ${document.querySelectorAll('.session-group').length + 1}`; input.classList.add('form-input');
   inputDiv.appendChild(label); inputDiv.appendChild(input); form.appendChild(inputDiv);
-  const buttonContainer = document.createElement('div'); buttonContainer.style.display = 'flex'; buttonContainer.style.justifyContent = 'space-between';
-  const createButton = document.createElement('button'); createButton.type = 'submit'; createButton.textContent = 'Create Group'; Object.assign(createButton.style, { padding: '8px 12px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' });
-  const cancelButton = document.createElement('button'); cancelButton.type = 'button'; cancelButton.textContent = 'Cancel'; Object.assign(cancelButton.style, { padding: '8px 12px', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' });
+  const buttonContainer = document.createElement('div'); buttonContainer.classList.add('form-actions');
+  const createButton = document.createElement('button'); createButton.type = 'submit'; createButton.textContent = 'Create Group'; createButton.classList.add('btn', 'btn-primary');
+  const cancelButton = document.createElement('button'); cancelButton.type = 'button'; cancelButton.textContent = 'Cancel'; cancelButton.classList.add('btn', 'btn-cancel');
   cancelButton.onclick = () => { document.body.removeChild(popupContainer); };
   buttonContainer.appendChild(cancelButton); buttonContainer.appendChild(createButton); form.appendChild(buttonContainer); popupContainer.appendChild(form); document.body.appendChild(popupContainer);
   setTimeout(() => { input.focus(); }, 0);
@@ -1182,7 +1185,8 @@ if (chatgptRefBtn) {
         try {
           const rect = el.getBoundingClientRect(); const cs = getComputedStyle(el);
           const ghost = el.cloneNode(true);
-          Object.assign(ghost.style, { position: 'fixed', top: '-10000px', left: '-10000px', width: rect.width + 'px', height: rect.height + 'px', boxSizing: 'border-box', background: cs.backgroundColor || '#007bff', color: cs.color || '#fff', borderRadius: cs.borderRadius || '15px', padding: cs.padding || '10px', lineHeight: cs.lineHeight, font: cs.font, whiteSpace: 'pre-wrap', boxShadow: '0 6px 14px rgba(0,0,0,0.18)', pointerEvents: 'none', zIndex: 9999, opacity: '1', overflow: 'hidden', backgroundClip: 'padding-box' });
+          // Avoid setting inline styles (CSP) — use a CSS class for the drag ghost
+          ghost.classList.add('drag-ghost');
           document.body.appendChild(ghost);
           const offsetX = (e.clientX || 0) - rect.left; const offsetY = (e.clientY || 0) - rect.top;
           if (e.dataTransfer && e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(ghost, Math.max(0, Math.min(rect.width, offsetX)), Math.max(0, Math.min(rect.height, offsetY)));
@@ -1190,7 +1194,7 @@ if (chatgptRefBtn) {
         } catch (_) { }
         chatgptRefBtn.classList.add('drop-target');
       });
-      el.addEventListener('dragend', () => { chatgptRefBtn.classList.remove('drop-target'); if (el.__dragGhost) { try { el.__dragGhost.remove(); } catch(_) {} el.__dragGhost = null; } });
+  el.addEventListener('dragend', () => { chatgptRefBtn.classList.remove('drop-target'); if (el.__dragGhost) { try { el.__dragGhost.remove(); } catch(_) {} el.__dragGhost = null; } });
     }
     chatMessagesEl.querySelectorAll('.message.user').forEach(armDraggable);
     const mo = new MutationObserver((muts) => { muts.forEach(m => m.addedNodes.forEach(node => { if (node instanceof HTMLElement) { if (node.matches && node.matches('.message.user')) armDraggable(node); node.querySelectorAll && node.querySelectorAll('.message.user').forEach(armDraggable); } })); });
@@ -1206,16 +1210,49 @@ if (chatgptRefBtn) {
       }
       showChatGPTReferencePopup();
     });
-    let touchState = { active: false, el: null, ghost: null }; let longPressTimer = null;
+    // Dynamic stylesheet helper used to position touch drag ghosts without setting inline styles (CSP-safe)
+    function _ensureDynamicStyleSheet() {
+      let s = document.getElementById('dynamic-style-sheet');
+      if (!s) {
+        s = document.createElement('style'); s.id = 'dynamic-style-sheet'; s.appendChild(document.createTextNode('')); document.head.appendChild(s);
+      }
+      return s.sheet;
+    }
+    function _insertPosRule(className, x, y) {
+      const sheet = _ensureDynamicStyleSheet();
+      const rule = `.${className} { left: ${x}px; top: ${y}px; }`;
+      try { return sheet.insertRule(rule, sheet.cssRules.length); } catch (e) { console.error('insertRule failed', e); return -1; }
+    }
+    function _updatePosRule(ruleIndex, x, y) {
+      const sheet = _ensureDynamicStyleSheet();
+      if (!sheet || ruleIndex < 0 || ruleIndex >= sheet.cssRules.length) return;
+      try { sheet.cssRules[ruleIndex].style.left = x + 'px'; sheet.cssRules[ruleIndex].style.top = y + 'px'; } catch (e) { /* ignore */ }
+    }
+    function _removePosRule(ruleIndex) {
+      const sheet = _ensureDynamicStyleSheet();
+      if (!sheet || ruleIndex < 0 || ruleIndex >= sheet.cssRules.length) return;
+      try { sheet.deleteRule(ruleIndex); } catch (e) { /* ignore */ }
+    }
+
+    let touchState = { active: false, el: null, ghost: null };
+    let longPressTimer = null;
     function startTouchDrag(el, touch) {
-      touchState.active = true; touchState.el = el; const ghost = document.createElement('div'); ghost.textContent = 'Drag to Reference'; Object.assign(ghost.style, { position: 'fixed', left: touch.clientX + 'px', top: touch.clientY + 'px', transform: 'translate(-50%, -150%)', background: '#2d8cff', color: '#fff', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', zIndex: 9999 }); document.body.appendChild(ghost); touchState.ghost = ghost;
+      touchState.active = true; touchState.el = el; const ghost = document.createElement('div'); ghost.textContent = 'Drag to Reference'; // use CSS class to avoid inline styles
+      // give the ghost a unique pos-class so we can update its left/top via stylesheet rules
+      const uniq = 'touch-ghost-pos-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+      ghost.classList.add('touch-ghost'); ghost.classList.add(uniq);
+      document.body.appendChild(ghost);
+      // create initial rule off-screen then update on first move
+      ghost._posRuleIndex = _insertPosRule(uniq, touch.clientX, touch.clientY);
+      touchState.ghost = ghost;
     }
     function endTouchDrag(touch) {
       if (!touchState.active) return; const rect = chatgptRefBtn.getBoundingClientRect(); const x = touch.clientX, y = touch.clientY; if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) { const txt = (touchState.el.innerText || touchState.el.textContent || '').trim(); window.__lastDroppedPromptText = txt; window.__lastDraggedPromptElement = touchState.el; showChatGPTReferencePopup(); }
-      if (touchState.ghost) touchState.ghost.remove(); touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target');
+      if (touchState.ghost) { try { if (typeof touchState.ghost._posRuleIndex === 'number') _removePosRule(touchState.ghost._posRuleIndex); } catch(_) {} try { touchState.ghost.remove(); } catch(_) {} }
+      touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target');
     }
     chatMessagesEl.addEventListener('touchstart', (e) => { const msg = e.target.closest && e.target.closest('.message.user'); if (!msg) return; if (longPressTimer) clearTimeout(longPressTimer); const t = e.touches[0]; longPressTimer = setTimeout(() => startTouchDrag(msg, t), 350); }, { passive: true });
-    chatMessagesEl.addEventListener('touchmove', (e) => { if (!touchState.active || !touchState.ghost) return; const t = e.touches[0]; touchState.ghost.style.left = t.clientX + 'px'; touchState.ghost.style.top = t.clientY + 'px'; const rect = chatgptRefBtn.getBoundingClientRect(); const over = (t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom); chatgptRefBtn.classList.toggle('drop-target', over); }, { passive: true });
+  chatMessagesEl.addEventListener('touchmove', (e) => { if (!touchState.active || !touchState.ghost) return; const t = e.touches[0]; try { if (typeof touchState.ghost._posRuleIndex === 'number' && touchState.ghost._posRuleIndex >= 0) _updatePosRule(touchState.ghost._posRuleIndex, t.clientX, t.clientY); } catch (_) {} const rect = chatgptRefBtn.getBoundingClientRect(); const over = (t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom); chatgptRefBtn.classList.toggle('drop-target', over); }, { passive: true });
     chatMessagesEl.addEventListener('touchend', (e) => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } const t = e.changedTouches && e.changedTouches[0]; if (t) endTouchDrag(t); });
     chatMessagesEl.addEventListener('touchcancel', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } if (touchState.ghost) touchState.ghost.remove(); touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target'); });
   })();
@@ -1297,8 +1334,8 @@ async function turingInsertReferenceAndPromptImage(editableEl, promptText, promp
   if (!window.html2canvas) {
   await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = '/vendor/html2canvas.min.js'; s.defer = true; s.onload = () => resolve(); s.onerror = () => reject(new Error('Failed to load html2canvas')); document.head.appendChild(s); });
   }
-  function ensureFooter(el) { let footer = el.querySelector('[data-section="turing-footer"]'); if (!footer) { footer = document.createElement('div'); footer.setAttribute('data-section', 'turing-footer'); footer.style.marginTop = '16px'; if (el.lastChild) el.appendChild(document.createElement('br')); el.appendChild(footer); } if (footer !== el.lastChild) { el.appendChild(footer); } return footer; }
-  function ensureSection(footer, key, titleText) { let section = footer.querySelector(`[data-section="${key}-section"]`); if (!section) { section = document.createElement('div'); section.setAttribute('data-section', `${key}-section`); const headingP = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = titleText; headingP.appendChild(strong); const body = document.createElement('div'); body.setAttribute('data-section', `${key}-body`); body.style.marginTop = '6px'; section.appendChild(headingP); section.appendChild(body); if (footer.lastChild) footer.appendChild(document.createElement('br')); footer.appendChild(section); } return section; }
+  function ensureFooter(el) { let footer = el.querySelector('[data-section="turing-footer"]'); if (!footer) { footer = document.createElement('div'); footer.setAttribute('data-section', 'turing-footer'); footer.classList.add('turing-footer'); if (el.lastChild) el.appendChild(document.createElement('br')); el.appendChild(footer); } if (footer !== el.lastChild) { el.appendChild(footer); } return footer; }
+  function ensureSection(footer, key, titleText) { let section = footer.querySelector(`[data-section="${key}-section"]`); if (!section) { section = document.createElement('div'); section.setAttribute('data-section', `${key}-section`); const headingP = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = titleText; headingP.appendChild(strong); const body = document.createElement('div'); body.setAttribute('data-section', `${key}-body`); body.classList.add('section-body'); section.appendChild(headingP); section.appendChild(body); if (footer.lastChild) footer.appendChild(document.createElement('br')); footer.appendChild(section); } return section; }
   function getBody(section, key) { let body = section.querySelector(`[data-section="${key}-body"]`); if (!body) { body = document.createElement('div'); body.setAttribute('data-section', `${key}-body`); section.appendChild(body); } return body; }
   function moveOldSectionContentToFooter(el, key, titles, destBody) { const headings = Array.from(el.querySelectorAll('strong, b, h1, h2, h3, h4, h5, h6, p')).filter(n => { if (n.closest('[data-section="turing-footer"]')) return false; const txt = (n.textContent || '').trim().toLowerCase(); return titles.some(t => txt.startsWith(t.toLowerCase())); }); headings.forEach(h => { let cursor = h.nextSibling; const toMove = []; while (cursor && !(cursor.nodeType === 1 && /^(STRONG|B|H1|H2|H3|H4|H5|H6|P)$/.test(cursor.nodeName) && titles.concat(['references','prompts']).some(t => ((cursor.textContent||'').trim().toLowerCase().startsWith(t.toLowerCase())))) && !cursor.closest?.('[data-section="turing-footer"]')) { const next = cursor.nextSibling; toMove.push(cursor); cursor = next; } toMove.forEach(node => destBody.appendChild(node)); h.remove(); }); }
   const footer = ensureFooter(editableEl); const refsSection = ensureSection(footer, 'references', 'References'); const promptsSection = ensureSection(footer, 'prompts', 'Prompts'); const refsBody = getBody(refsSection, 'references'); const promptsBody = getBody(promptsSection, 'prompts');

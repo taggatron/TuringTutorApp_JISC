@@ -147,7 +147,7 @@ async function saveMessageWithScaleLevel(session_id, username, role, content, co
 
 async function getMessages(session_id) {
   // Explicitly select common columns including metadata jsonb columns if present
-  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, created_at, updated_at, references_json AS references, prompts_json AS prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
   // Ensure references/prompts are parsed to native JS objects if stored as strings
   return res.rows.map(r => ({
     ...r,
