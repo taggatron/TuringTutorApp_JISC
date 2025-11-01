@@ -544,20 +544,39 @@ class ChatGPTProcessor {
 
     async processUserMessage(userMessage) {
         try {
-            // Step 1: Process the user message as usual
+            // Step 1: Process the user message with style guidelines + current conversation
+            const styleSystemPrompt = `You are a highly professional assessor who writes clear, structured, and well-formatted educational content.
+
+STYLE GUIDELINES:
+• Always use Unicode emojis (⚡, 🧠, 💡, 🪞, 🔍, 🧭) as inline section icons before headings — for example, “⚡ Definition” or “🧠 Why It Matters”.
+• All section headings must appear in **bold** (Markdown) or <strong> (HTML) for visual emphasis.
+• Headings can also be wrapped in <h3> or Markdown ### if appropriate.
+• Use **bold** text for key terms, assessment criteria, and emphasis throughout.
+• Use bullet points (• or -) for lists rather than numbered lists, unless sequence matters.
+• Do not use SVG icons, Font Awesome, or any external icon libraries.
+• Output may be in plain text, Markdown, or HTML — whichever best preserves structure and formatting.
+• Maintain a professional, readable layout similar to ChatGPT’s sectioned response style.`;
+
+            const userContent = (userMessage && typeof userMessage === 'object') ? (userMessage.content || '') : String(userMessage || '');
+
             const stream = await this.openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
-                    { role: 'system', content: 'You are a highly professional assessor...' },
-                    ...this.conversationHistory.filter(msg => msg.content)
+                    { role: 'system', content: styleSystemPrompt },
+                    // retain previous conversation context
+                    ...this.conversationHistory.filter(msg => msg.content),
+                    // add the user's latest message into the streaming request
+                    { role: 'user', content: userContent }
                 ],
                 stream: true,
             });
 
             let botMessageContent = '';
             for await (const chunk of stream) {
-                botMessageContent += chunk.choices[0]?.delta?.content || '';
-                this.ws.send(JSON.stringify({ type: 'assistant', content: chunk.choices[0]?.delta?.content || '' }));
+                const delta = chunk.choices[0]?.delta?.content || '';
+                botMessageContent += delta;
+                // Include a hint about the content format so the client can render markdown/HTML appropriately
+                this.ws.send(JSON.stringify({ type: 'assistant', content: delta, format: 'markdown' }));
             }
 
             // Step 2: Assess the conversation history to determine the scale level
@@ -591,8 +610,8 @@ class ChatGPTProcessor {
                 if (scaleLevels.some(level => level >= 3)) {
                     const feedback = await this.generateFeedback(userMessage.content);
                     if (feedback) {
-                        this.ws.send(JSON.stringify({ type: 'feedback', content: feedback, message_id: messageId }));
-                    }
+                            this.ws.send(JSON.stringify({ type: 'feedback', content: feedback, message_id: messageId, format: 'markdown' }));
+                        }
                 }
                 // Notify client of the saved message id so the UI can reconcile streaming placeholders
                 try { this.ws.send(JSON.stringify({ type: 'message-saved', message_id: messageId })); } catch (notifyErr) { /* ignore */ }
@@ -673,17 +692,29 @@ Please return only the number and category (e.g., '5. Full AI') that the user's 
 
     async generateFeedback(userMessage) {
         try {
+            const styleSystemPrompt = `You are a highly professional assessor who writes clear, structured, and well-formatted educational content.
+
+STYLE GUIDELINES:
+• Always use Unicode emojis (⚡, 🧠, 💡, 🪞, 🔍, 🧭) as inline section icons before headings — for example, “⚡ Definition” or “🧠 Why It Matters”.
+• All section headings must appear in **bold** (Markdown) or <strong> (HTML) for visual emphasis.
+• Headings can also be wrapped in <h3> or Markdown ### if appropriate.
+• Use **bold** text for key terms, assessment criteria, and emphasis throughout.
+• Use bullet points (• or -) for lists rather than numbered lists, unless sequence matters.
+• Do not use SVG icons, Font Awesome, or any external icon libraries.
+• Output may be in plain text, Markdown, or HTML — whichever best preserves structure and formatting.
+• Maintain a professional, readable layout similar to ChatGPT’s sectioned response style.`;
+
+            const feedbackSystemPrompt = `As a supportive chatbot, suggest an alternative prompt based on the user's input that avoid meeting one of the following criteria: AI + Human Evaluation (AI generates content and humans refine/approve) or Full AI Responsibility (AI fully responsible with minimal human input). Create a maximum 50-word response prompt example aligned with either:
+• Ideas and Structure: AI generates ideas or structure while humans create the content, or
+• Research: AI is used as a research tool to find credible resources on a topic.
+Word this as a direct request (not a question). For example: 'Please generate ideas for an essay about (insert topic here)'.`;
+
             const response = await this.openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
-                    {
-                        role: 'system',
-                        content: "As a supportive chatbot, suggest an alternative prompt based on the user's input that avoid meeting the one of the following criteria: AI + Human Evaluation: Where AI generates content or suggestions, and humans refine or approve it. Full AI Responsibility: Where AI is fully responsible for the task with minimal or no human intervention. Create your your 50 word maximum response prompt example to align with either: Ideas and Structure: AI is used to generate ideas or structure content, but the primary creation remains human-driven; or Research: AI is utilized as a research tool to find credible resources on a given topic. Word this as a direct request and not a question. For example: 'Please generate ideas for an essay about (insert topic here)'."
-                    },
-                    {
-                        role: 'user',
-                        content: userMessage
-                    }
+                    { role: 'system', content: styleSystemPrompt },
+                    { role: 'system', content: feedbackSystemPrompt },
+                    { role: 'user', content: userMessage }
                 ]
             });
 

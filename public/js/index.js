@@ -2,59 +2,51 @@
 
 // Inject html2canvas for client-side screenshot export
 (function ensureHtml2Canvas() {
-    if (!window.html2canvas) {
-      const s = document.createElement('script');
-      s.src = '/vendor/html2canvas.min.js';
-      s.defer = true;
-      document.head.appendChild(s);
-    }
+  if (!window.html2canvas) {
+    const s = document.createElement('script');
+    s.src = '/vendor/html2canvas.min.js';
+    s.defer = true;
+    document.head.appendChild(s);
+  }
 })();
 
 const popup = document.getElementById('scale-popup');
 let fadeTimeout;
 
-// Function to show the pop-up with information
-function showPopup(element, message) {
-  if (!popup) {
-    console.warn('showPopup: scale-popup element not present');
-    return;
-  }
-  clearTimeout(fadeTimeout);
-  popup.textContent = message;
-  try {
-    const rect = element.getBoundingClientRect();
-    popup.style.top = `${rect.top - popup.offsetHeight - 10}px`;
-    popup.style.left = `${window.innerWidth / 2 - popup.offsetWidth / 2}px`;
-    // safe z-index calculation: only if element id follows expected pattern
-    try { popup.style.zIndex = String(2010 + (parseInt((element.id||'').split('-')[1]) || 0)); } catch(_) {}
-  } catch (e) {
-    // If element is not positioned or missing, fall back to centered location
-    popup.style.top = '';
-    popup.style.left = '';
-  }
-  popup.classList.add('visible');
-  popup.classList.remove('fade-out');
-}
-
-function hidePopup() {
-  if (!popup) return;
-  popup.classList.add('fade-out');
-  fadeTimeout = setTimeout(() => {
-    if (popup) popup.classList.remove('visible');
-  }, 4000);
-}
-
-// Create WebSocket using the correct scheme/host for current page
-const wsScheme = (location.protocol === 'https:') ? 'wss' : 'ws';
-const ws = new WebSocket(`${wsScheme}://${location.host}`);
+// Core DOM references used throughout the script
 const chatMessages = document.getElementById('chat-messages');
-const sessionList = document.getElementById('session-list');
+
+// Initialize WebSocket connection to the same host. Use wss when on https.
+let ws = null;
+try {
+  const wsProtocol = (location.protocol === 'https:') ? 'wss:' : 'ws:';
+  // connect to the same host; the server upgrades the connection
+  const wsUrl = `${wsProtocol}//${location.host}`;
+  ws = new WebSocket(wsUrl);
+  ws.addEventListener('open', () => console.debug('WebSocket connected to', wsUrl));
+  ws.addEventListener('error', (e) => console.error('WebSocket error', e));
+} catch (e) {
+  console.error('Failed to create WebSocket:', e);
+}
+
+function showPopup(element, message) {
+  // Simple popup helper: ensure popup exists, set content, and auto-hide
+  if (!popup) return;
+  const contentEl = popup.querySelector('.popup-content') || popup;
+  try {
+    if (contentEl) contentEl.textContent = message || '';
+  } catch (e) { /* ignore DOM issues */ }
+  popup.classList.add('visible');
+  if (fadeTimeout) clearTimeout(fadeTimeout);
+  fadeTimeout = setTimeout(() => { if (popup) popup.classList.remove('visible'); }, 4500);
+}
 let session_id = null;
 let __turingInitialMessageId = null; // for newly created turing sessions
 let botMessageDiv = null;
 let activeLevels = new Set();
-let feedbackMapping = []; // Array to map message elements to feedback containers
 let sessionFeedback = {}; // Object to store feedback for each session
+// Mapping of user message elements to their feedback containers (used to manage margins and persistence)
+const feedbackMapping = [];
 
 window.onload = async () => {
   await loadGroups();
@@ -70,6 +62,91 @@ window.onload = async () => {
     }
   }
 };
+
+// Minimal, safe markdown-ish renderer: escapes HTML, converts **bold** to <strong>,
+// handles simple '###' headings to <h3>, and groups lines beginning with '- ' into <ul>/<li>.
+function escapeHtml(unsafe) {
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderMarkdownToHtml(text) {
+  if (!text) return '';
+  const lines = String(text).split(/\r?\n/);
+  let out = '';
+  let inList = false;
+
+  // accumulate consecutive non-list lines into paragraphs
+  let paragraphBuffer = [];
+  function flushParagraph() {
+    if (paragraphBuffer.length === 0) return;
+    const joined = paragraphBuffer.join(' ');
+    out += `<p>${processInlineMarkdown(joined)}</p>`;
+    paragraphBuffer = [];
+  }
+
+  try {
+    for (let rawLine of lines) {
+      const line = rawLine.trim();
+      if (line === '---' || line === '***') {
+        if (inList) { out += '</ul>'; inList = false; }
+        flushParagraph();
+        out += '<hr/>';
+        continue;
+      }
+
+      const headingMatch = line.match(/^#{1,6}\s+(.*)$/);
+      if (headingMatch) {
+        if (inList) { out += '</ul>'; inList = false; }
+        flushParagraph();
+        const level = Math.min(3, (line.match(/^#+/)||[''])[0].length);
+        const content = headingMatch[1];
+        out += `<h${level}>${processInlineMarkdown(content)}</h${level}>`;
+        continue;
+      }
+
+      if (/^[-•]\s+/.test(line)) {
+        flushParagraph();
+        if (!inList) { out += '<ul>'; inList = true; }
+        const item = line.replace(/^[-•]\s+/, '');
+        out += `<li>${processInlineMarkdown(item)}</li>`;
+        continue;
+      }
+
+      // blank line: paragraph boundary
+      if (line === '') {
+        if (inList) { out += '</ul>'; inList = false; }
+        flushParagraph();
+        continue;
+      }
+
+      // accumulate into paragraph
+      paragraphBuffer.push(line);
+    }
+    flushParagraph();
+  } catch (e) {
+    console.error('Error rendering markdown:', e);
+    return '';
+  }
+
+  if (inList) out += '</ul>';
+  return out;
+
+  function processInlineMarkdown(s) {
+    let escaped = escapeHtml(s);
+    // Bold **text** (multiline safe)
+    escaped = escaped.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+    // Simple italic (single * on both sides) - conservative
+    escaped = escaped.replace(/(^|\s)\*([^*]+?)\*(\s|$)/g, '$1<em>$2</em>$3');
+    // Autolink
+    escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    return escaped;
+  }
+}
 
 ws.onmessage = (event) => {
   try {
@@ -99,11 +176,54 @@ ws.onmessage = (event) => {
         botMessageDiv.appendChild(overlayDiv);
         row.appendChild(botMessageDiv);
         chatMessages.appendChild(row);
+        // initialize streaming accumulator for robust markdown rendering across chunks
+        botMessageDiv._accumulatedRaw = '';
+        botMessageDiv._visibleRaw = '';
+        botMessageDiv._lastAppend = 0;
+        botMessageDiv._renderTimer = null;
       }
   const contentDiv = botMessageDiv.querySelector('.message-content');
-  // append content safely
-  const newHtml = (message.content || '').replace(/\n/g, '<br>');
-  contentDiv.innerHTML += newHtml;
+  // If server indicates markdown formatting, accumulate the raw text and render progressively
+  if (!botMessageDiv._accumulatedRaw) botMessageDiv._accumulatedRaw = '';
+  if (!botMessageDiv._visibleRaw) botMessageDiv._visibleRaw = '';
+  if (message.format === 'markdown' || message.format === undefined) {
+    // Append raw delta to buffer
+    botMessageDiv._accumulatedRaw += (message.content || '');
+    botMessageDiv._lastAppend = Date.now();
+
+    // Start a render timer if not already running
+    if (!botMessageDiv._renderTimer) {
+      const CHUNK_SIZE = 24; // chars moved per tick
+      const TICK_MS = 60; // render every 60ms for smoother streaming
+      botMessageDiv._renderTimer = setInterval(() => {
+        try {
+          if (botMessageDiv._accumulatedRaw.length > 0) {
+            // Move a chunk from accumulated to visible
+            const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
+            botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
+            botMessageDiv._visibleRaw += take;
+            // Render the visible subset
+            contentDiv.innerHTML = renderMarkdownToHtml(botMessageDiv._visibleRaw);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          } else {
+            // No buffered content; if no new data for a short while, stop the timer
+            if (Date.now() - botMessageDiv._lastAppend > 300) {
+              clearInterval(botMessageDiv._renderTimer);
+              botMessageDiv._renderTimer = null;
+              // Ensure final render includes any leftover visibleRaw
+              contentDiv.innerHTML = renderMarkdownToHtml(botMessageDiv._visibleRaw);
+            }
+          }
+        } catch (e) {
+          // on any render error, fallback to appending raw text
+          contentDiv.innerHTML += (message.content || '').replace(/\n/g, '<br>');
+        }
+      }, TICK_MS);
+    }
+  } else {
+    // non-markdown fallback: append raw
+    contentDiv.innerHTML += (message.content || '').replace(/\n/g, '<br>');
+  }
       chatMessages.scrollTop = chatMessages.scrollHeight;
     } else if (message.type === 'scale') {
       updateScale(message.data);
@@ -251,7 +371,14 @@ function sendMessage() {
   const message = input.value;
   if (message.trim()) {
     botMessageDiv = null;
-    ws.send(JSON.stringify({ content: message, session_id }));
+    // Clear input immediately to give responsive feedback to the user
+    input.value = '';
+    input.style.height = 'auto';
+    try {
+      ws.send(JSON.stringify({ content: message, session_id }));
+    } catch (err) {
+      console.error('WebSocket send failed:', err);
+    }
     const userMessage = document.createElement('div');
     userMessage.className = 'message user';
     const previousMapping = feedbackMapping[feedbackMapping.length - 1];
@@ -263,8 +390,7 @@ function sendMessage() {
     chatMessages.appendChild(userMessage);
     const feedbackContainer = createFeedbackContainer('');
     feedbackMapping.push({ messageElement: userMessage, feedbackContainer });
-    input.value = '';
-    input.style.height = 'auto';
+  // input already cleared above
     chatMessages.scrollTop = chatMessages.scrollHeight;
     setTimeout(() => {
       input.focus();
@@ -349,16 +475,20 @@ async function loadChatHistory(messages) {
       const shouldLock = (Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || feedbackByMessageId.has(String(msg.message_id));
       if (shouldLock) messageElement.classList.add('edit-locked');
       messageElement.dataset.messageId = msg.message_id;
-  const showOverlay = feedbackByMessageId.has(String(msg.message_id));
-  if (showOverlay) messageElement.classList.add('overlay-active');
-  // build content and overlay nodes without inline style attributes (CSP-safe)
-  const contentDiv = document.createElement('div');
-  contentDiv.className = 'message-content';
-  contentDiv.innerHTML = (msg.content||'').replace(/\n/g,'<br>');
-  const overlayDiv = document.createElement('div');
-  overlayDiv.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
-  messageElement.appendChild(contentDiv);
-  messageElement.appendChild(overlayDiv);
+      const showOverlay = feedbackByMessageId.has(String(msg.message_id));
+      if (showOverlay) messageElement.classList.add('overlay-active');
+      // build content and overlay nodes without inline style attributes (CSP-safe)
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+      try {
+        contentDiv.innerHTML = renderMarkdownToHtml(msg.content || '');
+      } catch (e) {
+        contentDiv.innerHTML = (msg.content || '').replace(/\n/g,'<br>');
+      }
+      const overlayDiv = document.createElement('div');
+      overlayDiv.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
+      messageElement.appendChild(contentDiv);
+      messageElement.appendChild(overlayDiv);
       row.appendChild(messageElement);
       const fb = feedbackByMessageId.get(String(msg.message_id));
       if (fb) { const fbContainer = createFeedbackContainer(fb.feedbackContent); row.appendChild(fbContainer); }
@@ -491,7 +621,12 @@ async function loadSessionHistory(sessionId) {
         const __isHtml = /<\w+[\s\S]*?>[\s\S]*<\/\w+>/i.test(msg.content || '');
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.innerHTML = __isHtml ? (msg.content || '') : (msg.content || '').replace(/\n/g, '<br>');
+        try {
+          if (__isHtml) contentDiv.innerHTML = msg.content || '';
+          else contentDiv.innerHTML = renderMarkdownToHtml(msg.content || '');
+        } catch (e) {
+          contentDiv.innerHTML = (msg.content || '').replace(/\n/g,'<br>');
+        }
         const overlay = document.createElement('div');
         overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
         const overlayText = document.createElement('span');
@@ -561,7 +696,9 @@ async function startNewChat() {
     const data = await response.json();
     if (data.success) {
       session_id = data.session_id;
-      chatMessages.innerHTML = '';
+      // Ensure chatMessages element exists (fall back to querying DOM)
+      const cm = chatMessages || document.getElementById('chat-messages');
+      if (cm) cm.innerHTML = '';
       resetScale();
       addSessionButton(session_id);
       highlightCurrentSession(session_id);
@@ -1248,7 +1385,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelector('.send-message-button')?.addEventListener('click', sendMessage);
   const input = document.getElementById('message-input');
   if (input) {
+    // listen for Enter on both keypress (fallback) and keydown for modern browsers
     input.addEventListener('keypress', handleKeyPress);
+    input.addEventListener('keydown', handleKeyPress);
     input.addEventListener('input', resizeInput);
   }
 });
