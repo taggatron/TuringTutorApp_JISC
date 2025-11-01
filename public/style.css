@@ -433,6 +433,11 @@ body {
     z-index: 9999;
     pointer-events: none;
 }
+.message.user.dragging {
+    /* Keep layout stable but hide the original during drag */
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
 .overlay-shown { display: flex !important; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: rgba(255,230,230,0.98); color: #600; border-radius: 8px; z-index: 1200; }
 .overlay-hidden { display: none !important; }
 .content-dim { opacity: 0.35 !important; pointer-events: none !important; }

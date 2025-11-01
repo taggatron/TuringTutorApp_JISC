@@ -1186,15 +1186,10 @@ if (chatgptRefBtn) {
           const rect = el.getBoundingClientRect(); const cs = getComputedStyle(el);
           const ghost = el.cloneNode(true);
           // Avoid setting inline styles (CSP) — use a CSS class for the drag ghost
-          ghost.classList.add('drag-ghost');
-          document.body.appendChild(ghost);
-          const offsetX = (e.clientX || 0) - rect.left; const offsetY = (e.clientY || 0) - rect.top;
-          if (e.dataTransfer && e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(ghost, Math.max(0, Math.min(rect.width, offsetX)), Math.max(0, Math.min(rect.height, offsetY)));
-          el.__dragGhost = ghost;
         } catch (_) { }
         chatgptRefBtn.classList.add('drop-target');
       });
-  el.addEventListener('dragend', () => { chatgptRefBtn.classList.remove('drop-target'); if (el.__dragGhost) { try { el.__dragGhost.remove(); } catch(_) {} el.__dragGhost = null; } });
+  el.addEventListener('dragend', () => { chatgptRefBtn.classList.remove('drop-target'); try { el.classList.remove('dragging'); } catch(_) {} if (el.__dragGhost) { try { el.__dragGhost.remove(); } catch(_) {} el.__dragGhost = null; } });
     }
     chatMessagesEl.querySelectorAll('.message.user').forEach(armDraggable);
     const mo = new MutationObserver((muts) => { muts.forEach(m => m.addedNodes.forEach(node => { if (node instanceof HTMLElement) { if (node.matches && node.matches('.message.user')) armDraggable(node); node.querySelectorAll && node.querySelectorAll('.message.user').forEach(armDraggable); } })); });
@@ -1238,6 +1233,8 @@ if (chatgptRefBtn) {
     let longPressTimer = null;
     function startTouchDrag(el, touch) {
       touchState.active = true; touchState.el = el; const ghost = document.createElement('div'); ghost.textContent = 'Drag to Reference'; // use CSS class to avoid inline styles
+      // Hide the original element during touch-drag so only the touch ghost is visible
+      try { el.classList.add('dragging'); } catch (_) {}
       // give the ghost a unique pos-class so we can update its left/top via stylesheet rules
       const uniq = 'touch-ghost-pos-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
       ghost.classList.add('touch-ghost'); ghost.classList.add(uniq);
@@ -1248,13 +1245,15 @@ if (chatgptRefBtn) {
     }
     function endTouchDrag(touch) {
       if (!touchState.active) return; const rect = chatgptRefBtn.getBoundingClientRect(); const x = touch.clientX, y = touch.clientY; if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) { const txt = (touchState.el.innerText || touchState.el.textContent || '').trim(); window.__lastDroppedPromptText = txt; window.__lastDraggedPromptElement = touchState.el; showChatGPTReferencePopup(); }
+      // Restore visibility of the original element
+      try { if (touchState.el) touchState.el.classList.remove('dragging'); } catch (_) {}
       if (touchState.ghost) { try { if (typeof touchState.ghost._posRuleIndex === 'number') _removePosRule(touchState.ghost._posRuleIndex); } catch(_) {} try { touchState.ghost.remove(); } catch(_) {} }
       touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target');
     }
     chatMessagesEl.addEventListener('touchstart', (e) => { const msg = e.target.closest && e.target.closest('.message.user'); if (!msg) return; if (longPressTimer) clearTimeout(longPressTimer); const t = e.touches[0]; longPressTimer = setTimeout(() => startTouchDrag(msg, t), 350); }, { passive: true });
   chatMessagesEl.addEventListener('touchmove', (e) => { if (!touchState.active || !touchState.ghost) return; const t = e.touches[0]; try { if (typeof touchState.ghost._posRuleIndex === 'number' && touchState.ghost._posRuleIndex >= 0) _updatePosRule(touchState.ghost._posRuleIndex, t.clientX, t.clientY); } catch (_) {} const rect = chatgptRefBtn.getBoundingClientRect(); const over = (t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom); chatgptRefBtn.classList.toggle('drop-target', over); }, { passive: true });
     chatMessagesEl.addEventListener('touchend', (e) => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } const t = e.changedTouches && e.changedTouches[0]; if (t) endTouchDrag(t); });
-    chatMessagesEl.addEventListener('touchcancel', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } if (touchState.ghost) touchState.ghost.remove(); touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target'); });
+    chatMessagesEl.addEventListener('touchcancel', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } try { if (touchState.el) touchState.el.classList.remove('dragging'); } catch(_) {} if (touchState.ghost) touchState.ghost.remove(); touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target'); });
   })();
 }
 
