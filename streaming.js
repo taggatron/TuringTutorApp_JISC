@@ -97,12 +97,21 @@ app.get('/register.html', cspStrict, (req, res) => {
 });
 
 // CSP for main app (index.html): allow local scripts/styles and jsdelivr for html2canvas while we migrate to local vendor copy
+// NOTE: html2canvas and some UI libraries create inline style attributes
+// at runtime (element.style.*). Browsers will block those when CSP's
+// style-src disallows inline styles. As a pragmatic short-term fix we
+// include 'unsafe-inline' for the app index page. This is intended as a
+// temporary mitigation while we progressively remove inline-style usage
+// and migrate dynamic sizing to CSS classes or CSSOM rules.
 const cspIndex = helmet.contentSecurityPolicy({
     useDefaults: true,
     directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
+        // Allow inline styles for now to support html2canvas and some UI
+        // behaviors. Consider removing this later and implementing a
+        // narrower solution (nonce/hash or dedicated capture endpoint).
+        styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
         connectSrc: ["'self'", 'ws:', 'wss:'],
         objectSrc: ["'none'"],
@@ -243,7 +252,9 @@ app.post('/save-session', async (req, res) => {
             try {
                 const existingMessage = await getMessageByContent(session_id, message.content);
                 if (!existingMessage) {
-                    const cleaned = serverSanitizeHtml(message.content || '');
+                    // Preserve raw HTML/markdown in stored messages per request.
+                    // Historical sanitization is applied only when sending history to the ChatGPT API.
+                    const cleaned = message.content || '';
                     // preserve optional structured metadata if provided by the client
                     const refs = (message.references && message.references.length) ? message.references : null;
                     const prompts = (message.prompts && message.prompts.length) ? message.prompts : null;
@@ -358,8 +369,10 @@ app.post('/update-message', async (req, res) => {
             if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
         }
 
-    // Sanitize content server-side to avoid storing dangerous HTML/attributes
-    const cleanedContent = serverSanitizeHtml(content ?? '');
+    // Do not perform global server-side sanitization when saving message edits.
+    // We keep the raw content in the DB; sanitization for model input happens
+    // at the point where conversation history is prepared for the ChatGPT API.
+    const cleanedContent = content ?? '';
     // Accept optional structured metadata (references, prompts) from client
     const refs = Array.isArray(req.body.references) ? req.body.references : null;
     const prompts = Array.isArray(req.body.prompts) ? req.body.prompts : null;
@@ -602,7 +615,13 @@ STYLE GUIDELINES:
             for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
                 const m = this.conversationHistory[i];
                 if (!m || !m.content) continue;
-                const cleaned = this.sanitizeContent(m.content, MAX_MESSAGE_CHARS);
+                // Apply server-side sanitization only when preparing historic
+                // messages to be sent to the ChatGPT API. This keeps the DB
+                // stored content raw while ensuring model inputs don't contain
+                // dangerous or very large embedded data.
+                const raw = m.content || '';
+                const preclean = serverSanitizeHtml(raw);
+                const cleaned = this.sanitizeContent(preclean, MAX_MESSAGE_CHARS);
                 const len = cleaned.length;
                 if (acc + len > MAX_HISTORY_CHARS) break;
                 sanitizedHistory.unshift({ role: m.role || 'user', content: cleaned });
@@ -647,12 +666,13 @@ STYLE GUIDELINES:
                 let messageId;
                 if (empty && empty.id) {
                     messageId = empty.id;
-                    await updateMessageContent(messageId, serverSanitizeHtml(botMessageContent));
+                    // Store raw assistant content; model-safe history is built later.
+                    await updateMessageContent(messageId, botMessageContent);
                     // Ensure scale level row exists for this session/message
                     try { await saveScaleLevel(this.session_id, this.username, scaleLevel); } catch (slErr) { /* non-fatal */ }
                     console.log(`Updated existing empty assistant message id=${messageId} for session ${this.session_id}`);
                 } else {
-                    messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', serverSanitizeHtml(botMessageContent), shouldCollapse, scaleLevel);
+                    messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', botMessageContent, shouldCollapse, scaleLevel);
                     console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
                 }
 
@@ -677,7 +697,8 @@ STYLE GUIDELINES:
             if (userMessage.content) {
             this.conversationHistory.push({ role: "user", content: userMessage.content });
             try {
-                const id = await saveMessageWithScaleLevel(this.session_id, this.username, 'user', serverSanitizeHtml(userMessage.content), 0, 1);
+                // Store raw user content; model-safe cleanup will be applied when building history
+                const id = await saveMessageWithScaleLevel(this.session_id, this.username, 'user', userMessage.content, 0, 1);
                 console.log(`User message saved to session ID: ${this.session_id} id=${id}`);
             } catch (err) {
                 console.error('Error saving user message:', err);
