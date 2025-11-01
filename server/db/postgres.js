@@ -126,8 +126,8 @@ async function saveMessage(session_id, username, role, content, collapsed = 0, r
   let sql = 'INSERT INTO message (session_id, username, role, content, collapsed';
   let vals = ' VALUES ($1, $2, $3, $4, $5)';
   let idx = 6;
-  if (references !== null) { sql += ', references'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
-  if (prompts !== null) { sql += ', prompts'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
+  if (references !== null) { sql += ', references_json'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
+  if (prompts !== null) { sql += ', prompts_json'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
   sql += ')' + vals + ' RETURNING id';
   const res = await query(sql, params);
   return res.rows[0].id;
@@ -138,8 +138,8 @@ async function saveMessageWithScaleLevel(session_id, username, role, content, co
   let sql = 'INSERT INTO message (session_id, username, role, content, collapsed, scale_level';
   let vals = ' VALUES ($1, $2, $3, $4, $5, $6)';
   let idx = 7;
-  if (references !== null) { sql += ', references'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
-  if (prompts !== null) { sql += ', prompts'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
+  if (references !== null) { sql += ', references_json'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
+  if (prompts !== null) { sql += ', prompts_json'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
   sql += ')' + vals + ' RETURNING id';
   const res = await query(sql, params);
   return res.rows[0].id;
@@ -147,7 +147,7 @@ async function saveMessageWithScaleLevel(session_id, username, role, content, co
 
 async function getMessages(session_id) {
   // Explicitly select common columns including metadata jsonb columns if present
-  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, created_at, updated_at, references, prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, created_at, updated_at, references_json AS references, prompts_json AS prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
   // Ensure references/prompts are parsed to native JS objects if stored as strings
   return res.rows.map(r => ({
     ...r,
@@ -220,8 +220,8 @@ async function updateMessageContent(message_id, content, references = null, prom
   const parts = ['content = $1'];
   const params = [content];
   let idx = 2;
-  if (references !== null) { parts.push(`references = $${idx++}`); params.push(JSON.stringify(references)); }
-  if (prompts !== null) { parts.push(`prompts = $${idx++}`); params.push(JSON.stringify(prompts)); }
+  if (references !== null) { parts.push(`references_json = $${idx++}`); params.push(JSON.stringify(references)); }
+  if (prompts !== null) { parts.push(`prompts_json = $${idx++}`); params.push(JSON.stringify(prompts)); }
   params.push(message_id);
   const sql = `UPDATE message SET ${parts.join(', ')} WHERE id = $${params.length}`;
   await query(sql, params);
