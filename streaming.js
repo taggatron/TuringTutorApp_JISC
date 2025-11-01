@@ -244,7 +244,10 @@ app.post('/save-session', async (req, res) => {
                 const existingMessage = await getMessageByContent(session_id, message.content);
                 if (!existingMessage) {
                     const cleaned = serverSanitizeHtml(message.content || '');
-                    const messageId = await saveMessage(session_id, username, message.role, cleaned, message.collapsed || 0);
+                    // preserve optional structured metadata if provided by the client
+                    const refs = (message.references && message.references.length) ? message.references : null;
+                    const prompts = (message.prompts && message.prompts.length) ? message.prompts : null;
+                    const messageId = await saveMessage(session_id, username, message.role, cleaned, message.collapsed || 0, refs, prompts);
                     console.log(`Message saved with ID: ${messageId}`);
 
                     const feedback = (feedbackData || []).find(fb => fb.messageId === message.id);
@@ -357,7 +360,10 @@ app.post('/update-message', async (req, res) => {
 
     // Sanitize content server-side to avoid storing dangerous HTML/attributes
     const cleanedContent = serverSanitizeHtml(content ?? '');
-    await updateMessageContent(targetMessageId, cleanedContent);
+    // Accept optional structured metadata (references, prompts) from client
+    const refs = Array.isArray(req.body.references) ? req.body.references : null;
+    const prompts = Array.isArray(req.body.prompts) ? req.body.prompts : null;
+    await updateMessageContent(targetMessageId, cleanedContent, refs, prompts);
         res.json({ success: true });
     } catch (err) {
         console.error('Could not update message:', err);

@@ -120,19 +120,40 @@ async function createTuringSession(user_id, username, session_name = 'Turing Mod
 }
 
 // Messages
-async function saveMessage(session_id, username, role, content, collapsed = 0) {
-  const res = await query('INSERT INTO message (session_id, username, role, content, collapsed) VALUES ($1, $2, $3, $4, $5) RETURNING id', [session_id, username, role, content, collapsed]);
+async function saveMessage(session_id, username, role, content, collapsed = 0, references = null, prompts = null) {
+  // keep backward compatible parameter order; references/prompts are optional jsonb
+  const params = [session_id, username, role, content, collapsed];
+  let sql = 'INSERT INTO message (session_id, username, role, content, collapsed';
+  let vals = ' VALUES ($1, $2, $3, $4, $5)';
+  let idx = 6;
+  if (references !== null) { sql += ', references'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
+  if (prompts !== null) { sql += ', prompts'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
+  sql += ')' + vals + ' RETURNING id';
+  const res = await query(sql, params);
   return res.rows[0].id;
 }
 
-async function saveMessageWithScaleLevel(session_id, username, role, content, collapsed = 0, scale_level = 1) {
-  const res = await query('INSERT INTO message (session_id, username, role, content, collapsed, scale_level) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id', [session_id, username, role, content, collapsed, scale_level]);
+async function saveMessageWithScaleLevel(session_id, username, role, content, collapsed = 0, scale_level = 1, references = null, prompts = null) {
+  const params = [session_id, username, role, content, collapsed, scale_level];
+  let sql = 'INSERT INTO message (session_id, username, role, content, collapsed, scale_level';
+  let vals = ' VALUES ($1, $2, $3, $4, $5, $6)';
+  let idx = 7;
+  if (references !== null) { sql += ', references'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
+  if (prompts !== null) { sql += ', prompts'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
+  sql += ')' + vals + ' RETURNING id';
+  const res = await query(sql, params);
   return res.rows[0].id;
 }
 
 async function getMessages(session_id) {
-  const res = await query('SELECT * FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
-  return res.rows;
+  // Explicitly select common columns including metadata jsonb columns if present
+  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, created_at, updated_at, references, prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+  // Ensure references/prompts are parsed to native JS objects if stored as strings
+  return res.rows.map(r => ({
+    ...r,
+    references: r.references === null || r.references === undefined ? [] : (typeof r.references === 'string' ? JSON.parse(r.references) : r.references),
+    prompts: r.prompts === null || r.prompts === undefined ? [] : (typeof r.prompts === 'string' ? JSON.parse(r.prompts) : r.prompts)
+  }));
 }
 
 // Feedback
@@ -190,8 +211,20 @@ async function getEmptyAssistantMessage(session_id) {
   return res.rows[0] || null;
 }
 
-async function updateMessageContent(message_id, content) {
-  await query('UPDATE message SET content = $1 WHERE id = $2', [content, message_id]);
+async function updateMessageContent(message_id, content, references = null, prompts = null) {
+  // Update content and optional metadata. Keep backwards compatibility for callers that only pass content.
+  if (references === null && prompts === null) {
+    await query('UPDATE message SET content = $1 WHERE id = $2', [content, message_id]);
+    return;
+  }
+  const parts = ['content = $1'];
+  const params = [content];
+  let idx = 2;
+  if (references !== null) { parts.push(`references = $${idx++}`); params.push(JSON.stringify(references)); }
+  if (prompts !== null) { parts.push(`prompts = $${idx++}`); params.push(JSON.stringify(prompts)); }
+  params.push(message_id);
+  const sql = `UPDATE message SET ${parts.join(', ')} WHERE id = $${params.length}`;
+  await query(sql, params);
 }
 
 async function updateMessageCollapsedState(message_id, collapsed) {

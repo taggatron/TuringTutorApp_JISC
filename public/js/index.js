@@ -443,12 +443,15 @@ function handleKeyPress(event) {
 
 function sendMessage() {
   const input = document.getElementById('message-input');
-  const message = input.value;
+  const message = input ? input.value : '';
   if (message.trim()) {
+    // mark streaming container as new
     botMessageDiv = null;
     // Clear input immediately to give responsive feedback to the user
-    input.value = '';
-    input.style.height = 'auto';
+    if (input) {
+      input.value = '';
+      input.style.height = 'auto';
+    }
     try {
       ws.send(JSON.stringify({ content: message, session_id }));
     } catch (err) {
@@ -457,7 +460,7 @@ function sendMessage() {
     const userMessage = document.createElement('div');
     userMessage.className = 'message user';
     const previousMapping = feedbackMapping[feedbackMapping.length - 1];
-    const hasFeedback = previousMapping && previousMapping.feedbackContainer.style.display !== 'none' && previousMapping.feedbackContainer.querySelector('.feedback-message').textContent.trim() !== '';
+    const hasFeedback = previousMapping && previousMapping.feedbackContainer && previousMapping.feedbackContainer.style.display !== 'none' && previousMapping.feedbackContainer.querySelector('.feedback-message') && previousMapping.feedbackContainer.querySelector('.feedback-message').textContent.trim() !== '';
     if (hasFeedback) setDynamicTopMargin(userMessage, previousMapping.feedbackContainer);
     userMessage.textContent = message;
     const oldPlaceholder = chatMessages.querySelector('.user.placeholder-message');
@@ -465,13 +468,14 @@ function sendMessage() {
     chatMessages.appendChild(userMessage);
     const feedbackContainer = createFeedbackContainer('');
     feedbackMapping.push({ messageElement: userMessage, feedbackContainer });
-  // input already cleared above
     chatMessages.scrollTop = chatMessages.scrollHeight;
     setTimeout(() => {
-      input.focus();
-      input.setSelectionRange(0, 0);
+      if (input) {
+        input.focus();
+        try { input.setSelectionRange(0, 0); } catch (e) {}
+      }
       const upArrowEvent = new KeyboardEvent('keydown', { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38, which: 38, bubbles: true });
-      input.dispatchEvent(upArrowEvent);
+      if (input) input.dispatchEvent(upArrowEvent);
     }, 0);
   }
 }
@@ -565,6 +569,11 @@ async function loadChatHistory(messages) {
       overlayDiv.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
       messageElement.appendChild(contentDiv);
       messageElement.appendChild(overlayDiv);
+      // If this message carries persisted references/prompts metadata, rehydrate a footer
+      try {
+        const footerNode = buildFooterFromMessage(msg);
+        if (footerNode) messageElement.appendChild(footerNode);
+      } catch (e) { /* best-effort */ }
       row.appendChild(messageElement);
       const fb = feedbackByMessageId.get(String(msg.message_id));
       if (fb) { const fbContainer = createFeedbackContainer(fb.feedbackContent); row.appendChild(fbContainer); }
@@ -652,104 +661,109 @@ async function loadSessionHistory(sessionId) {
   hideAndStoreFeedback(session_id);
   session_id = sessionId;
   resetScale();
-  highlightCurrentSession(sessionId);
-  const response = await fetch(`/messages?session_id=${sessionId}`);
-  const data = await response.json();
-  if (data.success) {
-    chatMessages.innerHTML = '';
-    const isTuring = Number(data.is_turing) === 1;
-    window.__isTuringFlag = !!isTuring;
-    const messagesWithFeedback = new Set();
-    const feedbackByMessageId = new Map();
-    if (!isTuring && data.feedbackData && data.feedbackData.length > 0) {
-      data.feedbackData.forEach(feedback => { messagesWithFeedback.add(String(feedback.messageId)); feedbackByMessageId.set(String(feedback.messageId), feedback); });
-    }
-    let prevMsg = null;
-    let prevAssistantHadFeedback = false;
-    let prevAssistantFeedbackMargin = 0;
-    const msgs = Array.isArray(data.messages) ? data.messages.slice() : [];
-    if (isTuring) {
-      const hasAssistant = msgs.some(m => m.role === 'assistant');
-      if (!hasAssistant) msgs.push({ role: 'assistant', content: '', message_id: 'turing-seed', collapsed: 0, scale_level: 1 });
-    }
-    msgs.forEach((msg, idx) => {
-      if (msg.role === 'user') {
-        const userMessageDiv = document.createElement('div');
-        userMessageDiv.className = 'message user';
-        userMessageDiv.textContent = msg.content; userMessageDiv.dataset.messageId = msg.message_id;
-        const fb = feedbackByMessageId.get(String(msg.message_id));
-        let marginApplied = false;
-        if (fb && typeof fb.feedbackMargin === 'number' && !isNaN(fb.feedbackMargin)) {
-          userMessageDiv.style.marginTop = fb.feedbackMargin + 'px'; marginApplied = true;
-        }
-        if (!marginApplied && prevAssistantHadFeedback && typeof prevAssistantFeedbackMargin === 'number' && !isNaN(prevAssistantFeedbackMargin)) {
-          userMessageDiv.style.marginTop = prevAssistantFeedbackMargin + 'px';
-        }
-        chatMessages.appendChild(userMessageDiv);
-        setTimeout(() => { feedbackMapping.push({ messageElement: userMessageDiv, feedbackContainer: createFeedbackContainer('Feedback for session') }); }, 0);
-      } else if (msg.role === 'assistant') {
-        const assistantMessageDiv = document.createElement('div');
-        assistantMessageDiv.className = 'message assistant with-feedback';
-        const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
-        if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
-        assistantMessageDiv.dataset.messageId = msg.message_id;
-        const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
-        if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
-        const __isHtml = /<\w+[\s\S]*?>[\s\S]*<\/\w+>/i.test(msg.content || '');
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'message-content';
-        try {
-          if (__isHtml) contentDiv.innerHTML = sanitizeHtml(msg.content || '');
-          else contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
-        } catch (e) {
-          const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
-          contentDiv.innerHTML = sanitizeHtml(safe);
-        }
-        const overlay = document.createElement('div');
-        overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
-        const overlayText = document.createElement('span');
-        overlayText.textContent = 'Copying or directly using this response breaches academic integrity guidelines';
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'close-overlay-btn';
-        closeBtn.type = 'button';
-        closeBtn.textContent = '×';
-        overlay.appendChild(overlayText);
-        overlay.appendChild(closeBtn);
-        assistantMessageDiv.appendChild(contentDiv);
-        assistantMessageDiv.appendChild(overlay);
-        if (closeBtn && overlay && contentDiv) {
-          closeBtn.addEventListener('click', function(e) {
-            e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto';
-          });
-          overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto'; });
-        }
-        chatMessages.appendChild(assistantMessageDiv);
+    highlightCurrentSession(sessionId); 
+    const response = await fetch(`/messages?session_id=${sessionId}`);
+    const data = await response.json();
+    if (data.success) {
+      chatMessages.innerHTML = '';
+      const isTuring = Number(data.is_turing) === 1;
+      window.__isTuringFlag = !!isTuring;
+      const messagesWithFeedback = new Set();
+      const feedbackByMessageId = new Map();
+      if (!isTuring && data.feedbackData && data.feedbackData.length > 0) {
+        data.feedbackData.forEach(feedback => { messagesWithFeedback.add(String(feedback.messageId)); feedbackByMessageId.set(String(feedback.messageId), feedback); });
       }
-      if (!isTuring && msg.role === 'assistant' && feedbackByMessageId.has(String(msg.message_id))) {
-        prevAssistantHadFeedback = true; prevAssistantFeedbackMargin = feedbackByMessageId.get(String(msg.message_id)).feedbackMargin;
-      } else { prevAssistantHadFeedback = false; prevAssistantFeedbackMargin = 0; }
-      prevMsg = msg;
-    });
-    if (isTuring) {
-      const firstAssistant = document.querySelector('#chat-messages .message.assistant');
-      if (firstAssistant) setTimeout(() => { if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click(); }, 10);
+      let prevMsg = null;
+      let prevAssistantHadFeedback = false;
+      let prevAssistantFeedbackMargin = 0;
+      const msgs = Array.isArray(data.messages) ? data.messages.slice() : [];
+      if (isTuring) {
+        const hasAssistant = msgs.some(m => m.role === 'assistant');
+        if (!hasAssistant) msgs.push({ role: 'assistant', content: '', message_id: 'turing-seed', collapsed: 0, scale_level: 1 });
+      }
+      msgs.forEach((msg, idx) => {
+        if (msg.role === 'user') {
+          const userMessageDiv = document.createElement('div');
+          userMessageDiv.className = 'message user';
+          userMessageDiv.textContent = msg.content; userMessageDiv.dataset.messageId = msg.message_id;
+          const fb = feedbackByMessageId.get(String(msg.message_id));
+          let marginApplied = false;
+          if (fb && typeof fb.feedbackMargin === 'number' && !isNaN(fb.feedbackMargin)) {
+            userMessageDiv.style.marginTop = fb.feedbackMargin + 'px'; marginApplied = true;
+          }
+          if (!marginApplied && prevAssistantHadFeedback && typeof prevAssistantFeedbackMargin === 'number' && !isNaN(prevAssistantFeedbackMargin)) {
+            userMessageDiv.style.marginTop = prevAssistantFeedbackMargin + 'px';
+          }
+          chatMessages.appendChild(userMessageDiv);
+          setTimeout(() => { feedbackMapping.push({ messageElement: userMessageDiv, feedbackContainer: createFeedbackContainer('Feedback for session') }); }, 0);
+        } else if (msg.role === 'assistant') {
+          const assistantMessageDiv = document.createElement('div');
+          assistantMessageDiv.className = 'message assistant with-feedback';
+          const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
+          if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
+          assistantMessageDiv.dataset.messageId = msg.message_id;
+          const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
+          if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
+          const __isHtml = /<\w+[\s\S]*?>[\s\S]*<\/\w+>/i.test(msg.content || '');
+          const contentDiv = document.createElement('div');
+          contentDiv.className = 'message-content';
+          try {
+            if (__isHtml) contentDiv.innerHTML = sanitizeHtml(msg.content || '');
+            else contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
+          } catch (e) {
+            const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
+            contentDiv.innerHTML = sanitizeHtml(safe);
+          }
+          const overlay = document.createElement('div');
+          overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
+          const overlayText = document.createElement('span');
+          overlayText.textContent = 'Copying or directly using this response breaches academic integrity guidelines';
+          const closeBtn = document.createElement('button');
+          closeBtn.className = 'close-overlay-btn';
+          closeBtn.type = 'button';
+          closeBtn.textContent = '×';
+          overlay.appendChild(overlayText);
+          overlay.appendChild(closeBtn);
+          assistantMessageDiv.appendChild(contentDiv);
+          assistantMessageDiv.appendChild(overlay);
+          // Rehydrate persisted references/prompts if present
+          try {
+            const footerNode = buildFooterFromMessage(msg);
+            if (footerNode) assistantMessageDiv.appendChild(footerNode);
+          } catch (e) { /* ignore */ }
+          if (closeBtn && overlay && contentDiv) {
+            closeBtn.addEventListener('click', function(e) {
+              e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto';
+            });
+            overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.style.opacity = '1'; contentDiv.style.pointerEvents = 'auto'; });
+          }
+          chatMessages.appendChild(assistantMessageDiv);
+        }
+        if (!isTuring && msg.role === 'assistant' && feedbackByMessageId.has(String(msg.message_id))) {
+          prevAssistantHadFeedback = true; prevAssistantFeedbackMargin = feedbackByMessageId.get(String(msg.message_id)).feedbackMargin;
+        } else { prevAssistantHadFeedback = false; prevAssistantFeedbackMargin = 0; }
+        prevMsg = msg;
+      });
+      if (isTuring) {
+        const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+        if (firstAssistant) setTimeout(() => { if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click(); }, 10);
+      }
+      const userMessages = chatMessages.querySelectorAll('.message.user');
+      const lastUserMessage = userMessages[userMessages.length - 1];
+      let lastUserFeedback = null; let lastUserScaleLevel = null;
+      const lastMsg = data.messages[data.messages.length - 1];
+      if (lastMsg && lastMsg.role === 'user') {
+        if (data.feedbackData && data.feedbackData.length > 0) lastUserFeedback = data.feedbackData.find(fb => String(fb.messageId) === String(lastMsg.message_id));
+        lastUserScaleLevel = lastMsg.scale_level || 1;
+      }
+      if (lastUserMessage && lastUserFeedback && lastUserScaleLevel >= 3) lastUserMessage.style.marginBottom = '80px'; else if (lastUserMessage) lastUserMessage.style.marginBottom = '';
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      window.__lastFeedbackData = isTuring ? [] : (data.feedbackData || []);
+      if (!isTuring && window.__lastFeedbackData.length) showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
+      updateScale(data.scale_levels);
+    } else {
+      alert('Failed to load session history.');
     }
-    const userMessages = chatMessages.querySelectorAll('.message.user');
-    const lastUserMessage = userMessages[userMessages.length - 1];
-    let lastUserFeedback = null; let lastUserScaleLevel = null;
-    const lastMsg = data.messages[data.messages.length - 1];
-    if (lastMsg && lastMsg.role === 'user') {
-      if (data.feedbackData && data.feedbackData.length > 0) lastUserFeedback = data.feedbackData.find(fb => String(fb.messageId) === String(lastMsg.message_id));
-      lastUserScaleLevel = lastMsg.scale_level || 1;
-    }
-    if (lastUserMessage && lastUserFeedback && lastUserScaleLevel >= 3) lastUserMessage.style.marginBottom = '80px'; else if (lastUserMessage) lastUserMessage.style.marginBottom = '';
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-    window.__lastFeedbackData = isTuring ? [] : (data.feedbackData || []);
-    if (!isTuring && window.__lastFeedbackData.length) showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
-    updateScale(data.scale_levels);
-  } else {
-    alert('Failed to load session history.');
-  }
 }
 
 async function deleteSession(sessionId, parentElementId) {
@@ -1217,6 +1231,63 @@ async function ensureAssistantEditor() {
   return el;
 }
 
+// Extract references/prompts metadata from an editable assistant node
+function extractFooterFromEditable(editable) {
+  if (!editable) return { references: [], prompts: [] };
+  const footer = editable.querySelector('[data-section="turing-footer"]');
+  const refs = [];
+  const prompts = [];
+  if (!footer) return { references: refs, prompts };
+  const refsBody = footer.querySelector('[data-section="references-body"]');
+  if (refsBody) {
+    refsBody.querySelectorAll('.reference-item, p').forEach(p => {
+      const txt = (p.textContent || '').trim(); if (txt) refs.push(txt);
+    });
+  }
+  const promptsBody = footer.querySelector('[data-section="prompts-body"]');
+  if (promptsBody) {
+    promptsBody.querySelectorAll('.reference-image-wrapper, p, .reference-item').forEach(n => {
+      if (n.classList && n.classList.contains('reference-image-wrapper')) {
+        const img = n.querySelector('img'); if (img && img.src) prompts.push({ type: 'image', src: img.src, alt: img.alt || '' });
+      } else {
+        const txt = (n.textContent || '').trim(); if (txt) prompts.push(txt);
+      }
+    });
+  }
+  return { references: refs, prompts };
+}
+
+function buildFooterFromMessage(msg) {
+  if (!msg) return null;
+  const hasRefs = Array.isArray(msg.references) && msg.references.length > 0;
+  const hasPrompts = Array.isArray(msg.prompts) && msg.prompts.length > 0;
+  if (!hasRefs && !hasPrompts) return null;
+  const footer = document.createElement('div');
+  footer.setAttribute('data-section', 'turing-footer');
+  footer.className = 'turing-footer';
+  if (hasRefs) {
+    const refsSection = document.createElement('div'); refsSection.setAttribute('data-section', 'references-section'); refsSection.className = 'turing-section';
+    const headingP = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = 'References'; headingP.appendChild(strong); refsSection.appendChild(headingP);
+    const body = document.createElement('div'); body.setAttribute('data-section', 'references-body');
+    msg.references.forEach(r => { const p = document.createElement('p'); p.className = 'reference-item'; p.textContent = (typeof r === 'string') ? r : (r.text || ''); body.appendChild(p); });
+    refsSection.appendChild(body); footer.appendChild(refsSection);
+  }
+  if (hasPrompts) {
+    const promptsSection = document.createElement('div'); promptsSection.setAttribute('data-section', 'prompts-section'); promptsSection.className = 'turing-section';
+    const headingP2 = document.createElement('p'); const strong2 = document.createElement('strong'); strong2.textContent = 'Prompts'; headingP2.appendChild(strong2); promptsSection.appendChild(headingP2);
+    const body2 = document.createElement('div'); body2.setAttribute('data-section', 'prompts-body');
+    msg.prompts.forEach(p => {
+      if (p && typeof p === 'object' && p.type === 'image' && p.src) {
+        const wrapper = document.createElement('div'); wrapper.className = 'reference-image-wrapper'; const img = document.createElement('img'); img.className = 'reference-image'; img.src = p.src; img.alt = p.alt || ''; wrapper.appendChild(img); body2.appendChild(wrapper);
+      } else {
+        const pp = document.createElement('p'); pp.className = 'prompt-item'; pp.textContent = (typeof p === 'string') ? p : (p.text || ''); body2.appendChild(pp);
+      }
+    });
+    promptsSection.appendChild(body2); footer.appendChild(promptsSection);
+  }
+  return footer;
+}
+
 function buildChatGPTReferenceTextFromPrompt(promptText) {
   const now = new Date(); const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']; const formattedDate = `${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`; const safePrompt = (promptText || '').trim().replace(/\s+/g,' ').slice(0,2000); const promptLine = safePrompt ? ` Response generated to the prompt: "${safePrompt}".` : ''; return `OpenAI (2025) ChatGPT [AI language model].${promptLine} Available at: https://chat.openai.com/ (Accessed: ${formattedDate}).`;
 }
@@ -1233,19 +1304,28 @@ async function turingInsertReferenceAndPromptImage(editableEl, promptText, promp
   const footer = ensureFooter(editableEl); const refsSection = ensureSection(footer, 'references', 'References'); const promptsSection = ensureSection(footer, 'prompts', 'Prompts'); const refsBody = getBody(refsSection, 'references'); const promptsBody = getBody(promptsSection, 'prompts');
   moveOldSectionContentToFooter(editableEl, 'references', ['References','Citations','Bibliography'], refsBody);
   moveOldSectionContentToFooter(editableEl, 'prompts', ['Prompts'], promptsBody);
-  const refText = buildChatGPTReferenceTextFromPrompt(promptText); const refP = document.createElement('p'); refP.className = 'reference-item'; refP.textContent = refText; refsBody.appendChild(refP);
+  const refText = buildChatGPTReferenceTextFromPrompt(promptText);
+  // avoid duplicate identical references
+  const existingRef = Array.from(refsBody.querySelectorAll('.reference-item')).find(n => (n.textContent || '').trim() === refText.trim());
+  if (!existingRef) {
+    const refP = document.createElement('p'); refP.className = 'reference-item'; refP.textContent = refText; refsBody.appendChild(refP);
+  } else {
+    // refresh existing reference text (updates access date etc)
+    existingRef.textContent = refText;
+  }
   const pair = turingFindPairFromPromptEl(promptEl) || turingFindDefaultPair(); if (!pair) return;
-  const container = turingBuildCaptureContainer(pair); container.style.position = 'fixed'; container.style.left = '-10000px'; container.style.top = '0'; document.body.appendChild(container);
+  const container = turingBuildCaptureContainer(pair);
+  // keep capture container in the viewport but hidden to avoid html2canvas using an iframe
+  container.classList.add('turing-capture-hidden');
+  document.body.appendChild(container);
   try {
     await new Promise(r => setTimeout(r, 50));
     const canvas = await window.html2canvas(container, { backgroundColor: '#ffffff', scale: window.devicePixelRatio || 2 });
     const dataUrl = canvas.toDataURL('image/png');
-    const img = document.createElement('img');
-    img.src = dataUrl;
-    img.alt = 'Prompt and AI excerpt';
-    img.style.maxWidth = '100%';
-    img.style.border = '1px solid #e5e7eb';
-    img.style.borderRadius = '8px';
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  img.alt = 'Prompt and AI excerpt';
+  img.classList.add('reference-image');
     // wrap the image in a constrained wrapper so it cannot push out the layout
     const wrapper = document.createElement('div');
     wrapper.className = 'reference-image-wrapper';
@@ -1259,7 +1339,25 @@ async function turingInsertReferenceAndPromptImage(editableEl, promptText, promp
 
 function turingFindPairFromPromptEl(promptEl) { if (!promptEl) return null; let ai = promptEl.nextElementSibling; while (ai && !(ai.classList && ai.classList.contains('assistant'))) ai = ai.nextElementSibling; if (!ai) ai = document.querySelector('#chat-messages .message.assistant:last-of-type'); return ai ? { promptEl, assistantEl: ai } : null; }
 function turingFindDefaultPair() { const ai = document.querySelector('#chat-messages .message.assistant:last-of-type'); if (!ai) return null; let user = ai.previousElementSibling; while (user && !(user.classList && user.classList.contains('user'))) user = user.previousElementSibling; return user ? { promptEl: user, assistantEl: ai } : null; }
-function turingBuildCaptureContainer(pair) { const wrap = document.createElement('div'); wrap.className = 'turing-capture-container'; Object.assign(wrap.style, { maxWidth: '760px', padding: '16px', background: '#ffffff', color: '#111827', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 6px 18px rgba(0,0,0,0.08)' }); const h = document.createElement('div'); h.textContent = 'Chat excerpt'; h.style.fontWeight = '600'; h.style.marginBottom = '12px'; wrap.appendChild(h); const p = pair.promptEl.cloneNode(true); const a = pair.assistantEl.cloneNode(true); p.style.background = '#007bff'; p.style.color = '#ffffff'; p.style.textAlign = 'right'; p.style.marginLeft = 'auto'; a.style.background = '#f1f1f1'; a.style.color = '#000000'; a.style.width = '100%'; p.style.borderRadius = '15px'; a.style.borderRadius = '15px'; p.style.padding = '10px 12px'; a.style.padding = '10px 12px'; p.style.marginBottom = '8px'; p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove()); a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove()); wrap.appendChild(p); wrap.appendChild(a); return wrap; }
+function turingBuildCaptureContainer(pair) {
+  const wrap = document.createElement('div');
+  wrap.className = 'turing-capture-container';
+  const h = document.createElement('div');
+  h.className = 'turing-capture-heading';
+  h.textContent = 'Chat excerpt';
+  const p = pair.promptEl.cloneNode(true);
+  const a = pair.assistantEl.cloneNode(true);
+  // apply semantic classes rather than inline styles so CSS (not inline styles) controls rendering
+  p.classList.add('turing-prompt');
+  a.classList.add('turing-assistant');
+  // remove editing UI elements that shouldn't appear in the capture
+  p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove());
+  a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove());
+  wrap.appendChild(h);
+  wrap.appendChild(p);
+  wrap.appendChild(a);
+  return wrap;
+}
 
 
 function setupReferenceImageActions() {
@@ -1268,10 +1366,45 @@ function setupReferenceImageActions() {
   if (!copyBtn || !dlBtn) return;
   function findPairFromPromptEl(promptEl) { if (!promptEl) return null; let ai = promptEl.nextElementSibling; while (ai && !(ai.classList && ai.classList.contains('assistant'))) ai = ai.nextElementSibling; if (!ai) ai = document.querySelector('#chat-messages .message.assistant:last-of-type'); return ai ? { promptEl, assistantEl: ai } : null; }
   function findDefaultPair() { const ai = document.querySelector('#chat-messages .message.assistant:last-of-type'); if (!ai) return null; let user = ai.previousElementSibling; while (user && !(user.classList && user.classList.contains('user'))) user = user.previousElementSibling; return user ? { promptEl: user, assistantEl: ai } : null; }
-  function buildCaptureContainer(pair) { const wrap = document.createElement('div'); wrap.className = 'turing-capture-container'; Object.assign(wrap.style, { maxWidth: '760px', padding: '16px', background: '#ffffff', color: '#111827', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 6px 18px rgba(0,0,0,0.08)' }); const h = document.createElement('div'); h.textContent = 'Chat excerpt'; h.style.fontWeight = '600'; h.style.marginBottom = '12px'; wrap.appendChild(h); const p = pair.promptEl.cloneNode(true); const a = pair.assistantEl.cloneNode(true); p.style.background = '#007bff'; p.style.color = '#ffffff'; p.style.textAlign = 'right'; p.style.marginLeft = 'auto'; a.style.background = '#f1f1f1'; a.style.color = '#000000'; a.style.width = '100%'; p.style.borderRadius = '15px'; a.style.borderRadius = '15px'; p.style.padding = '10px 12px'; a.style.padding = '10px 12px'; p.style.marginBottom = '8px'; p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove()); a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove()); wrap.appendChild(p); wrap.appendChild(a); return wrap; }
+  function buildCaptureContainer(pair) {
+    const wrap = document.createElement('div');
+    wrap.className = 'turing-capture-container';
+    const h = document.createElement('div');
+    h.className = 'turing-capture-heading';
+    h.textContent = 'Chat excerpt';
+    const p = pair.promptEl.cloneNode(true);
+    const a = pair.assistantEl.cloneNode(true);
+    p.classList.add('turing-prompt');
+    a.classList.add('turing-assistant');
+    p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove());
+    a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove());
+    wrap.appendChild(h);
+    wrap.appendChild(p);
+    wrap.appendChild(a);
+    return wrap;
+  }
   async function renderImageCanvas(container) { if (!window.html2canvas) throw new Error('html2canvas not loaded'); await new Promise(r => setTimeout(r, 50)); return await window.html2canvas(container, { backgroundColor: '#ffffff', scale: window.devicePixelRatio || 2 }); }
-  async function copyImageFlow() { try { const pair = findPairFromPromptEl(window.__lastDraggedPromptElement) || findDefaultPair(); if (!pair) return alert('Could not find a user prompt and assistant reply to export.'); const cont = buildCaptureContainer(pair); cont.style.position = 'fixed'; cont.style.left = '-10000px'; cont.style.top = '0'; document.body.appendChild(cont); try { const canvas = await renderImageCanvas(cont); const blob = await new Promise(res => canvas.toBlob(res, 'image/png')); const item = new ClipboardItem({ 'image/png': blob }); await navigator.clipboard.write([item]); } finally { cont.remove(); } } catch (e) { console.error('Copy image failed, falling back to download:', e); await downloadImageFlow(); } }
-  async function downloadImageFlow() { try { const pair = findPairFromPromptEl(window.__lastDraggedPromptElement) || findDefaultPair(); if (!pair) return alert('Could not find a user prompt and assistant reply to export.'); const cont = buildCaptureContainer(pair); cont.style.position = 'fixed'; cont.style.left = '-10000px'; cont.style.top = '0'; document.body.appendChild(cont); try { const canvas = await renderImageCanvas(cont); const a = document.createElement('a'); a.download = 'chat-snippet.png'; a.href = canvas.toDataURL('image/png'); document.body.appendChild(a); a.click(); a.remove(); } finally { cont.remove(); } } catch (e) { console.error('Download image failed:', e); alert('Unable to create image. Please try again.'); } }
+  async function copyImageFlow() {
+    try {
+      const pair = findPairFromPromptEl(window.__lastDraggedPromptElement) || findDefaultPair();
+      if (!pair) return alert('Could not find a user prompt and assistant reply to export.');
+  const cont = buildCaptureContainer(pair);
+  // keep container in viewport but invisible to avoid html2canvas iframe/document.write
+  cont.classList.add('turing-capture-hidden');
+  document.body.appendChild(cont);
+      try { const canvas = await renderImageCanvas(cont); const blob = await new Promise(res => canvas.toBlob(res, 'image/png')); const item = new ClipboardItem({ 'image/png': blob }); await navigator.clipboard.write([item]); } finally { cont.remove(); }
+    } catch (e) { console.error('Copy image failed, falling back to download:', e); await downloadImageFlow(); }
+  }
+  async function downloadImageFlow() {
+    try {
+      const pair = findPairFromPromptEl(window.__lastDraggedPromptElement) || findDefaultPair();
+      if (!pair) return alert('Could not find a user prompt and assistant reply to export.');
+  const cont = buildCaptureContainer(pair);
+  cont.classList.add('turing-capture-hidden');
+  document.body.appendChild(cont);
+      try { const canvas = await renderImageCanvas(cont); const a = document.createElement('a'); a.download = 'chat-snippet.png'; a.href = canvas.toDataURL('image/png'); document.body.appendChild(a); a.click(); a.remove(); } finally { cont.remove(); }
+    } catch (e) { console.error('Download image failed:', e); alert('Unable to create image. Please try again.'); }
+  }
   copyBtn.onclick = copyImageFlow; dlBtn.onclick = downloadImageFlow;
 }
 
@@ -1375,6 +1508,12 @@ function enterAssistantEditMode(targetAssistant) {
       const messageId = targetAssistant.dataset.messageId;
       // Always include session_id for server-side fallback; only send message_id when it's a valid integer
       const payload = { content: cleaned, session_id };
+      // extract any references/prompts the user added in the editor and include them with the save
+      try {
+        const meta = extractFooterFromEditable(editable);
+        if (meta && Array.isArray(meta.references) && meta.references.length) payload.references = meta.references;
+        if (meta && Array.isArray(meta.prompts) && meta.prompts.length) payload.prompts = meta.prompts;
+      } catch (e) { console.warn('Could not extract editor metadata:', e); }
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
       try {

@@ -398,6 +398,52 @@ body {
 .group-header .delete-icon {
     padding: 0 8px;
     margin-left: 10px;
+
+/* Styles for Turing capture/export containers (kept in external CSS to satisfy CSP 'style-src') */
+.turing-capture-container {
+    max-width: 760px;
+    padding: 16px;
+    background: #ffffff;
+    color: #111827;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    box-sizing: border-box;
+}
+.turing-capture-heading {
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+.turing-prompt {
+    background: #007bff !important;
+    color: #ffffff !important;
+    text-align: right;
+    margin-left: auto;
+    border-radius: 15px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: block;
+}
+.turing-assistant {
+    background: #f1f1f1 !important;
+    color: #000000 !important;
+    width: 100%;
+    border-radius: 15px;
+    padding: 10px 12px;
+    display: block;
+}
+.turing-capture-hidden {
+    position: absolute;
+    left: 0;
+    top: 0;
+    /* keep the element renderable by the browser but visually transparent
+       so html2canvas can compute layout without falling back to iframe/document.write */
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+}
+.reference-image-wrapper img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; display: block; }
     cursor: pointer;
 }
 
