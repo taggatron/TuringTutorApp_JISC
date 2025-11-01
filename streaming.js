@@ -243,7 +243,8 @@ app.post('/save-session', async (req, res) => {
             try {
                 const existingMessage = await getMessageByContent(session_id, message.content);
                 if (!existingMessage) {
-                    const messageId = await saveMessage(session_id, username, message.role, message.content, message.collapsed || 0);
+                    const cleaned = serverSanitizeHtml(message.content || '');
+                    const messageId = await saveMessage(session_id, username, message.role, cleaned, message.collapsed || 0);
                     console.log(`Message saved with ID: ${messageId}`);
 
                     const feedback = (feedbackData || []).find(fb => fb.messageId === message.id);
@@ -354,7 +355,9 @@ app.post('/update-message', async (req, res) => {
             if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
         }
 
-        await updateMessageContent(targetMessageId, content ?? '');
+    // Sanitize content server-side to avoid storing dangerous HTML/attributes
+    const cleanedContent = serverSanitizeHtml(content ?? '');
+    await updateMessageContent(targetMessageId, cleanedContent);
         res.json({ success: true });
     } catch (err) {
         console.error('Could not update message:', err);
@@ -542,6 +545,28 @@ class ChatGPTProcessor {
         this.username = username;
     }
 
+    // Sanitize content before sending to the model: remove data: URIs, strip HTML/JSX tags,
+    // remove Markdown image/link syntaxes that embed data, collapse whitespace and truncate.
+    sanitizeContent(raw, maxLen = 4000) {
+        if (!raw) return '';
+        let s = String(raw);
+        // Remove data: URIs (images/audio/etc.) which are very large and unnecessary for context
+        s = s.replace(/data:[^\s"'>]+;base64,[A-Za-z0-9+/=]+/g, ' [removed embedded data] ');
+        // Remove common Markdown image syntax with embedded data URIs: ![alt](data:...)
+        s = s.replace(/!\[[^\]]*\]\([^\)]*data:[^\)]+\)/g, ' [removed image] ');
+        // Strip HTML tags but keep their inner text
+        s = s.replace(/<\/?[^>]+>/g, ' ');
+        // Remove any remaining HTML entities that look suspicious (optional)
+        s = s.replace(/&nbsp;|&lt;|&gt;|&amp;|&quot;|&#\d+;/g, ' ');
+        // Collapse whitespace
+        s = s.replace(/\s+/g, ' ').trim();
+        // Truncate to maxLen characters to avoid sending huge messages
+        if (s.length > maxLen) {
+            s = s.slice(0, maxLen) + ' [truncated]';
+        }
+        return s;
+    }
+
     async processUserMessage(userMessage) {
         try {
             // Step 1: Process the user message with style guidelines + current conversation
@@ -559,14 +584,33 @@ STYLE GUIDELINES:
 
             const userContent = (userMessage && typeof userMessage === 'object') ? (userMessage.content || '') : String(userMessage || '');
 
+            // Prevent very large embedded blobs (base64 images, HTML) from being sent to the model.
+            const MAX_MESSAGE_CHARS = 4000; // per-message cap
+            const MAX_HISTORY_CHARS = 15000; // total chars of included history (approx)
+
+            const cleanUserContent = this.sanitizeContent(userContent, MAX_MESSAGE_CHARS);
+
+            // Build a trimmed, sanitized conversation history (keep most recent messages until MAX_HISTORY_CHARS)
+            const sanitizedHistory = [];
+            let acc = 0;
+            for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
+                const m = this.conversationHistory[i];
+                if (!m || !m.content) continue;
+                const cleaned = this.sanitizeContent(m.content, MAX_MESSAGE_CHARS);
+                const len = cleaned.length;
+                if (acc + len > MAX_HISTORY_CHARS) break;
+                sanitizedHistory.unshift({ role: m.role || 'user', content: cleaned });
+                acc += len;
+            }
+
             const stream = await this.openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
                     { role: 'system', content: styleSystemPrompt },
-                    // retain previous conversation context
-                    ...this.conversationHistory.filter(msg => msg.content),
-                    // add the user's latest message into the streaming request
-                    { role: 'user', content: userContent }
+                    // retain previous sanitized conversation context (most recent first)
+                    ...sanitizedHistory,
+                    // add the user's latest cleaned message into the streaming request
+                    { role: 'user', content: cleanUserContent }
                 ],
                 stream: true,
             });
@@ -597,12 +641,12 @@ STYLE GUIDELINES:
                 let messageId;
                 if (empty && empty.id) {
                     messageId = empty.id;
-                    await updateMessageContent(messageId, botMessageContent);
+                    await updateMessageContent(messageId, serverSanitizeHtml(botMessageContent));
                     // Ensure scale level row exists for this session/message
                     try { await saveScaleLevel(this.session_id, this.username, scaleLevel); } catch (slErr) { /* non-fatal */ }
                     console.log(`Updated existing empty assistant message id=${messageId} for session ${this.session_id}`);
                 } else {
-                    messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', botMessageContent, shouldCollapse, scaleLevel);
+                    messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', serverSanitizeHtml(botMessageContent), shouldCollapse, scaleLevel);
                     console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
                 }
 
@@ -627,7 +671,7 @@ STYLE GUIDELINES:
             if (userMessage.content) {
             this.conversationHistory.push({ role: "user", content: userMessage.content });
             try {
-                const id = await saveMessageWithScaleLevel(this.session_id, this.username, 'user', userMessage.content, 0, 1);
+                const id = await saveMessageWithScaleLevel(this.session_id, this.username, 'user', serverSanitizeHtml(userMessage.content), 0, 1);
                 console.log(`User message saved to session ID: ${this.session_id} id=${id}`);
             } catch (err) {
                 console.error('Error saving user message:', err);
@@ -646,6 +690,8 @@ STYLE GUIDELINES:
         const userMessageContent = recentUserMessage ? recentUserMessage.content : "";
 
         // Make the API call to OpenAI
+        const MAX_MESSAGE_CHARS = 2000;
+        const cleanedUserMessage = this.sanitizeContent(userMessageContent, MAX_MESSAGE_CHARS);
         const assessmentResponse = await this.openai.chat.completions.create({
             model: "gpt-4o", // Changed model to gpt-4o
             messages: [
@@ -659,7 +705,7 @@ STYLE GUIDELINES:
 5. Full AI: AI is almost fully responsible for the task or process with little to no human intervention. For example: create me a essay about ... or create me a paragraph about... \n
 Please return only the number and category (e.g., '5. Full AI') that the user's messages correspond to.`
                 },
-                { role: 'user', content: userMessageContent }
+                { role: 'user', content: cleanedUserMessage }
             ]
         });
 
@@ -709,12 +755,14 @@ STYLE GUIDELINES:
 • Research: AI is used as a research tool to find credible resources on a topic.
 Word this as a direct request (not a question). For example: 'Please generate ideas for an essay about (insert topic here)'.`;
 
+            const MAX_MESSAGE_CHARS = 2000;
+            const cleanedUser = this.sanitizeContent(userMessage, MAX_MESSAGE_CHARS);
             const response = await this.openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
                     { role: 'system', content: styleSystemPrompt },
                     { role: 'system', content: feedbackSystemPrompt },
-                    { role: 'user', content: userMessage }
+                    { role: 'user', content: cleanedUser }
                 ]
             });
 
@@ -870,4 +918,23 @@ async function getSessionIdForMessage(message_id) {
         throw new Error('message_id must be an integer');
     }
     return await getSessionByMessageId(id);
+}
+
+// Server-side HTML sanitizer to remove dangerous tags/attributes before saving to DB
+function serverSanitizeHtml(raw) {
+    if (!raw) return '';
+    let s = String(raw);
+    // Remove script/style/iframe/object/embed/form/input/button/svg tags and their contents
+    s = s.replace(/<\s*(script|style|iframe|object|embed|form|input|button|svg)[\s\S]*?<\s*\/\s*\1\s*>/gi, ' ');
+    // Remove any standalone dangerous tags
+    s = s.replace(/<\s*(script|style|iframe|object|embed|form|input|button|svg)[^>]*\/?\s*>/gi, ' ');
+    // Remove inline event handlers like onclick="..."
+    s = s.replace(/\s*on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+    // Remove style attributes
+    s = s.replace(/\sstyle\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+    // Remove javascript:, data:, vbscript: in href/src attributes
+    s = s.replace(/\s(href|src)\s*=\s*(?:"|')?\s*(?:javascript:|data:|vbscript:)[^"'\s>]*(?:"|')?/gi, '');
+    // Collapse whitespace
+    s = s.replace(/\s+/g, ' ').trim();
+    return s;
 }

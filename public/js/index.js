@@ -148,6 +148,79 @@ function renderMarkdownToHtml(text) {
   }
 }
 
+// Sanitize HTML before inserting into the DOM.
+// Uses DOMParser to walk the fragment and remove disallowed nodes and attributes.
+// Whitelist tags and attributes; strip event handlers, <script>, <iframe>, <style>, and any
+// href/src that start with javascript:, data:, or vbscript:.
+function sanitizeHtml(dirtyHtml) {
+  try {
+    if (!dirtyHtml) return '';
+    const parser = new DOMParser();
+    // parse as fragment inside a body so we can serialize later
+    const doc = parser.parseFromString(`<body>${dirtyHtml}</body>`, 'text/html');
+    const root = (doc && doc.body) ? doc.body : doc;
+
+    const allowedTags = new Set(['A','P','BR','STRONG','B','EM','I','UL','LI','H1','H2','H3','H4','H5','H6','DIV','SPAN']);
+
+    const walk = (node) => {
+      let child = node.firstChild;
+      while (child) {
+        const next = child.nextSibling;
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          const tag = child.nodeName.toUpperCase();
+          if (!allowedTags.has(tag)) {
+            // move children up to parent, if possible
+            const parent = child.parentNode;
+            if (parent) {
+              while (child.firstChild) parent.insertBefore(child.firstChild, child);
+              parent.removeChild(child);
+            } else {
+              // no parent (shouldn't happen for body children) — replace with text node
+              const txt = document.createTextNode(child.textContent || '');
+              try { node.replaceChild(txt, child); } catch (e) { /* best-effort */ }
+            }
+            child = next;
+            continue;
+          }
+
+          // Clean attributes
+          const attrs = Array.from(child.attributes || []);
+          for (const attr of attrs) {
+            const name = attr.name.toLowerCase();
+            const val = attr.value || '';
+            // Remove event handlers and style/class/id attributes
+            if (name.startsWith('on') || name === 'style' || name === 'class' || name === 'id') {
+              child.removeAttribute(attr.name);
+              continue;
+            }
+            if (name === 'href' && tag === 'A') {
+              const v = val.trim().toLowerCase();
+              if (v.startsWith('javascript:') || v.startsWith('data:') || v.startsWith('vbscript:')) {
+                child.removeAttribute('href');
+              } else {
+                child.setAttribute('rel', 'noopener noreferrer');
+                child.setAttribute('target', '_blank');
+              }
+              continue;
+            }
+            // remove any other attribute
+            child.removeAttribute(attr.name);
+          }
+        }
+        // descend into next level
+        if (child && child.firstChild) walk(child);
+        child = next;
+      }
+    };
+
+    walk(root);
+    return (root && root.innerHTML) ? root.innerHTML : '';
+  } catch (err) {
+    // Fallback: escape everything
+    try { return escapeHtml(String(dirtyHtml)); } catch (e) { return ''; }
+  }
+}
+
 ws.onmessage = (event) => {
   try {
     const message = JSON.parse(event.data);
@@ -202,28 +275,30 @@ ws.onmessage = (event) => {
             const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
             botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
             botMessageDiv._visibleRaw += take;
-            // Render the visible subset
-            contentDiv.innerHTML = renderMarkdownToHtml(botMessageDiv._visibleRaw);
+            // Render the visible subset (sanitize to avoid XSS)
+            contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
             chatMessages.scrollTop = chatMessages.scrollHeight;
           } else {
             // No buffered content; if no new data for a short while, stop the timer
-            if (Date.now() - botMessageDiv._lastAppend > 300) {
+              if (Date.now() - botMessageDiv._lastAppend > 300) {
               clearInterval(botMessageDiv._renderTimer);
               botMessageDiv._renderTimer = null;
-              // Ensure final render includes any leftover visibleRaw
-              contentDiv.innerHTML = renderMarkdownToHtml(botMessageDiv._visibleRaw);
+              // Ensure final render includes any leftover visibleRaw (sanitized)
+              contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
             }
           }
         } catch (e) {
           // on any render error, fallback to appending raw text
-          contentDiv.innerHTML += (message.content || '').replace(/\n/g, '<br>');
+          const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
+          contentDiv.innerHTML += sanitizeHtml(safe);
         }
       }, TICK_MS);
     }
-  } else {
-    // non-markdown fallback: append raw
-    contentDiv.innerHTML += (message.content || '').replace(/\n/g, '<br>');
-  }
+    } else {
+      // non-markdown fallback: append raw text safely
+      const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
+      contentDiv.innerHTML += sanitizeHtml(safe);
+    }
       chatMessages.scrollTop = chatMessages.scrollHeight;
     } else if (message.type === 'scale') {
       updateScale(message.data);
@@ -481,9 +556,10 @@ async function loadChatHistory(messages) {
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
       try {
-        contentDiv.innerHTML = renderMarkdownToHtml(msg.content || '');
+        contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
       } catch (e) {
-        contentDiv.innerHTML = (msg.content || '').replace(/\n/g,'<br>');
+        const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
+        contentDiv.innerHTML = sanitizeHtml(safe);
       }
       const overlayDiv = document.createElement('div');
       overlayDiv.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
@@ -497,7 +573,8 @@ async function loadChatHistory(messages) {
       const row = document.createElement('div'); row.className = 'message-row user-row';
       const messageElement = document.createElement('div'); messageElement.classList.add('message','user');
       messageElement.dataset.messageId = msg.message_id;
-      messageElement.innerHTML = `<div class=\"message-content\">${(msg.content||'').replace(/\n/g,'<br>')}</div>`;
+  const safeUser = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
+  messageElement.innerHTML = `<div class=\"message-content\">${sanitizeHtml(safeUser)}</div>`;
       row.appendChild(messageElement);
       chatMessages.appendChild(row);
     }
@@ -524,7 +601,7 @@ async function loadSessions() {
           btn.innerHTML = `
             <div class="turing-left">
               <img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt="">
-              <span class="turing-name" contenteditable="true">${name}</span>
+              <span class="turing-name" contenteditable="true">${escapeHtml(name)}</span>
             </div>
             <span class="delete-icon" title="Delete">🗑</span>`;
           btn.onclick = () => {
@@ -622,10 +699,11 @@ async function loadSessionHistory(sessionId) {
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         try {
-          if (__isHtml) contentDiv.innerHTML = msg.content || '';
-          else contentDiv.innerHTML = renderMarkdownToHtml(msg.content || '');
+          if (__isHtml) contentDiv.innerHTML = sanitizeHtml(msg.content || '');
+          else contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
         } catch (e) {
-          contentDiv.innerHTML = (msg.content || '').replace(/\n/g,'<br>');
+          const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
+          contentDiv.innerHTML = sanitizeHtml(safe);
         }
         const overlay = document.createElement('div');
         overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
@@ -1269,7 +1347,8 @@ function enterAssistantEditMode(targetAssistant) {
   editable.contentEditable = 'true';
   // Populate with the message content (preserve basic markup)
   const contentEl = targetAssistant.querySelector('.message-content');
-  editable.innerHTML = contentEl ? contentEl.innerHTML : '';
+  // sanitize the content before allowing editing to avoid executing scripts
+  editable.innerHTML = sanitizeHtml(contentEl ? contentEl.innerHTML : '');
 
   wrapper.appendChild(closeBtn);
   wrapper.appendChild(toolbar);
@@ -1288,12 +1367,14 @@ function enterAssistantEditMode(targetAssistant) {
   async function saveEdit() {
     // Copy edited HTML back into the target assistant element
     try {
-      if (contentEl) contentEl.innerHTML = editable.innerHTML;
+      // Sanitize edited HTML before writing back and sending to server
+      const cleaned = sanitizeHtml(editable.innerHTML || '');
+      if (contentEl) contentEl.innerHTML = cleaned;
       targetAssistant.dataset.edited = '1';
       // Attempt to persist change to the server if message_id present
       const messageId = targetAssistant.dataset.messageId;
       // Always include session_id for server-side fallback; only send message_id when it's a valid integer
-      const payload = { content: editable.innerHTML, session_id };
+      const payload = { content: cleaned, session_id };
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
       try {
