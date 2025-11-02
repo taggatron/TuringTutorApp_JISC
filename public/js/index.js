@@ -99,31 +99,6 @@ function renderMarkdownToHtml(text) {
         continue;
       }
 
-      const headingMatch = line.match(/^#{1,6}\s+(.*)$/);
-      if (headingMatch) {
-        if (inList) { out += '</ul>'; inList = false; }
-        flushParagraph();
-        const level = Math.min(3, (line.match(/^#+/)||[''])[0].length);
-        const content = headingMatch[1];
-        out += `<h${level}>${processInlineMarkdown(content)}</h${level}>`;
-        continue;
-      }
-
-      if (/^[-•]\s+/.test(line)) {
-        flushParagraph();
-        if (!inList) { out += '<ul>'; inList = true; }
-        const item = line.replace(/^[-•]\s+/, '');
-        out += `<li>${processInlineMarkdown(item)}</li>`;
-        continue;
-      }
-
-      // blank line: paragraph boundary
-      if (line === '') {
-        if (inList) { out += '</ul>'; inList = false; }
-        flushParagraph();
-        continue;
-      }
-
       // accumulate into paragraph
       paragraphBuffer.push(line);
     }
@@ -1180,13 +1155,116 @@ if (chatgptRefBtn) {
       if (!el || el.__armedDrag) return; el.__armedDrag = true; el.setAttribute('draggable', 'true');
       el.addEventListener('dragstart', (e) => {
         const txt = (el.innerText || el.textContent || '').trim();
-        e.dataTransfer.setData('text/plain', txt); e.dataTransfer.effectAllowed = 'copy';
+        try {
+          e.dataTransfer.setData('text/plain', txt);
+          e.dataTransfer.effectAllowed = 'copy';
+        } catch (_) {
+          // ignore if dataTransfer is not writable in some browsers/environments
+        }
         window.__lastDraggedPromptElement = el;
         try {
-          const rect = el.getBoundingClientRect(); const cs = getComputedStyle(el);
-          const ghost = el.cloneNode(true);
-          // Avoid setting inline styles (CSP) — use a CSS class for the drag ghost
-        } catch (_) { }
+          // Preferred: render drag image onto an off-screen canvas to avoid
+          // injecting visible DOM nodes that can leak text into the layout.
+          const rect = el.getBoundingClientRect();
+          const DPR = window.devicePixelRatio || 1;
+          const cs = getComputedStyle(el);
+          // derive font properties from the element so the drag image matches
+          const fontSizeRaw = parseFloat(cs.fontSize) || 14;
+          const fontSize = fontSizeRaw * DPR;
+          const fontFamily = cs.fontFamily || 'system-ui, -apple-system, Roboto, Arial';
+          const fontWeight = cs.fontWeight || '400';
+          const lineHeightRaw = cs.lineHeight === 'normal' ? Math.round(fontSizeRaw * 1.25) : parseFloat(cs.lineHeight) || Math.round(fontSizeRaw * 1.25);
+          const lineHeight = Math.round(lineHeightRaw * DPR);
+          const padLeft = parseFloat(cs.paddingLeft) || parseFloat(cs.padding) || 12;
+          const padTop = parseFloat(cs.paddingTop) || parseFloat(cs.padding) || 8;
+          // use CSS pixel padding when drawing; ctx is scaled by DPR
+          const paddingX_css = padLeft;
+          const paddingY_css = padTop;
+          // width should match the source element width where possible, clamped to a sane max
+          const maxCssWidth = 360; // mirror CSS .drag-ghost max-width
+          const cssWidth = Math.max(40, Math.min(maxCssWidth, Math.round(rect.width || maxCssWidth)));
+          const maxTextWidth = Math.max(8, cssWidth - paddingX_css * 2);
+          const text = (txt || '').replace(/\n/g, ' ');
+          // measure and wrap text into lines that fit maxTextWidth
+          const measureCanvas = document.createElement('canvas');
+          const mctx = measureCanvas.getContext('2d');
+          mctx.font = `${fontWeight} ${fontSizeRaw}px ${fontFamily}`;
+          function wrapText(ctx, str, maxW) {
+            const words = String(str).split(' ');
+            const lines = [];
+            let current = '';
+            for (let w of words) {
+              const test = current ? (current + ' ' + w) : w;
+              if (ctx.measureText(test).width <= maxW) {
+                current = test;
+              } else {
+                if (current) lines.push(current); current = w;
+              }
+            }
+            if (current) lines.push(current);
+            return lines;
+          }
+          const lines = wrapText(mctx, text, maxTextWidth);
+          // canvas sizing: use CSS pixel sizes then scale for DPR so the
+          // visual size matches the source element (avoids oversized ghosts)
+          /* cssWidth computed above */
+          const cssHeight = Math.max(1, Math.round(lineHeightRaw * lines.length + paddingY_css * 2));
+          const canvas = document.createElement('canvas');
+          canvas.width = cssWidth * DPR;
+          canvas.height = cssHeight * DPR;
+          // ensure the canvas displays at CSS pixel size when appended
+          canvas.style.width = cssWidth + 'px';
+          canvas.style.height = cssHeight + 'px';
+          const ctx = canvas.getContext('2d');
+          // scale drawing operations so we can use CSS pixel units below
+          ctx.scale(DPR, DPR);
+          // draw background rounded rect using CSS units
+          ctx.fillStyle = cs.backgroundColor && cs.backgroundColor !== 'transparent' ? cs.backgroundColor : '#007bff';
+          roundRect(ctx, 0, 0, cssWidth, cssHeight, (parseFloat(cs.borderRadius) || 12));
+          ctx.fill();
+          // draw text lines (use CSS font size)
+          ctx.fillStyle = (cs.color && cs.color !== 'transparent') ? cs.color : '#ffffff';
+          ctx.font = `${fontWeight} ${fontSizeRaw}px ${fontFamily}`;
+          ctx.textBaseline = 'top';
+          const textX = paddingX_css;
+          let y = paddingY_css;
+          const available = cssWidth - paddingX_css * 2;
+          for (let line of lines) {
+            // defensive measure: truncate if a single word exceeds width
+            if (ctx.measureText(line).width > available) line = truncateTextToWidth(ctx, line, available);
+            ctx.fillText(line, textX, y);
+            y += lineHeightRaw;
+          }
+          const offsetX = Math.round(cssWidth / 2);
+          const offsetY = Math.round(cssHeight / 2);
+          try {
+            // Append canvas off-screen so browsers that require an in-DOM
+            // element for setDragImage will use our rendered image instead
+            // of falling back to a default file icon.
+            canvas.style.position = 'fixed';
+            canvas.style.left = '10000px';
+            canvas.style.top = '-10000px';
+            canvas.style.zIndex = '9999';
+            canvas.style.pointerEvents = 'none';
+            document.body.appendChild(canvas);
+            e.dataTransfer.setDragImage(canvas, offsetX, offsetY);
+            // remember canvas so dragend can remove it
+            el.__dragGhost = canvas;
+          } catch (err) {
+            // Fallback to DOM ghost if canvas isn't accepted
+            const ghost = document.createElement('div');
+            ghost.className = 'drag-ghost';
+            ghost.textContent = txt || '';
+            ghost.style.left = '10000px';
+            ghost.style.top = '-10000px';
+            document.body.appendChild(ghost);
+            try { e.dataTransfer.setDragImage(ghost, Math.round(rect.width / 2), Math.round(rect.height / 2)); } catch (_) { /* ignore */ }
+            el.__dragGhost = ghost;
+          }
+          try { el.classList.add('dragging'); } catch (_) {}
+        } catch (outerErr) {
+          console.error('drag ghost creation failed', outerErr);
+        }
         chatgptRefBtn.classList.add('drop-target');
       });
   el.addEventListener('dragend', () => { chatgptRefBtn.classList.remove('drop-target'); try { el.classList.remove('dragging'); } catch(_) {} if (el.__dragGhost) { try { el.__dragGhost.remove(); } catch(_) {} el.__dragGhost = null; } });
@@ -1256,6 +1334,31 @@ if (chatgptRefBtn) {
     chatMessagesEl.addEventListener('touchcancel', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } try { if (touchState.el) touchState.el.classList.remove('dragging'); } catch(_) {} if (touchState.ghost) touchState.ghost.remove(); touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target'); });
   })();
 }
+
+  // Helper: draw rounded rect on canvas
+  function roundRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+  }
+
+  // Helper: truncate text with ellipsis to fit width
+  function truncateTextToWidth(ctx, text, maxWidth) {
+    if (!text) return '';
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let low = 0, high = text.length, best = '';
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      const candidate = text.slice(0, mid) + '…';
+      if (ctx.measureText(candidate).width <= maxWidth) { low = mid + 1; best = candidate; } else { high = mid; }
+    }
+    return best || text.slice(0, Math.max(0, Math.floor(maxWidth / 10))) + '…';
+  }
 
 function waitFor(predicate, intervalMs = 80, tries = 25) { return new Promise((resolve) => { let t = 0; const id = setInterval(() => { const val = typeof predicate === 'function' ? predicate() : null; if (val) { clearInterval(id); resolve(val); } else if (++t >= tries) { clearInterval(id); resolve(null); } }, intervalMs); }); }
 
