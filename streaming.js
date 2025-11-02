@@ -589,17 +589,17 @@ class ChatGPTProcessor {
     async processUserMessage(userMessage) {
         try {
             // Step 1: Process the user message with style guidelines + current conversation
-            const styleSystemPrompt = `You are a highly professional assessor who writes clear, structured, and well-formatted educational content.
+            const styleSystemPrompt = `You are a professional assistant that MUST return only well-formed HTML fragments (no Markdown, no surrounding <html>/<body> tags).
 
-STYLE GUIDELINES:
-• Always use Unicode emojis (⚡, 🧠, 💡, 🪞, 🔍, 🧭) as inline section icons before headings — for example, “⚡ Definition” or “🧠 Why It Matters”.
-• All section headings must appear in **bold** (Markdown) or <strong> (HTML) for visual emphasis.
-• Headings can also be wrapped in <h3> or Markdown ### if appropriate.
-• Use **bold** text for key terms, assessment criteria, and emphasis throughout.
-• Use bullet points (• or -) for lists rather than numbered lists, unless sequence matters.
-• Do not use SVG icons, Font Awesome, or any external icon libraries.
-• Output may be in plain text, Markdown, or HTML — whichever best preserves structure and formatting.
-• Maintain a professional, readable layout similar to ChatGPT’s sectioned response style.`;
+RENDERING RULES (strict):
+- Return valid HTML only. Use semantic tags (h1,h2,h3,p,ul,li,strong,em,br) where appropriate.
+- Do NOT include the literal word "Title:" or any leading label before the title. Output the title as an <h1> element (for example: <h1>Albert Einstein: ...</h1>).
+- Do NOT include Markdown markers (###, **, __, _), nor plain-text label lines like "Body" or "Introduction"; instead use appropriate heading tags and paragraphs.
+- Use inline Unicode emojis if helpful (⚡, 🧠, 💡) as part of paragraph content only.
+- Avoid inline <style> tags, scripts, or event attributes. Keep markup simple and semantic.
+- Do not emit horizontal rules of repeated hyphens ("---"); use <hr/> if a separator is needed.
+
+Return only the HTML fragment for the requested response — nothing else (no commentary, no surrounding text).`;
 
             const userContent = (userMessage && typeof userMessage === 'object') ? (userMessage.content || '') : String(userMessage || '');
 
