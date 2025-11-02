@@ -668,15 +668,18 @@ STYLE GUIDELINES:
                 // to avoid inserting a duplicate assistant message. If none exists, insert normally.
                 const empty = await getEmptyAssistantMessage(this.session_id);
                 let messageId;
-                if (empty && empty.id) {
+                    if (empty && empty.id) {
                     messageId = empty.id;
-                    // Store raw assistant content; model-safe history is built later.
-                    await updateMessageContent(messageId, botMessageContent);
+                    // Convert assistant content to HTML (if needed) before saving so
+                    // the client sees rendered HTML rather than raw markdown artifacts.
+                    const htmlToSave = serverRenderMarkdownToHtml(botMessageContent);
+                    await updateMessageContent(messageId, htmlToSave);
                     // Ensure scale level row exists for this session/message
                     try { await saveScaleLevel(this.session_id, this.username, scaleLevel); } catch (slErr) { /* non-fatal */ }
                     console.log(`Updated existing empty assistant message id=${messageId} for session ${this.session_id}`);
                 } else {
-                    messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', botMessageContent, shouldCollapse, scaleLevel);
+                    const htmlToSave = serverRenderMarkdownToHtml(botMessageContent);
+                    messageId = await saveMessageWithScaleLevel(this.session_id, this.username, 'assistant', htmlToSave, shouldCollapse, scaleLevel);
                     console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
                 }
 
@@ -968,4 +971,74 @@ function serverSanitizeHtml(raw) {
     // Collapse whitespace
     s = s.replace(/\s+/g, ' ').trim();
     return s;
+}
+
+// Server-side lightweight Markdown -> HTML renderer used to normalize assistant
+// content before persisting. It preserves HTML when the content already
+// appears to contain HTML tags; otherwise it escapes HTML and converts common
+// markdown patterns (headings, bold, italic, links, line breaks) to HTML.
+function serverRenderMarkdownToHtml(raw) {
+    if (!raw) return '';
+    const s = String(raw);
+    const looksLikeHtml = /<\s*\w+[^>]*>/i.test(s);
+    if (looksLikeHtml) {
+        // If content already contains HTML tags, trust it as HTML but
+        // perform a light sanitization pass to remove dangerous attributes.
+        return serverSanitizeHtml(s);
+    }
+
+    // Escape HTML entities first to avoid accidental tag injection
+    const escape = (u) => String(u)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const lines = s.split(/\r?\n/);
+    const out = [];
+    let paragraphBuffer = [];
+
+    function flushParagraph() {
+        if (paragraphBuffer.length === 0) return;
+        const joined = paragraphBuffer.join('<br>');
+        out.push(`<p>${processInline(joined)}</p>`);
+        paragraphBuffer = [];
+    }
+
+    function processInline(t) {
+        let w = escape(t);
+        // Restore intentional escaped <br> tokens if present
+        w = w.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+        // Bold **text** or __text__
+        w = w.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+        w = w.replace(/__([\s\S]+?)__/g, '<strong>$1</strong>');
+        // Italic *text* or _text_
+        w = w.replace(/(^|\s)\*([^*]+?)\*(\s|$)/g, '$1<em>$2</em>$3');
+        w = w.replace(/(^|\s)_([^_]+?)_(\s|$)/g, '$1<em>$2</em>$3');
+        // Headings will be handled separately
+        // Autolink
+        w = w.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+        return w;
+    }
+
+    for (let rawLine of lines) {
+        const line = rawLine.trim();
+        if (line === '') {
+            flushParagraph();
+            continue;
+        }
+        const m = line.match(/^(#{1,6})\s+(.*)$/);
+        if (m) {
+            // heading
+            flushParagraph();
+            const level = Math.min(6, m[1].length);
+            out.push(`<h${level}>${processInline(m[2])}</h${level}>`);
+            continue;
+        }
+        // accumulate paragraphs; keep original spacing for internal <br>
+        paragraphBuffer.push(rawLine);
+    }
+    flushParagraph();
+    return out.join('\n');
 }

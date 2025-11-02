@@ -91,13 +91,22 @@ function renderMarkdownToHtml(text) {
     paragraphBuffer = [];
   }
 
-  try {
+    try {
     for (let rawLine of lines) {
       const trimmed = rawLine.trim();
       if (trimmed === '---' || trimmed === '***') {
         if (inList) { out += '</ul>'; inList = false; }
         flushParagraph();
         out += '<hr/>';
+        continue;
+      }
+
+      // Headings: convert lines starting with #.. to <hN>
+      const hmatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+      if (hmatch) {
+        flushParagraph();
+        const level = Math.min(6, hmatch[1].length);
+        out += `<h${level}>${processInlineMarkdown(hmatch[2])}</h${level}>`;
         continue;
       }
 
@@ -119,17 +128,19 @@ function renderMarkdownToHtml(text) {
   if (inList) out += '</ul>';
   return out;
 
-  function processInlineMarkdown(s) {
+    function processInlineMarkdown(s) {
     // Preserve literal <br> tokens inside the text by temporarily replacing them
     const BR_TOKEN = '___HTML_BR_TOKEN___';
     let working = String(s).replace(/<br\s*\/?\s*>/gi, BR_TOKEN);
     let escaped = escapeHtml(working);
     // restore BR tokens back to actual <br>
     escaped = escaped.replace(new RegExp(BR_TOKEN, 'g'), '<br>');
-    // Bold **text** (multiline safe)
+    // Bold **text** or __text__ (multiline safe)
     escaped = escaped.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
-    // Simple italic (single * on both sides) - conservative
+    escaped = escaped.replace(/__([\s\S]+?)__/g, '<strong>$1</strong>');
+    // Italic *text* or _text_ (conservative)
     escaped = escaped.replace(/(^|\s)\*([^*]+?)\*(\s|$)/g, '$1<em>$2</em>$3');
+    escaped = escaped.replace(/(^|\s)_([^_]+?)_(\s|$)/g, '$1<em>$2</em>$3');
     // Autolink
     escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
     return escaped;
