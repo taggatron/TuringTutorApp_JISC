@@ -34,7 +34,7 @@ function showPopup(element, message) {
   if (!popup) return;
   const contentEl = popup.querySelector('.popup-content') || popup;
   try {
-    if (contentEl) contentEl.textContent = message || '';
+      if (contentEl) contentEl.textContent = message || ''; 
   } catch (e) { /* ignore DOM issues */ }
   popup.classList.add('visible');
   if (fadeTimeout) clearTimeout(fadeTimeout);
@@ -76,6 +76,7 @@ function escapeHtml(unsafe) {
 
 function renderMarkdownToHtml(text) {
   if (!text) return '';
+  // Split into lines but preserve empty lines; we'll treat empty lines as paragraph breaks.
   const lines = String(text).split(/\r?\n/);
   let out = '';
   let inList = false;
@@ -84,23 +85,30 @@ function renderMarkdownToHtml(text) {
   let paragraphBuffer = [];
   function flushParagraph() {
     if (paragraphBuffer.length === 0) return;
-    const joined = paragraphBuffer.join(' ');
+    // Join with <br> to preserve single newlines inside a paragraph
+    const joined = paragraphBuffer.join('<br>');
     out += `<p>${processInlineMarkdown(joined)}</p>`;
     paragraphBuffer = [];
   }
 
   try {
     for (let rawLine of lines) {
-      const line = rawLine.trim();
-      if (line === '---' || line === '***') {
+      const trimmed = rawLine.trim();
+      if (trimmed === '---' || trimmed === '***') {
         if (inList) { out += '</ul>'; inList = false; }
         flushParagraph();
         out += '<hr/>';
         continue;
       }
 
-      // accumulate into paragraph
-      paragraphBuffer.push(line);
+      // If this line is empty (after trimming), treat as paragraph separator
+      if (trimmed === '') {
+        flushParagraph();
+        continue;
+      }
+
+      // accumulate into paragraph (preserve original rawLine so we keep internal spacing)
+      paragraphBuffer.push(rawLine);
     }
     flushParagraph();
   } catch (e) {
@@ -112,7 +120,12 @@ function renderMarkdownToHtml(text) {
   return out;
 
   function processInlineMarkdown(s) {
-    let escaped = escapeHtml(s);
+    // Preserve literal <br> tokens inside the text by temporarily replacing them
+    const BR_TOKEN = '___HTML_BR_TOKEN___';
+    let working = String(s).replace(/<br\s*\/?\s*>/gi, BR_TOKEN);
+    let escaped = escapeHtml(working);
+    // restore BR tokens back to actual <br>
+    escaped = escaped.replace(new RegExp(BR_TOKEN, 'g'), '<br>');
     // Bold **text** (multiline safe)
     escaped = escaped.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
     // Simple italic (single * on both sides) - conservative
@@ -158,29 +171,39 @@ function sanitizeHtml(dirtyHtml) {
             continue;
           }
 
-          // Clean attributes
-          const attrs = Array.from(child.attributes || []);
-          for (const attr of attrs) {
-            const name = attr.name.toLowerCase();
-            const val = attr.value || '';
-            // Remove event handlers and style/class/id attributes
-            if (name.startsWith('on') || name === 'style' || name === 'class' || name === 'id') {
-              child.removeAttribute(attr.name);
-              continue;
-            }
-            if (name === 'href' && tag === 'A') {
-              const v = val.trim().toLowerCase();
-              if (v.startsWith('javascript:') || v.startsWith('data:') || v.startsWith('vbscript:')) {
-                child.removeAttribute('href');
-              } else {
-                child.setAttribute('rel', 'noopener noreferrer');
-                child.setAttribute('target', '_blank');
-              }
-              continue;
-            }
-            // remove any other attribute
-            child.removeAttribute(attr.name);
-          }
+                // Clean attributes
+                const attrs = Array.from(child.attributes || []);
+                for (const attr of attrs) {
+                  const name = attr.name.toLowerCase();
+                  const val = attr.value || '';
+                  // Remove event handlers and id/class attributes entirely
+                  if (name.startsWith('on') || name === 'class' || name === 'id') {
+                    child.removeAttribute(attr.name);
+                    continue;
+                  }
+
+                  // Allow a safe, filtered subset of inline styles. This preserves
+                  // presentation (spacing, boldness, alignment) while blocking
+                  // dangerous CSS (expressions, url(...), javascript:, data:).
+                  if (name === 'style') {
+                    const safe = sanitizeStyle(val);
+                    if (safe) child.setAttribute('style', safe); else child.removeAttribute('style');
+                    continue;
+                  }
+
+                  if (name === 'href' && tag === 'A') {
+                    const v = val.trim().toLowerCase();
+                    if (v.startsWith('javascript:') || v.startsWith('data:') || v.startsWith('vbscript:')) {
+                      child.removeAttribute('href');
+                    } else {
+                      child.setAttribute('rel', 'noopener noreferrer');
+                      child.setAttribute('target', '_blank');
+                    }
+                    continue;
+                  }
+                  // remove any other attribute
+                  child.removeAttribute(attr.name);
+                }
         }
         // descend into next level
         if (child && child.firstChild) walk(child);
@@ -194,6 +217,36 @@ function sanitizeHtml(dirtyHtml) {
     // Fallback: escape everything
     try { return escapeHtml(String(dirtyHtml)); } catch (e) { return ''; }
   }
+}
+
+// Sanitize an inline style attribute value by keeping only a safe set of
+// CSS properties and rejecting dangerous constructs. Returns a cleaned
+// style string or an empty string if nothing safe remains.
+function sanitizeStyle(styleString) {
+  if (!styleString || typeof styleString !== 'string') return '';
+  const allowedProps = new Set([
+    'color','background-color','font-weight','font-style','text-decoration',
+    'text-align','white-space','margin','margin-left','margin-right','margin-top','margin-bottom',
+    'padding','padding-left','padding-right','padding-top','padding-bottom',
+    'font-size','line-height','display'
+  ]);
+  const parts = styleString.split(';').map(p => p.trim()).filter(Boolean);
+  const safeParts = [];
+  for (const part of parts) {
+    const i = part.indexOf(':');
+    if (i === -1) continue;
+    const prop = part.slice(0, i).trim().toLowerCase();
+    let val = part.slice(i + 1).trim();
+    if (!allowedProps.has(prop)) continue;
+    // Reject javascript/data expressions and url(...) which can embed resources
+    if (/expression\s*\(|url\s*\(|javascript:|data:|vbscript:/i.test(val)) continue;
+    // Normalize whitespace and remove quotes around values
+    val = val.replace(/["']/g, '').replace(/\s+/g, ' ').trim();
+    // Very small safety check: only allow characters commonly found in CSS values
+    if (!/^[#0-9a-zA-Z().%\-\s,]+$/.test(val)) continue;
+    safeParts.push(`${prop}: ${val}`);
+  }
+  return safeParts.join('; ');
 }
 
 ws.onmessage = (event) => {
@@ -224,17 +277,21 @@ ws.onmessage = (event) => {
         botMessageDiv.appendChild(overlayDiv);
         row.appendChild(botMessageDiv);
         chatMessages.appendChild(row);
-        // initialize streaming accumulator for robust markdown rendering across chunks
+        // initialize streaming accumulator for robust rendering across chunks
         botMessageDiv._accumulatedRaw = '';
         botMessageDiv._visibleRaw = '';
         botMessageDiv._lastAppend = 0;
         botMessageDiv._renderTimer = null;
+        botMessageDiv._format = null; // 'markdown' or 'html'
       }
   const contentDiv = botMessageDiv.querySelector('.message-content');
-  // If server indicates markdown formatting, accumulate the raw text and render progressively
   if (!botMessageDiv._accumulatedRaw) botMessageDiv._accumulatedRaw = '';
   if (!botMessageDiv._visibleRaw) botMessageDiv._visibleRaw = '';
-  if (message.format === 'markdown' || message.format === undefined) {
+  // Determine format: prefer existing marker, otherwise use chunk hint
+  if (!botMessageDiv._format) botMessageDiv._format = message.format || 'markdown';
+  if (message.format === 'html') botMessageDiv._format = 'html';
+
+  if (botMessageDiv._format === 'markdown') {
     // Append raw delta to buffer
     botMessageDiv._accumulatedRaw += (message.content || '');
     botMessageDiv._lastAppend = Date.now();
@@ -269,11 +326,39 @@ ws.onmessage = (event) => {
         }
       }, TICK_MS);
     }
-    } else {
-      // non-markdown fallback: append raw text safely
-      const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
-      contentDiv.innerHTML += sanitizeHtml(safe);
+  } else if (botMessageDiv._format === 'html') {
+    // HTML streaming: append chunk to accumulator and render sanitized HTML progressively
+    botMessageDiv._accumulatedRaw += (message.content || '');
+    botMessageDiv._lastAppend = Date.now();
+    if (!botMessageDiv._renderTimer) {
+      const CHUNK_SIZE = 128;
+      const TICK_MS = 60;
+      botMessageDiv._renderTimer = setInterval(() => {
+        try {
+          if (botMessageDiv._accumulatedRaw.length > 0) {
+            const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
+            botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
+            botMessageDiv._visibleRaw += take;
+            contentDiv.innerHTML = sanitizeHtml(botMessageDiv._visibleRaw);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          } else {
+            if (Date.now() - botMessageDiv._lastAppend > 300) {
+              clearInterval(botMessageDiv._renderTimer);
+              botMessageDiv._renderTimer = null;
+              contentDiv.innerHTML = sanitizeHtml(botMessageDiv._visibleRaw);
+            }
+          }
+        } catch (e) {
+          const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
+          contentDiv.innerHTML += sanitizeHtml(safe);
+        }
+      }, TICK_MS);
     }
+  } else {
+    // non-markdown, non-html fallback: append raw text safely
+    const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
+    contentDiv.innerHTML += sanitizeHtml(safe);
+  }
       chatMessages.scrollTop = chatMessages.scrollHeight;
     } else if (message.type === 'scale') {
       updateScale(message.data);
@@ -432,7 +517,7 @@ function sendMessage() {
       input.style.height = 'auto';
     }
     try {
-      ws.send(JSON.stringify({ content: message, session_id }));
+      ws.send(JSON.stringify({ content: message, session_id })); 
     } catch (err) {
       console.error('WebSocket send failed:', err);
     }
@@ -539,7 +624,7 @@ async function loadChatHistory(messages) {
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
       try {
-        contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
+        contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || '')); 
       } catch (e) {
         const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
         contentDiv.innerHTML = sanitizeHtml(safe);

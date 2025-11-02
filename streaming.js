@@ -644,8 +644,12 @@ STYLE GUIDELINES:
             for await (const chunk of stream) {
                 const delta = chunk.choices[0]?.delta?.content || '';
                 botMessageContent += delta;
+                // Heuristic: if the delta contains HTML tags, mark this chunk as HTML
+                // so the client can render it as sanitized HTML instead of escaping it.
+                const looksLikeHtml = /<\s*\w+[^>]*>/i.test(delta);
+                const format = looksLikeHtml ? 'html' : 'markdown';
                 // Include a hint about the content format so the client can render markdown/HTML appropriately
-                this.ws.send(JSON.stringify({ type: 'assistant', content: delta, format: 'markdown' }));
+                this.ws.send(JSON.stringify({ type: 'assistant', content: delta, format }));
             }
 
             // Step 2: Assess the conversation history to determine the scale level
