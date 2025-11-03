@@ -567,6 +567,8 @@ async function loadChatHistory(messages) {
       contentDiv.className = 'message-content';
       try {
         contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || '')); 
+        // If historic content accidentally contains embedded footers, strip them
+        removeEmbeddedTuringFooters(contentDiv);
       } catch (e) {
         const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
         contentDiv.innerHTML = sanitizeHtml(safe);
@@ -722,6 +724,8 @@ async function loadSessionHistory(sessionId) {
           try {
             if (__isHtml) contentDiv.innerHTML = sanitizeHtml(decodedCandidate || '');
             else contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
+            // Remove any accidentally embedded Turing footer from stored content
+            removeEmbeddedTuringFooters(contentDiv);
           } catch (e) {
             const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
             contentDiv.innerHTML = sanitizeHtml(safe);
@@ -1501,6 +1505,21 @@ function buildChatGPTReferenceTextFromPrompt(promptText) {
   const now = new Date(); const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']; const formattedDate = `${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`; const safePrompt = (promptText || '').trim().replace(/\s+/g,' ').slice(0,2000); const promptLine = safePrompt ? ` Response generated to the prompt: "${safePrompt}".` : ''; return `OpenAI (2025) ChatGPT [AI language model].${promptLine} Available at: https://chat.openai.com/ (Accessed: ${formattedDate}).`;
 }
 
+// Remove any Turing footer(s) embedded inside given root and trim adjacent <br>.
+function removeEmbeddedTuringFooters(root) {
+  if (!root) return;
+  const nodes = root.querySelectorAll('[data-section="turing-footer"], .turing-footer');
+  nodes.forEach(n => {
+    try {
+      const prev = n.previousSibling; if (prev && prev.nodeType === 1 && prev.nodeName === 'BR') prev.remove();
+    } catch(_) {}
+    try {
+      const next = n.nextSibling; if (next && next.nodeType === 1 && next.nodeName === 'BR') next.remove();
+    } catch(_) {}
+    try { n.remove(); } catch(_) {}
+  });
+}
+
 // Apply or refresh the footer under an assistant message from extracted metadata
 function applyFooterToAssistant(assistantEl, meta) {
   if (!assistantEl || !meta) return;
@@ -1508,9 +1527,14 @@ function applyFooterToAssistant(assistantEl, meta) {
   const hasRefs = Array.isArray(meta.references) && meta.references.length > 0;
   const hasPrompts = Array.isArray(meta.prompts) && meta.prompts.length > 0;
   if (!hasRefs && !hasPrompts) return;
-  // Replace existing footer with the new one built from metadata.
-  const old = assistantEl.querySelector('.turing-footer');
-  if (old) { try { old.remove(); } catch(_) {} }
+  // Replace any and all existing footers in this assistant message.
+  assistantEl.querySelectorAll('[data-section="turing-footer"], .turing-footer').forEach(n => {
+    try {
+      const prev = n.previousSibling; if (prev && prev.nodeType === 1 && prev.nodeName === 'BR') prev.remove();
+      const next = n.nextSibling; if (next && next.nodeType === 1 && next.nodeName === 'BR') next.remove();
+      n.remove();
+    } catch(_) {}
+  });
   const msg = { references: hasRefs ? meta.references : [], prompts: hasPrompts ? meta.prompts : [] };
   const footer = buildFooterFromMessage(msg);
   if (footer) assistantEl.appendChild(footer);
@@ -1742,9 +1766,13 @@ function enterAssistantEditMode(targetAssistant) {
   async function saveEdit() {
     // Copy edited HTML back into the target assistant element
     try {
-      // Sanitize edited HTML before writing back and sending to server
-      const cleaned = sanitizeHtml(editable.innerHTML || '');
-      if (contentEl) contentEl.innerHTML = cleaned;
+  // Sanitize edited HTML before writing back and sending to server
+  const cleaned = sanitizeHtml(editable.innerHTML || '');
+  // Strip any embedded Turing footer from the body we save back
+  const tmp = document.createElement('div');
+  tmp.innerHTML = cleaned;
+  removeEmbeddedTuringFooters(tmp);
+  if (contentEl) contentEl.innerHTML = tmp.innerHTML;
       targetAssistant.dataset.edited = '1';
       // Attempt to persist change to the server if message_id present
       let messageId = targetAssistant.dataset.messageId;
@@ -1756,7 +1784,7 @@ function enterAssistantEditMode(targetAssistant) {
         }
       }
       // Always include session_id for server-side fallback; only send message_id when it's a valid integer
-      const payload = { content: cleaned, session_id };
+  const payload = { content: tmp.innerHTML, session_id };
       // extract any references/prompts the user added in the editor and include them with the save
       try {
         const rawMeta = extractFooterFromEditable(editable);
