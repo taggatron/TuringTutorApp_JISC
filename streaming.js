@@ -195,6 +195,31 @@ app.get('/messages', async (req, res) => {
 
         const scaleLevels = [...new Set(scaleRows.map(row => row.scale_level))];
 
+        // Normalize prompt shapes server-side so clients can render reliably
+        const normalizePrompt = (p) => {
+            try {
+                if (typeof p === 'string') {
+                    if (/^data:image\//i.test(p)) return { type: 'image', src: p };
+                    return p.trim() ? p : null;
+                }
+                if (p && typeof p === 'object') {
+                    if (p.src) return { type: p.type || 'image', src: p.src, alt: p.alt || '' };
+                    const src = p.dataUrl || p.data || (p.image && p.image.src) || p.image || p.base64 || null;
+                    if (src && typeof src === 'string' && /^data:image\//i.test(src)) return { type: 'image', src, alt: p.alt || '' };
+                    if (p.text) return { text: p.text };
+                }
+            } catch (_) {}
+            return p;
+        };
+        for (const m of messages) {
+            if (Array.isArray(m.prompts)) {
+                m.prompts = m.prompts.map(normalizePrompt).filter(x => x !== null && x !== undefined);
+            } else {
+                m.prompts = [];
+            }
+            if (!Array.isArray(m.references) || m.references === null) m.references = [];
+        }
+
         res.json({
             success: true,
             is_turing: sess?.is_turing === 1 || sess?.is_turing === true ? 1 : 0,
@@ -538,6 +563,35 @@ app.use(express.static(path.join(path.resolve(), 'public')));
 
 // Then enforce auth for protected routes
 app.use(checkAuth);
+
+// Upload image endpoint: accepts a base64 data URL and returns a /uploads URL
+app.post('/upload-image', async (req, res) => {
+    try {
+        const dataUrl = (req.body && req.body.dataUrl) ? String(req.body.dataUrl) : '';
+        if (!dataUrl) return res.status(400).json({ success: false, message: 'dataUrl required' });
+        // Accept common image data URLs; allow optional charset parameter
+        const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+)(;charset=[^;]+)?;base64,(.+)$/);
+        if (!m) return res.status(400).json({ success: false, message: 'Invalid image data URL' });
+        const mime = m[1].toLowerCase();
+        const base64 = m[3];
+        const buf = Buffer.from(base64, 'base64');
+        // Size guard: 10MB per image
+        if (buf.length > 10 * 1024 * 1024) return res.status(413).json({ success: false, message: 'Image too large' });
+        const extMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+        const ext = extMap[mime] || 'bin';
+        const uploadsDir = path.join(path.resolve(), 'public', 'uploads');
+        await fs.promises.mkdir(uploadsDir, { recursive: true });
+        const filename = `${Date.now()}_${Math.random().toString(16).slice(2)}.${ext}`;
+        const fullPath = path.join(uploadsDir, filename);
+        await fs.promises.writeFile(fullPath, buf);
+        // Return a path relative to the site root
+        const url = `/uploads/${filename}`;
+        return res.json({ success: true, url });
+    } catch (err) {
+        console.error('Upload image failed:', err);
+        return res.status(500).json({ success: false, message: 'Failed to upload image' });
+    }
+});
 
 // CSRF error handler
 app.use((err, req, res, next) => {

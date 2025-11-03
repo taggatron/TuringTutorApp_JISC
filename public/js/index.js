@@ -1831,12 +1831,14 @@ function enterAssistantEditMode(targetAssistant) {
       const payload = { content: cleaned, session_id };
       // extract any references/prompts the user added in the editor and include them with the save
       try {
-        const meta = extractFooterFromEditable(editable);
+        const rawMeta = extractFooterFromEditable(editable);
+        // Upload any data URL screenshots first, replace with canonical URL-based prompts
+        const meta = await uploadDataUrlPrompts(rawMeta);
         if (meta && Array.isArray(meta.references) && meta.references.length) payload.references = meta.references;
         if (meta && Array.isArray(meta.prompts) && meta.prompts.length) payload.prompts = meta.prompts;
-        // Immediately apply or refresh footer in the UI so screenshots remain visible after closing
+        // Apply or refresh footer in the UI using canonical URLs
         try { applyFooterToAssistant(targetAssistant, meta); } catch (_) {}
-      } catch (e) { console.warn('Could not extract editor metadata:', e); }
+      } catch (e) { console.warn('Could not extract/upload editor metadata:', e); }
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
       try {
@@ -1854,6 +1856,35 @@ function enterAssistantEditMode(targetAssistant) {
   }
 
   return wrapper;
+}
+
+// Replace any data URL image prompts with uploaded URLs via /upload-image
+async function uploadDataUrlPrompts(meta) {
+  if (!meta || typeof meta !== 'object') return { references: [], prompts: [] };
+  const out = { references: Array.isArray(meta.references) ? meta.references : [], prompts: [] };
+  const prompts = Array.isArray(meta.prompts) ? meta.prompts : [];
+  for (const p of prompts) {
+    try {
+      if (p && typeof p === 'object' && (p.type === 'image' || !p.type) && typeof p.src === 'string' && /^data:image\//i.test(p.src)) {
+        const resp = await fetch('/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl: p.src })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data && data.success && data.url) {
+          out.prompts.push({ type: 'image', src: data.url, alt: p.alt || '' });
+        } else {
+          out.prompts.push(p);
+        }
+      } else {
+        out.prompts.push(p);
+      }
+    } catch (_) {
+      out.prompts.push(p);
+    }
+  }
+  return out;
 }
 
 function exitAssistantEditMode(wrapper, saved, targetAssistant) {
