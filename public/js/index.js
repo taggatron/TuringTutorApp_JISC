@@ -1509,10 +1509,14 @@ function buildChatGPTReferenceTextFromPrompt(promptText) {
 // Apply or refresh the footer under an assistant message from extracted metadata
 function applyFooterToAssistant(assistantEl, meta) {
   if (!assistantEl || !meta) return;
-  // Remove existing footer, if any
+  // If there's no metadata provided, keep any existing footer intact.
+  const hasRefs = Array.isArray(meta.references) && meta.references.length > 0;
+  const hasPrompts = Array.isArray(meta.prompts) && meta.prompts.length > 0;
+  if (!hasRefs && !hasPrompts) return;
+  // Replace existing footer with the new one built from metadata.
   const old = assistantEl.querySelector('.turing-footer');
   if (old) { try { old.remove(); } catch(_) {} }
-  const msg = { references: meta.references || [], prompts: meta.prompts || [] };
+  const msg = { references: hasRefs ? meta.references : [], prompts: hasPrompts ? meta.prompts : [] };
   const footer = buildFooterFromMessage(msg);
   if (footer) assistantEl.appendChild(footer);
 }
@@ -1713,6 +1717,18 @@ function enterAssistantEditMode(targetAssistant) {
   const contentEl = targetAssistant.querySelector('.message-content');
   // sanitize the content before allowing editing to avoid executing scripts
   editable.innerHTML = sanitizeHtml(contentEl ? contentEl.innerHTML : '');
+
+  // Also include any existing References/Prompts footer in the editor so it
+  // remains visible and is preserved on save. We clone it into the editable
+  // area and let the save flow re-extract metadata from this copy.
+  try {
+    const existingFooter = targetAssistant.querySelector('[data-section="turing-footer"], .turing-footer');
+    if (existingFooter) {
+      const cloned = existingFooter.cloneNode(true);
+      editable.appendChild(document.createElement('br'));
+      editable.appendChild(cloned);
+    }
+  } catch (_) { /* non-fatal */ }
 
   wrapper.appendChild(closeBtn);
   wrapper.appendChild(toolbar);
