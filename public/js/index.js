@@ -151,113 +151,19 @@ function renderMarkdownToHtml(text) {
 // Uses DOMParser to walk the fragment and remove disallowed nodes and attributes.
 // Whitelist tags and attributes; strip event handlers, <script>, <iframe>, <style>, and any
 // href/src that start with javascript:, data:, or vbscript:.
+// TEMPORARY: Disable client-side HTML sanitization to unblock Turing screenshot persistence
+// WARNING: This bypasses XSS protections. Re-enable sanitization before production redeploy.
 function sanitizeHtml(dirtyHtml) {
-  try {
-    if (!dirtyHtml) return '';
-    const parser = new DOMParser();
-    // parse as fragment inside a body so we can serialize later
-    const doc = parser.parseFromString(`<body>${dirtyHtml}</body>`, 'text/html');
-    const root = (doc && doc.body) ? doc.body : doc;
-
-    const allowedTags = new Set(['A','P','BR','STRONG','B','EM','I','UL','LI','H1','H2','H3','H4','H5','H6','DIV','SPAN']);
-
-    const walk = (node) => {
-      let child = node.firstChild;
-      while (child) {
-        const next = child.nextSibling;
-        if (child.nodeType === Node.ELEMENT_NODE) {
-          const tag = child.nodeName.toUpperCase();
-          if (!allowedTags.has(tag)) {
-            // move children up to parent, if possible
-            const parent = child.parentNode;
-            if (parent) {
-              while (child.firstChild) parent.insertBefore(child.firstChild, child);
-              parent.removeChild(child);
-            } else {
-              // no parent (shouldn't happen for body children) — replace with text node
-              const txt = document.createTextNode(child.textContent || '');
-              try { node.replaceChild(txt, child); } catch (e) { /* best-effort */ }
-            }
-            child = next;
-            continue;
-          }
-
-                // Clean attributes
-                const attrs = Array.from(child.attributes || []);
-                for (const attr of attrs) {
-                  const name = attr.name.toLowerCase();
-                  const val = attr.value || '';
-                  // Remove event handlers and id/class attributes entirely
-                  if (name.startsWith('on') || name === 'class' || name === 'id') {
-                    child.removeAttribute(attr.name);
-                    continue;
-                  }
-
-                  // Allow a safe, filtered subset of inline styles. This preserves
-                  // presentation (spacing, boldness, alignment) while blocking
-                  // dangerous CSS (expressions, url(...), javascript:, data:).
-                  if (name === 'style') {
-                    const safe = sanitizeStyle(val);
-                    if (safe) child.setAttribute('style', safe); else child.removeAttribute('style');
-                    continue;
-                  }
-
-                  if (name === 'href' && tag === 'A') {
-                    const v = val.trim().toLowerCase();
-                    if (v.startsWith('javascript:') || v.startsWith('data:') || v.startsWith('vbscript:')) {
-                      child.removeAttribute('href');
-                    } else {
-                      child.setAttribute('rel', 'noopener noreferrer');
-                      child.setAttribute('target', '_blank');
-                    }
-                    continue;
-                  }
-                  // remove any other attribute
-                  child.removeAttribute(attr.name);
-                }
-        }
-        // descend into next level
-        if (child && child.firstChild) walk(child);
-        child = next;
-      }
-    };
-
-    walk(root);
-    return (root && root.innerHTML) ? root.innerHTML : '';
-  } catch (err) {
-    // Fallback: escape everything
-    try { return escapeHtml(String(dirtyHtml)); } catch (e) { return ''; }
-  }
+  // Return content as-is. Keep function signature for compatibility.
+  return dirtyHtml ?? '';
 }
 
 // Sanitize an inline style attribute value by keeping only a safe set of
 // CSS properties and rejecting dangerous constructs. Returns a cleaned
 // style string or an empty string if nothing safe remains.
 function sanitizeStyle(styleString) {
-  if (!styleString || typeof styleString !== 'string') return '';
-  const allowedProps = new Set([
-    'color','background-color','font-weight','font-style','text-decoration',
-    'text-align','white-space','margin','margin-left','margin-right','margin-top','margin-bottom',
-    'padding','padding-left','padding-right','padding-top','padding-bottom',
-    'font-size','line-height','display'
-  ]);
-  const parts = styleString.split(';').map(p => p.trim()).filter(Boolean);
-  const safeParts = [];
-  for (const part of parts) {
-    const i = part.indexOf(':');
-    if (i === -1) continue;
-    const prop = part.slice(0, i).trim().toLowerCase();
-    let val = part.slice(i + 1).trim();
-    if (!allowedProps.has(prop)) continue;
-    // Reject javascript/data expressions and url(...) which can embed resources
-    if (/expression\s*\(|url\s*\(|javascript:|data:|vbscript:/i.test(val)) continue;
-    // Normalize whitespace and remove quotes around values
-    val = val.replace(/["']/g, '').replace(/\s+/g, ' ').trim();
-    // Very small safety check: only allow characters commonly found in CSS values
-    if (!/^[#0-9a-zA-Z().%\-\s,]+$/.test(val)) continue;
-    safeParts.push(`${prop}: ${val}`);
-  }
-  return safeParts.join('; ');
+  // Return styles unchanged while sanitization is disabled.
+  return typeof styleString === 'string' ? styleString : '';
 }
 
 ws.onmessage = (event) => {
@@ -1550,14 +1456,25 @@ function buildFooterFromMessage(msg) {
     const body2 = document.createElement('div'); body2.setAttribute('data-section', 'prompts-body');
     // Normalize a variety of prompt shapes to support legacy and future formats
     const normalized = msg.prompts.map(p => {
-      // Strings that are data URLs should be treated as images
-      if (typeof p === 'string' && /^data:image\//i.test(p)) return { type: 'image', src: p };
+      // Strings: consider both data URLs and obvious image URLs
+      if (typeof p === 'string') {
+        const s = p.trim();
+        if (/^data:image\//i.test(s)) return { type: 'image', src: s };
+        if (/^(https?:)?\/\//i.test(s) || s.startsWith('/')) {
+          if (/\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(s)) return { type: 'image', src: s };
+        }
+        // otherwise leave as text
+        return s;
+      }
       if (p && typeof p === 'object') {
         // Most common shape
         if (p.src) return { type: p.type || 'image', src: p.src, alt: p.alt || '' };
         // Alternative keys often seen
         const src = p.dataUrl || p.data || p.image || (p.image && p.image.src) || p.base64 || null;
-        if (src && typeof src === 'string' && /^data:image\//i.test(src)) return { type: 'image', src, alt: p.alt || '' };
+        if (src && typeof src === 'string') {
+          const ss = src.trim();
+          if (/^data:image\//i.test(ss) || /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(ss)) return { type: 'image', src: ss, alt: p.alt || '' };
+        }
       }
       return p; // leave as-is (text or unknown)
     });

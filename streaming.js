@@ -199,13 +199,25 @@ app.get('/messages', async (req, res) => {
         const normalizePrompt = (p) => {
             try {
                 if (typeof p === 'string') {
-                    if (/^data:image\//i.test(p)) return { type: 'image', src: p };
-                    return p.trim() ? p : null;
+                    const s = p.trim();
+                    if (/^data:image\//i.test(s)) return { type: 'image', src: s };
+                    // Treat obvious image URLs (absolute or site-relative) as images
+                    if (/^(https?:)?\/\//i.test(s) || s.startsWith('/')) {
+                        if (/\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(s)) {
+                            return { type: 'image', src: s };
+                        }
+                    }
+                    return s || null;
                 }
                 if (p && typeof p === 'object') {
                     if (p.src) return { type: p.type || 'image', src: p.src, alt: p.alt || '' };
                     const src = p.dataUrl || p.data || (p.image && p.image.src) || p.image || p.base64 || null;
-                    if (src && typeof src === 'string' && /^data:image\//i.test(src)) return { type: 'image', src, alt: p.alt || '' };
+                    if (src && typeof src === 'string') {
+                        const ss = src.trim();
+                        if (/^data:image\//i.test(ss) || /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(ss)) {
+                            return { type: 'image', src: ss, alt: p.alt || '' };
+                        }
+                    }
                     if (p.text) return { text: p.text };
                 }
             } catch (_) {}
