@@ -705,7 +705,10 @@ async function loadSessionHistory(sessionId) {
         } else if (msg.role === 'assistant') {
           const assistantMessageDiv = document.createElement('div');
           assistantMessageDiv.className = 'message assistant with-feedback';
-          // Sticky Turing message disabled: do not mark special/sticky
+          // Mark the first assistant in a Turing session for special styling (non-sticky)
+          if (isTuring && !document.querySelector('#chat-messages .message.assistant')) {
+            assistantMessageDiv.classList.add('turing-message');
+          }
           const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
           if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
           assistantMessageDiv.dataset.messageId = msg.message_id;
@@ -739,10 +742,6 @@ async function loadSessionHistory(sessionId) {
           try {
             const footerNode = buildFooterFromMessage(msg);
             if (footerNode) assistantMessageDiv.appendChild(footerNode);
-            if (assistantMessageDiv.classList.contains('turing-message')) {
-              ensureTuringBar(assistantMessageDiv);
-              updateTuringBarCounts(assistantMessageDiv);
-            }
           } catch (e) { /* ignore */ }
           if (closeBtn && overlay && contentDiv) {
             closeBtn.addEventListener('click', function(e) {

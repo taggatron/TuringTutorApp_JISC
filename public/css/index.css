@@ -56,6 +56,7 @@
 .assistant-editable-content {
     outline: 2px solid #2d8cff;
     background: #ecfdf5; /* light green to match assistant messages */
+ /* revert to neutral; only top Turing chat gets green */
     border-radius: 10px;
     min-height: 60px;
     padding: 24px;
@@ -291,15 +292,12 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
     animation: blink-caret 1s step-end infinite;
 }
 
-/* Sticky Turing message at top of chat */
+/* Turing message visual treatment (non-sticky; color matches sidebar Turing button) */
 .message.assistant.turing-message {
-    position: sticky;
-    top: 0;
-    z-index: 12; /* above other messages, below global overlays */
-    background: #ecfdf5; /* light green (emerald-50) */
-    border-left: 4px solid #22c55e; /* emerald-500 to match sidebar turing session */
-    box-shadow: 0 2px 0 rgba(0,0,0,0.04);
-    backdrop-filter: saturate(105%) blur(0px);
+    position: relative; /* normal flow; not sticky */
+    background: #ecfdf5; /* light green to match assistant messages */
+ /* same light green as .turing-mode-button */
+    border-left: 4px solid #86efac; /* light green border from sidebar button */
 }
 .message.assistant.turing-message .turing-bar {
     display: flex;
@@ -319,14 +317,10 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
 .message.assistant.turing-message .turing-bar .sep { opacity: 0.5; }
 
 /* Collapse content/footers when scrolled */
+/* Collapsed state no longer used (sticky disabled); keep selectors inert for safety */
 .message.assistant.turing-message.collapsed .message-content,
-.message.assistant.turing-message.collapsed .turing-footer {
-    display: none !important;
-}
-.message.assistant.turing-message.collapsed {
-    max-height: 40px;
-    overflow: hidden;
-}
+.message.assistant.turing-message.collapsed .turing-footer { display: block; }
+.message.assistant.turing-message.collapsed { max-height: none; overflow: visible; }
 
 /* Ensure turing footer images remain constrained */
 .message.assistant .turing-footer .reference-image-wrapper { max-width: 760px; width:100%; }
