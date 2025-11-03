@@ -1548,11 +1548,36 @@ function buildFooterFromMessage(msg) {
     const promptsSection = document.createElement('div'); promptsSection.setAttribute('data-section', 'prompts-section'); promptsSection.className = 'turing-section';
     const headingP2 = document.createElement('p'); const strong2 = document.createElement('strong'); strong2.textContent = 'Prompts'; headingP2.appendChild(strong2); promptsSection.appendChild(headingP2);
     const body2 = document.createElement('div'); body2.setAttribute('data-section', 'prompts-body');
-    msg.prompts.forEach(p => {
-      if (p && typeof p === 'object' && p.type === 'image' && p.src) {
-        const wrapper = document.createElement('div'); wrapper.className = 'reference-image-wrapper'; const img = document.createElement('img'); img.className = 'reference-image'; img.src = p.src; img.alt = p.alt || ''; wrapper.appendChild(img); body2.appendChild(wrapper);
-      } else {
-        const pp = document.createElement('p'); pp.className = 'prompt-item'; pp.textContent = (typeof p === 'string') ? p : (p.text || ''); body2.appendChild(pp);
+    // Normalize a variety of prompt shapes to support legacy and future formats
+    const normalized = msg.prompts.map(p => {
+      // Strings that are data URLs should be treated as images
+      if (typeof p === 'string' && /^data:image\//i.test(p)) return { type: 'image', src: p };
+      if (p && typeof p === 'object') {
+        // Most common shape
+        if (p.src) return { type: p.type || 'image', src: p.src, alt: p.alt || '' };
+        // Alternative keys often seen
+        const src = p.dataUrl || p.data || p.image || (p.image && p.image.src) || p.base64 || null;
+        if (src && typeof src === 'string' && /^data:image\//i.test(src)) return { type: 'image', src, alt: p.alt || '' };
+      }
+      return p; // leave as-is (text or unknown)
+    });
+    normalized.forEach(p => {
+      if (p && typeof p === 'object' && p.src && (p.type === 'image' || p.type === undefined)) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'reference-image-wrapper';
+        const img = document.createElement('img');
+        img.className = 'reference-image';
+        img.src = p.src;
+        img.alt = p.alt || '';
+        // Defensive: ensure data URL images render at a sane size
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        wrapper.appendChild(img);
+        body2.appendChild(wrapper);
+      } else if (typeof p === 'string' && p.trim().length) {
+        const pp = document.createElement('p'); pp.className = 'prompt-item'; pp.textContent = p; body2.appendChild(pp);
+      } else if (p && typeof p === 'object' && p.text) {
+        const pp = document.createElement('p'); pp.className = 'prompt-item'; pp.textContent = p.text; body2.appendChild(pp);
       }
     });
     promptsSection.appendChild(body2); footer.appendChild(promptsSection);
