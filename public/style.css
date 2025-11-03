@@ -208,7 +208,7 @@ body {
 
 .message.assistant {
     align-self: stretch;
-    background-color: #f1f1f1;
+    background-color: #ecfdf5; /* light green */
     color: #000;
     text-align: left;
     box-sizing: border-box;

@@ -55,7 +55,7 @@
 }
 .assistant-editable-content {
     outline: 2px solid #2d8cff;
-    background: #fafbfc;
+    background: #ecfdf5; /* light green to match assistant messages */
     border-radius: 10px;
     min-height: 60px;
     padding: 24px;
