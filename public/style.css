@@ -214,6 +214,28 @@ body {
     box-sizing: border-box;
 }
 
+/* Make message content headings visually hierarchical
+   - h1 is the title and should be larger than subsequent headings
+   - tighten margins so headings and paragraphs have consistent spacing */
+.message .message-content h1 {
+    font-size: 1.35rem; /* largest */
+    margin: 0 0 0.45rem 0;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.message .message-content h2 {
+    font-size: 1.15rem;
+    margin: 0 0 0.35rem 0;
+    font-weight: 700;
+    line-height: 1.25;
+}
+.message .message-content h3 {
+    font-size: 1.0rem;
+    margin: 0 0 0.3rem 0;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
 /* Subtle lock indicator for integrity-locked assistant messages */
 .message.assistant.edit-locked::after {
     content: '🔒';
