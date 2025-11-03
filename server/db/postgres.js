@@ -340,6 +340,6 @@ export {
   query,
   pool,
   attachDbUser,
-  setCurrentUserId
+  setCurrentUserId, ensureMessageMetadataColumns
 };
 

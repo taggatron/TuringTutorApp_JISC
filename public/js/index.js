@@ -1633,9 +1633,12 @@ function turingBuildCaptureContainer(pair) {
   // apply semantic classes rather than inline styles so CSS (not inline styles) controls rendering
   p.classList.add('turing-prompt');
   a.classList.add('turing-assistant');
-  // remove editing UI elements that shouldn't appear in the capture
+  // remove UI chrome that shouldn't appear in capture (sticky turing bar, edit chrome, overlays, footers)
   p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove());
-  a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove());
+  // Remove the sticky Turing header bar and any overlay/toolbar in the assistant clone
+  a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay, .turing-bar').forEach(n => n.remove());
+  // Remove the aggregated footer (References/Prompts) from the capture to keep it focused on the message body
+  a.querySelectorAll('.turing-footer,[data-section="turing-footer"]').forEach(n => n.remove());
   wrap.appendChild(h);
   wrap.appendChild(p);
   wrap.appendChild(a);
@@ -1660,7 +1663,9 @@ function setupReferenceImageActions() {
     p.classList.add('turing-prompt');
     a.classList.add('turing-assistant');
     p.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close').forEach(n => n.remove());
-    a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay').forEach(n => n.remove());
+    // Remove sticky Turing header and footer/metainfo from assistant clone
+    a.querySelectorAll('.assistant-edit-toolbar, .assistant-edit-close, .message-assistant-overlay, .turing-bar').forEach(n => n.remove());
+    a.querySelectorAll('.turing-footer,[data-section="turing-footer"]').forEach(n => n.remove());
     wrap.appendChild(h);
     wrap.appendChild(p);
     wrap.appendChild(a);

@@ -344,6 +344,13 @@ app.post('/save-feedback', async (req, res) => {
 });
 
 // Update message content (used by Turing Mode autosave/close)
+// Toggle verbose logging for Turing save flow by setting DEBUG_TURING_SAVE=1
+function turingSaveDebug(...args) {
+    if (process.env.DEBUG_TURING_SAVE === '1') {
+        try { console.log('[TURING-SAVE]', ...args); } catch (_) {}
+    }
+}
+
 app.post('/update-message', async (req, res) => {
     const { message_id, content, session_id } = req.body;
     const username = req.cookies.username;
@@ -354,6 +361,8 @@ app.post('/update-message', async (req, res) => {
 
     try {
         let targetMessageId = null;
+        let sessRow = null; // session row for authorization and turing detection
+        turingSaveDebug('incoming', { message_id, hasSession: !!session_id, contentLen: (content || '').length });
 
         if (message_id) {
             // validate message_id; if it's not an integer, fall back to session_id if provided
@@ -361,39 +370,39 @@ app.post('/update-message', async (req, res) => {
             if (Number.isNaN(parsed)) {
                 if (!session_id) return res.json({ success: false, message: 'message_id must be an integer or session_id must be provided' });
                 // fallback to session-based path below
+                turingSaveDebug('non-numeric message_id provided; will use session fallback');
             } else {
                 targetMessageId = parsed;
                 const sess = await getSessionIdForMessage(targetMessageId);
                 if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+                sessRow = sess;
+                turingSaveDebug('numeric message_id accepted', { targetMessageId, is_turing: !!(sess?.is_turing) });
             }
         }
 
-        if (!targetMessageId && session_id && !message_id) {
-            // session_id provided and no message_id: choose latest message
+        // Determine target by session when message_id is missing or not numeric.
+        if (!targetMessageId && session_id) {
             const sess = await getSessionById(session_id);
             if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+            sessRow = sess;
             const messages = await getMessages(session_id);
             if (!messages || messages.length === 0) return res.json({ success: false, message: 'No messages found for session' });
-            const last = messages[messages.length - 1];
-            targetMessageId = last.id || last.message_id;
-            if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
-        } else if (!targetMessageId && session_id && message_id) {
-            // message_id present but non-integer; use session fallback
-            const sess = await getSessionById(session_id);
-            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
-            const messages = await getMessages(session_id);
-            if (!messages || messages.length === 0) return res.json({ success: false, message: 'No messages found for session' });
-            const last = messages[messages.length - 1];
-            targetMessageId = last.id || last.message_id;
-            if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
-        } else {
-            // session_id provided: update the most recent message for that session
-            const sess = await getSessionById(session_id);
-            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
-            const messages = await getMessages(session_id);
-            if (!messages || messages.length === 0) return res.json({ success: false, message: 'No messages found for session' });
-            const last = messages[messages.length - 1];
-            targetMessageId = last.id || last.message_id;
+            if (sess.is_turing === 1 || sess.is_turing === true) {
+                // In Turing Mode always persist edits/metadata to the FIRST assistant message (sticky card)
+                const firstAssistant = messages.find(m => m.role === 'assistant');
+                if (firstAssistant && (firstAssistant.id || firstAssistant.message_id)) {
+                    targetMessageId = firstAssistant.id || firstAssistant.message_id;
+                    turingSaveDebug('turing session: targeting FIRST assistant', { targetMessageId });
+                }
+            }
+            // Fallbacks when not Turing or no assistant found yet
+            if (!targetMessageId) {
+                // Prefer the last assistant if available, else the last message
+                const assistants = messages.filter(m => m.role === 'assistant');
+                const pick = assistants.length ? assistants[assistants.length - 1] : messages[messages.length - 1];
+                targetMessageId = pick.id || pick.message_id;
+                turingSaveDebug('fallback target', { targetMessageId, pickedRole: pick.role });
+            }
             if (!targetMessageId) return res.json({ success: false, message: 'Could not determine target message for session' });
         }
 
@@ -404,7 +413,16 @@ app.post('/update-message', async (req, res) => {
     // Accept optional structured metadata (references, prompts) from client
     const refs = Array.isArray(req.body.references) ? req.body.references : null;
     const prompts = Array.isArray(req.body.prompts) ? req.body.prompts : null;
+    const isTuring = !!(sessRow && (sessRow.is_turing === 1 || sessRow.is_turing === true));
+    turingSaveDebug('updating message', {
+        targetMessageId,
+        is_turing: isTuring,
+        refs_len: Array.isArray(refs) ? refs.length : 0,
+        prompts_len: Array.isArray(prompts) ? prompts.length : 0,
+        content_len: cleanedContent.length
+    });
     await updateMessageContent(targetMessageId, cleanedContent, refs, prompts);
+    turingSaveDebug('update complete', { targetMessageId });
         res.json({ success: true });
     } catch (err) {
         console.error('Could not update message:', err);
@@ -623,7 +641,7 @@ RENDERING RULES (strict):
 - Return valid HTML only. Use semantic tags (h1,h2,h3,p,ul,li,strong,em,br) where appropriate.
 - Do NOT include the literal word "Title:" or any leading label before the title. Output the title as an <h1> element (for example: <h1>Albert Einstein: ...</h1>).
 - Do NOT include Markdown markers (###, **, __, _), nor plain-text label lines like "Body" or "Introduction"; instead use appropriate heading tags and paragraphs.
-- Use inline Unicode emojis if helpful (⚡, 🧠, 💡) as part of paragraph content only.
+- Use inline Unicode emojis if helpful (⚡, 🧠, 💡).
 - Avoid inline <style> tags, scripts, or event attributes. Keep markup simple and semantic.
 - Do not emit horizontal rules of repeated hyphens ("---"); use <hr/> if a separator is needed.
 
