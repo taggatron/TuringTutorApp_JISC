@@ -15,7 +15,7 @@ import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
-import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel, getEmptyAssistantMessage } from './server/db/postgres.js';
+import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel, getEmptyAssistantMessage, ensureMessageMetadataColumns } from './server/db/postgres.js';
 import { checkAuth } from './server/middleware/auth.js';
 
 dotenv.config({ path: './APIkey.env' });
@@ -35,6 +35,15 @@ app.use(cookieParser());
 
 // Basic security headers (CSP disabled to avoid breaking inline scripts/styles)
 app.use(helmet({ contentSecurityPolicy: false }));
+
+// Ensure DB has metadata columns for durable Turing screenshots/refs
+try {
+    if (typeof ensureMessageMetadataColumns === 'function') {
+        await ensureMessageMetadataColumns();
+    }
+} catch (e) {
+    console.warn('Startup DB ensure failed (continuing):', e && e.message ? e.message : e);
+}
 
 // CSRF protection (cookie-based tokens)
 const csrfProtection = csrf({
@@ -164,6 +173,25 @@ app.get('/messages', async (req, res) => {
             getFeedback(session_id),
             getScaleLevels(session_id)
         ]);
+
+        // For legacy Turing sessions created before we seeded an assistant row,
+        // ensure there is a blank assistant message with a persisted id.
+        if ((sess?.is_turing === 1 || sess?.is_turing === true) && !messages.some(m => m.role === 'assistant')) {
+            const blankId = await saveMessageWithScaleLevel(session_id, username, 'assistant', '', 0, 1);
+            // Push a normalized message object to return immediately
+            messages.push({
+                id: blankId,
+                message_id: blankId,
+                session_id: Number(session_id),
+                username,
+                role: 'assistant',
+                content: '',
+                collapsed: 0,
+                scale_level: 1,
+                references: [],
+                prompts: []
+            });
+        }
 
         const scaleLevels = [...new Set(scaleRows.map(row => row.scale_level))];
 

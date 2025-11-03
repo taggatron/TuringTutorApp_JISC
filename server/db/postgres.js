@@ -28,6 +28,18 @@ async function query(text, params = []) {
   }
 }
 
+// Ensure JSONB metadata columns exist for durable references/prompts storage
+// This is idempotent and safe to run at startup.
+async function ensureMessageMetadataColumns() {
+  try {
+    await query("ALTER TABLE message ADD COLUMN IF NOT EXISTS references_json jsonb DEFAULT '[]'::jsonb");
+    await query("ALTER TABLE message ADD COLUMN IF NOT EXISTS prompts_json jsonb DEFAULT '[]'::jsonb");
+    console.log('[DB] message metadata columns ensured (references_json, prompts_json)');
+  } catch (e) {
+    console.error('[DB] Failed to ensure message metadata columns:', e && e.message ? e.message : e);
+  }
+}
+
 // Users
 async function registerUser(username, password) {
   const hash = await bcrypt.hash(password, 12);

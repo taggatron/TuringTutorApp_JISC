@@ -318,8 +318,15 @@ ws.onmessage = (event) => {
             const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
             botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
             botMessageDiv._visibleRaw += take;
-            // Render the visible subset (sanitize to avoid XSS)
-            contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
+            // Detect if the content actually contains HTML (including HTML-escaped tags)
+            const maybeHtml = decodeHtmlEntities(botMessageDiv._visibleRaw);
+            if (/<\w+[^>]*>/.test(maybeHtml)) {
+              botMessageDiv._format = 'html';
+              contentDiv.innerHTML = sanitizeHtml(maybeHtml);
+            } else {
+              // Render the visible subset (sanitize to avoid XSS)
+              contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
+            }
             chatMessages.scrollTop = chatMessages.scrollHeight;
           } else {
             // No buffered content; if no new data for a short while, stop the timer
@@ -327,7 +334,13 @@ ws.onmessage = (event) => {
               clearInterval(botMessageDiv._renderTimer);
               botMessageDiv._renderTimer = null;
               // Ensure final render includes any leftover visibleRaw (sanitized)
-              contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
+              const maybeHtmlFinal = decodeHtmlEntities(botMessageDiv._visibleRaw);
+              if (/<\w+[^>]*>/.test(maybeHtmlFinal)) {
+                botMessageDiv._format = 'html';
+                contentDiv.innerHTML = sanitizeHtml(maybeHtmlFinal);
+              } else {
+                contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
+              }
             }
           }
         } catch (e) {
@@ -350,13 +363,13 @@ ws.onmessage = (event) => {
             const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
             botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
             botMessageDiv._visibleRaw += take;
-            contentDiv.innerHTML = sanitizeHtml(botMessageDiv._visibleRaw);
+            contentDiv.innerHTML = sanitizeHtml(decodeHtmlEntities(botMessageDiv._visibleRaw));
             chatMessages.scrollTop = chatMessages.scrollHeight;
           } else {
             if (Date.now() - botMessageDiv._lastAppend > 300) {
               clearInterval(botMessageDiv._renderTimer);
               botMessageDiv._renderTimer = null;
-              contentDiv.innerHTML = sanitizeHtml(botMessageDiv._visibleRaw);
+              contentDiv.innerHTML = sanitizeHtml(decodeHtmlEntities(botMessageDiv._visibleRaw));
             }
           }
         } catch (e) {
@@ -484,6 +497,18 @@ function createFeedbackContainer(feedback) {
     setMessageInput(feedbackText);
   });
   return feedbackContainer;
+}
+
+// Decode basic HTML entities so server-stored `&lt;h1&gt;...` becomes real `<h1>`.
+function decodeHtmlEntities(str) {
+  try {
+    if (str == null) return '';
+    const txt = document.createElement('textarea');
+    txt.innerHTML = String(str);
+    return txt.value;
+  } catch (_) {
+    return String(str);
+  }
 }
 
 function updateScale(levels) {
@@ -774,16 +799,22 @@ async function loadSessionHistory(sessionId) {
         } else if (msg.role === 'assistant') {
           const assistantMessageDiv = document.createElement('div');
           assistantMessageDiv.className = 'message assistant with-feedback';
+          // In Turing sessions, mark the first assistant as the special sticky turing message
+          if (isTuring && !document.querySelector('#chat-messages .message.assistant')) {
+            assistantMessageDiv.classList.add('turing-message');
+          }
           const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
           if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
           assistantMessageDiv.dataset.messageId = msg.message_id;
           const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
           if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
-          const __isHtml = /<\w+[\s\S]*?>[\s\S]*<\/\w+>/i.test(msg.content || '');
+          // Detect true HTML either directly or when stored HTML-escaped in DB
+          const decodedCandidate = decodeHtmlEntities(msg.content || '');
+          const __isHtml = /<\w+[^>]*>/.test(decodedCandidate);
           const contentDiv = document.createElement('div');
           contentDiv.className = 'message-content';
           try {
-            if (__isHtml) contentDiv.innerHTML = sanitizeHtml(msg.content || '');
+            if (__isHtml) contentDiv.innerHTML = sanitizeHtml(decodedCandidate || '');
             else contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
           } catch (e) {
             const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
@@ -805,6 +836,10 @@ async function loadSessionHistory(sessionId) {
           try {
             const footerNode = buildFooterFromMessage(msg);
             if (footerNode) assistantMessageDiv.appendChild(footerNode);
+            if (assistantMessageDiv.classList.contains('turing-message')) {
+              ensureTuringBar(assistantMessageDiv);
+              updateTuringBarCounts(assistantMessageDiv);
+            }
           } catch (e) { /* ignore */ }
           if (closeBtn && overlay && contentDiv) {
             closeBtn.addEventListener('click', function(e) {
@@ -822,6 +857,8 @@ async function loadSessionHistory(sessionId) {
       if (isTuring) {
         const firstAssistant = document.querySelector('#chat-messages .message.assistant');
         if (firstAssistant) setTimeout(() => { if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click(); }, 10);
+        // Ensure sticky positioning and collapsed behavior is set up
+        setTimeout(() => { try { setupStickyTuringMessage(); } catch(_) {} }, 0);
       }
       const userMessages = chatMessages.querySelectorAll('.message.user');
       const lastUserMessage = userMessages[userMessages.length - 1];
@@ -1527,6 +1564,17 @@ function buildChatGPTReferenceTextFromPrompt(promptText) {
   const now = new Date(); const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']; const formattedDate = `${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`; const safePrompt = (promptText || '').trim().replace(/\s+/g,' ').slice(0,2000); const promptLine = safePrompt ? ` Response generated to the prompt: "${safePrompt}".` : ''; return `OpenAI (2025) ChatGPT [AI language model].${promptLine} Available at: https://chat.openai.com/ (Accessed: ${formattedDate}).`;
 }
 
+// Apply or refresh the footer under an assistant message from extracted metadata
+function applyFooterToAssistant(assistantEl, meta) {
+  if (!assistantEl || !meta) return;
+  // Remove existing footer, if any
+  const old = assistantEl.querySelector('.turing-footer');
+  if (old) { try { old.remove(); } catch(_) {} }
+  const msg = { references: meta.references || [], prompts: meta.prompts || [] };
+  const footer = buildFooterFromMessage(msg);
+  if (footer) assistantEl.appendChild(footer);
+}
+
 async function turingInsertReferenceAndPromptImage(editableEl, promptText, promptEl) {
   if (!editableEl) return;
   if (!window.html2canvas) {
@@ -1694,7 +1742,8 @@ function enterAssistantEditMode(targetAssistant) {
   closeBtn.type = 'button';
   closeBtn.setAttribute('aria-label', 'Close editor');
   closeBtn.innerHTML = '×';
-  closeBtn.addEventListener('click', () => exitAssistantEditMode(wrapper, false, targetAssistant));
+  // Auto-save on close to preserve prompt screenshots and references
+  closeBtn.addEventListener('click', () => saveEdit());
 
   const toolbar = document.createElement('div');
   toolbar.className = 'assistant-edit-toolbar';
@@ -1740,7 +1789,14 @@ function enterAssistantEditMode(targetAssistant) {
       if (contentEl) contentEl.innerHTML = cleaned;
       targetAssistant.dataset.edited = '1';
       // Attempt to persist change to the server if message_id present
-      const messageId = targetAssistant.dataset.messageId;
+      let messageId = targetAssistant.dataset.messageId;
+      // Fallback: try to locate a numeric assistant id if the seed has a placeholder id
+      if (!messageId || Number.isNaN(parseInt(messageId, 10))) {
+        const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+        if (firstAssistant && firstAssistant.dataset && !Number.isNaN(parseInt(firstAssistant.dataset.messageId, 10))) {
+          messageId = firstAssistant.dataset.messageId;
+        }
+      }
       // Always include session_id for server-side fallback; only send message_id when it's a valid integer
       const payload = { content: cleaned, session_id };
       // extract any references/prompts the user added in the editor and include them with the save
@@ -1748,6 +1804,8 @@ function enterAssistantEditMode(targetAssistant) {
         const meta = extractFooterFromEditable(editable);
         if (meta && Array.isArray(meta.references) && meta.references.length) payload.references = meta.references;
         if (meta && Array.isArray(meta.prompts) && meta.prompts.length) payload.prompts = meta.prompts;
+        // Immediately apply or refresh footer in the UI so screenshots remain visible after closing
+        try { applyFooterToAssistant(targetAssistant, meta); } catch (_) {}
       } catch (e) { console.warn('Could not extract editor metadata:', e); }
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
@@ -1757,6 +1815,8 @@ function enterAssistantEditMode(targetAssistant) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+        // Update sticky Turing message header counts after save
+        try { if (targetAssistant.classList.contains('turing-message')) updateTuringBarCounts(targetAssistant); } catch(_) {}
       } catch (err) { console.warn('Failed to persist edited message:', err); }
     } finally {
       exitAssistantEditMode(wrapper, true, targetAssistant);
@@ -1845,4 +1905,59 @@ document.addEventListener('DOMContentLoaded', () => {
     input.addEventListener('keydown', handleKeyPress);
     input.addEventListener('input', resizeInput);
   }
+  // When in a Turing session, set up sticky turing message behavior after DOM is ready
+  try { if (window.__isTuringFlag) setupStickyTuringMessage(); } catch(_) {}
 });
+
+// ----- Turing Message (sticky, collapsible, aggregates screenshots) -----
+function setupStickyTuringMessage() {
+  const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+  if (!firstAssistant) return;
+  // Mark as Turing message and move to top of list to ensure sticky works
+  firstAssistant.classList.add('turing-message');
+  if (firstAssistant.parentElement === chatMessages) {
+    // Ensure it's the first child inside chatMessages
+    if (chatMessages.firstChild !== firstAssistant) chatMessages.insertBefore(firstAssistant, chatMessages.firstChild);
+  } else if (firstAssistant.parentElement && firstAssistant.parentElement.classList.contains('message-row')) {
+    // If wrapped in a row, move the row to the top
+    const row = firstAssistant.parentElement;
+    if (row.parentElement === chatMessages && chatMessages.firstChild !== row) chatMessages.insertBefore(row, chatMessages.firstChild);
+  }
+  ensureTuringBar(firstAssistant);
+  updateTuringBarCounts(firstAssistant);
+  // Collapse on scroll beyond a small threshold
+  const onScroll = () => {
+    const sc = chatMessages.scrollTop || 0;
+    if (sc > 80) firstAssistant.classList.add('collapsed'); else firstAssistant.classList.remove('collapsed');
+  };
+  chatMessages.removeEventListener('scroll', chatMessages.__turingScrollHandler || (()=>{}));
+  chatMessages.__turingScrollHandler = onScroll;
+  chatMessages.addEventListener('scroll', onScroll);
+  // Initial state
+  onScroll();
+}
+
+function ensureTuringBar(assistantEl) {
+  if (!assistantEl) return;
+  let bar = assistantEl.querySelector('.turing-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'turing-bar';
+    const left = document.createElement('div'); left.className = 'turing-bar-left'; left.innerHTML = '<span class="dot"></span><strong>Turing message</strong>';
+    const right = document.createElement('div'); right.className = 'turing-bar-right'; right.innerHTML = '<span class="count-refs">Refs: 0</span><span class="sep">·</span><span class="count-prompts">Shots: 0</span>';
+    bar.appendChild(left); bar.appendChild(right);
+    assistantEl.prepend(bar);
+  }
+}
+
+function updateTuringBarCounts(assistantEl) {
+  if (!assistantEl) return;
+  const footer = assistantEl.querySelector('.turing-footer');
+  let refs = 0, shots = 0;
+  if (footer) {
+    refs = footer.querySelectorAll('[data-section="references-body"] .reference-item').length;
+    shots = footer.querySelectorAll('[data-section="prompts-body"] .reference-image-wrapper').length;
+  }
+  const r1 = assistantEl.querySelector('.turing-bar .count-refs'); if (r1) r1.textContent = `Refs: ${refs}`;
+  const r2 = assistantEl.querySelector('.turing-bar .count-prompts'); if (r2) r2.textContent = `Shots: ${shots}`;
+}

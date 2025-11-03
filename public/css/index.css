@@ -290,3 +290,44 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
     margin-left: 6px;
     animation: blink-caret 1s step-end infinite;
 }
+
+/* Sticky Turing message at top of chat */
+.message.assistant.turing-message {
+    position: sticky;
+    top: 0;
+    z-index: 12; /* above other messages, below global overlays */
+    background: #ecfdf5; /* light green (emerald-50) */
+    border-left: 4px solid #22c55e; /* emerald-500 to match sidebar turing session */
+    box-shadow: 0 2px 0 rgba(0,0,0,0.04);
+    backdrop-filter: saturate(105%) blur(0px);
+}
+.message.assistant.turing-message .turing-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    border-bottom: 1px solid rgba(16,185,129,0.2);
+}
+.message.assistant.turing-message .turing-bar .turing-bar-left { display:flex; align-items:center; gap:8px; }
+.message.assistant.turing-message .turing-bar .turing-bar-left .dot {
+    width: 8px; height: 8px; border-radius: 50%; background:#22c55e; display:inline-block;
+}
+.message.assistant.turing-message .turing-bar .turing-bar-right { display:flex; align-items:center; gap:8px; color:#065f46; }
+.message.assistant.turing-message .turing-bar .sep { opacity: 0.5; }
+
+/* Collapse content/footers when scrolled */
+.message.assistant.turing-message.collapsed .message-content,
+.message.assistant.turing-message.collapsed .turing-footer {
+    display: none !important;
+}
+.message.assistant.turing-message.collapsed {
+    max-height: 40px;
+    overflow: hidden;
+}
+
+/* Ensure turing footer images remain constrained */
+.message.assistant .turing-footer .reference-image-wrapper { max-width: 760px; width:100%; }
+.message.assistant .turing-footer img.reference-image { width: 100%; height: auto; display: block; }
