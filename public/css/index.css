@@ -295,7 +295,7 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
 /* Turing message visual treatment (non-sticky; color matches sidebar Turing button) */
 .message.assistant.turing-message {
     position: relative; /* normal flow; not sticky */
-    background: #ecfdf5; /* light green to match assistant messages */
+    background: #eaffea; /* light green to match assistant messages */
  /* same light green as .turing-mode-button */
     border-left: 4px solid #86efac; /* light green border from sidebar button */
 }
@@ -311,7 +311,7 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
 }
 .message.assistant.turing-message .turing-bar .turing-bar-left { display:flex; align-items:center; gap:8px; }
 .message.assistant.turing-message .turing-bar .turing-bar-left .dot {
-    width: 8px; height: 8px; border-radius: 50%; background:#22c55e; display:inline-block;
+    width: 8px; height: 8px; border-radius: 50%; background:#eaffea; display:inline-block;
 }
 .message.assistant.turing-message .turing-bar .turing-bar-right { display:flex; align-items:center; gap:8px; color:#065f46; }
 .message.assistant.turing-message .turing-bar .sep { opacity: 0.5; }
