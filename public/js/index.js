@@ -705,10 +705,7 @@ async function loadSessionHistory(sessionId) {
         } else if (msg.role === 'assistant') {
           const assistantMessageDiv = document.createElement('div');
           assistantMessageDiv.className = 'message assistant with-feedback';
-          // In Turing sessions, mark the first assistant as the special sticky turing message
-          if (isTuring && !document.querySelector('#chat-messages .message.assistant')) {
-            assistantMessageDiv.classList.add('turing-message');
-          }
+          // Sticky Turing message disabled: do not mark special/sticky
           const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
           if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
           assistantMessageDiv.dataset.messageId = msg.message_id;
@@ -763,8 +760,7 @@ async function loadSessionHistory(sessionId) {
       if (isTuring) {
         const firstAssistant = document.querySelector('#chat-messages .message.assistant');
         if (firstAssistant) setTimeout(() => { if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click(); }, 10);
-        // Ensure sticky positioning and collapsed behavior is set up
-        setTimeout(() => { try { setupStickyTuringMessage(); } catch(_) {} }, 0);
+        // Sticky positioning disabled: no special handling
       }
       const userMessages = chatMessages.querySelectorAll('.message.user');
       const lastUserMessage = userMessages[userMessages.length - 1];
@@ -1900,7 +1896,7 @@ document.addEventListener('DOMContentLoaded', () => {
     input.addEventListener('input', resizeInput);
   }
   // When in a Turing session, set up sticky turing message behavior after DOM is ready
-  try { if (window.__isTuringFlag) setupStickyTuringMessage(); } catch(_) {}
+  // Sticky Turing header disabled: allow assistant messages to scroll normally
 });
 
 // ----- Turing Message (sticky, collapsible, aggregates screenshots) -----
