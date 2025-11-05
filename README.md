@@ -27,7 +27,7 @@ Node.js + Express app with a browser UI under `public/`, now running primarily o
 docker compose up -d
 ```
 
-This brings up a Postgres 15 container per `docker-compose.yml` (defaults: user `turing`, db `turingdb`, password `turingpass`).
+This brings up a Postgres 15 container per `docker-compose.yml` (defaults: user `turing`, db `turingdb`, password `Hidden`).
 
 1. Configure environment
 
