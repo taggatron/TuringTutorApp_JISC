@@ -2,120 +2,78 @@
 
 This project has been upgraded with several security improvements:
 
-- Password hashing with bcrypt (12 rounds) on registration. Plaintext passwords are migrated to hashed on next successful login.
-- Session-based auth using `express-session` with HttpOnly, SameSite=Lax, and Secure (in production) cookies. Legacy cookies (`logged_in`, `username`) are still set for compatibility with the existing frontend and WebSocket handshake.
- - Session-based auth using `express-session` with HttpOnly, SameSite=Lax, and Secure (in production) cookies. Legacy cookies (`logged_in`, `username`) are still set for compatibility with the existing frontend and WebSocket handshake.
-   - Note: trusting the mere presence of a cookie (e.g. `logged_in`) as proof of authentication is insecure because cookies can be forged or spoofed. The middleware was updated to prefer server-side session state and to validate any fallback `username` cookie against the database before restoring a session.
-- Helmet for common HTTP security headers (CSP disabled to avoid breaking current inline scripts/styles).
-- Rate limiting for authentication endpoints and general traffic.
-- Ownership checks on all session-scoped endpoints (`/messages`, `/save-session`, `/delete-session`, `/save-feedback`, `/update-message`, `/update-message-collapsed`, `/update-session-group`, and group deletion) to prevent horizontal privilege escalation.
-- SQLite `PRAGMA foreign_keys=ON` and helpful indices for performance and integrity.
+- Password hashing with bcrypt (12 rounds) on registration. Legacy plaintext passwords are migrated to a hash on the next successful login.
+- Session-based auth using `express-session` with HttpOnly, SameSite=Lax, and Secure (in production) cookies. Legacy cookies (`logged_in`, `username`) are set for compatibility, but the middleware prefers server-side session state and validates any fallback `username` cookie against the database before restoring a session.
+- Helmet for common HTTP security headers. CSP is strict on `login.html`/`register.html`. For `index.html`, we temporarily allow `'unsafe-inline'` in `style-src` to support current UI behavior while we remove inline styles.
+- CSRF protection is enabled using `csurf` with a cookie-based token. Clients fetch from `GET /csrf-token`; the UI includes `public/js/csrf-auto.js` to manage this automatically.
+- Rate limiting for authentication endpoints (e.g., 20 req/15 min) and general traffic (e.g., 300 req/min).
+- Ownership checks on session-scoped endpoints (e.g., `/sessions`, `/messages`, `/save-session`, `/delete-session`, `/save-feedback`, `/update-message`, `/update-message-collapsed`, `/update-session-group`, `/groups`, `/create-group`, `/delete-group`, `/rename-group`, `/rename-session`) to prevent horizontal privilege escalation.
+- Image uploads are constrained to valid image data URLs and capped at 10 MB per file, stored under `public/uploads/`.
+- Postgres-first data layer: queries run through a helper that sets a per-request session GUC `app.current_user_id` so RLS policies can enforce row ownership. A limited helper role `app_admin` can be used for specific administrative operations (e.g., registration, password migration) via `SET LOCAL ROLE app_admin`.
+
+SQLite remains available for legacy/local development scenarios in `database.js`, but the runtime server uses the Postgres data access layer in `server/db/postgres.js` when `DATABASE_URL` is configured.
 
 ## Recommended Next Steps
 
-- Input validation: add `zod` or `express-validator` for stricter request payload validation across all endpoints.
-- Content Security Policy: replace inline scripts/styles in `public/` with external files and enable Helmet's CSP.
-- CSRF protection: if you continue to use cookies for session auth on POST/PUT/DELETE, add a CSRF token flow (e.g., `csurf`).
-- Secrets management: move secrets from `APIkey.env` to `.env` (or a secret store in production), and never commit them.
+- Input validation: expand `express-validator` beyond auth routes to cover all mutating endpoints.
+- Content Security Policy: continue removing inline styles/behaviors to drop `'unsafe-inline'` from `index.html` and move to a fully strict CSP.
+- Secrets management: keep secrets (OpenAI key, session secret, DB URL) out of source control (environment or secret store).
 
-Notes on Database Hardening & Migration
---------------------------------------
-- Row-Level Security (RLS): SQLite doesn't support RLS. For stronger multi-tenant guarantees, migrate to Postgres and enable RLS policies that only permit access to rows owned by the current user (example SQL added below).
-- Migration steps (high-level):
-  1. Provision a Postgres instance (managed or self-hosted).
-  2. Export existing SQLite data and transform to Postgres types (e.g., using `sqlite3` + custom scripts or `pgloader`).
-  3. Apply schema improvements and indexes in Postgres (see example schema in this file).
-  4. Add RLS policies (example below) and set the current user id in each DB connection/session.
+## Database Hardening & Migration
 
-Example RLS policy (Postgres):
+### Row-Level Security (RLS)
 
-```sql
--- Example policy: only the owner can access their rows
-ALTER TABLE session ENABLE ROW LEVEL SECURITY;
-CREATE POLICY session_owner ON session
-  USING (user_id = current_setting('app.user_id')::int);
+For strong multi-tenant guarantees, enable Postgres RLS policies that only permit access to rows owned by the current user. The application sets `app.current_user_id` per request using `SELECT set_config('app.current_user_id', $1::text, false);` before executing queries.
 
-ALTER TABLE message ENABLE ROW LEVEL SECURITY;
-CREATE POLICY message_owner ON message
-  USING (session_id IN (SELECT id FROM session WHERE user_id = current_setting('app.user_id')::int));
-
--- similar policies for feedback and scale_level
-```
-
-Implementation note: set the `app.user_id` per-request on the DB connection (e.g., `SELECT set_config('app.user_id', $1::text, true);`) so that RLS policies evaluate per-request.
-
-## Database Row-Level Security (RLS) and Migration to Postgres
-
-SQLite does not support Row-Level Security. For multi-tenant security guarantees, migrate to Postgres and enable RLS.
-
-### Example Postgres schema (sketch)
-
-```sql
-CREATE TABLE app_user (
-  id serial PRIMARY KEY,
-  username text UNIQUE NOT NULL,
-  password_hash text NOT NULL
-);
-
-CREATE TABLE session (
-  id serial PRIMARY KEY,
-  user_id int NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-  session_name text NOT NULL,
-  group_id int,
-  is_turing boolean DEFAULT false
-);
-
-CREATE TABLE message (
-  id serial PRIMARY KEY,
-  session_id int NOT NULL REFERENCES session(id) ON DELETE CASCADE,
-  username text,
-  role text NOT NULL,
-  content text NOT NULL,
-  collapsed boolean DEFAULT false,
-  scale_level int DEFAULT 1
-);
-
-CREATE TABLE feedback (
-  id serial PRIMARY KEY,
-  session_id int NOT NULL REFERENCES session(id) ON DELETE CASCADE,
-  message_id int REFERENCES message(id) ON DELETE CASCADE,
-  username text,
-  content text NOT NULL
-);
-
-CREATE TABLE scale_level (
-  id serial PRIMARY KEY,
-  session_id int NOT NULL REFERENCES session(id) ON DELETE CASCADE,
-  username text,
-  scale_level int NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
-```sql
-
-### Enable RLS
+Example policies (simplified):
 
 ```sql
 ALTER TABLE session ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message ENABLE ROW LEVEL SECURITY;
 ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scale_level ENABLE ROW LEVEL SECURITY;
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
 
--- Example policy: only the owner can access their rows
+-- Only the owner can access their sessions
 CREATE POLICY session_owner ON session
-  USING (user_id = current_setting('app.user_id')::int);
+  USING (user_id = current_setting('app.current_user_id')::int);
 
+-- Messages are visible if their session is owned by the current user
 CREATE POLICY message_session_owner ON message
-  USING (session_id IN (SELECT id FROM session WHERE user_id = current_setting('app.user_id')::int));
+  USING (session_id IN (
+    SELECT id FROM session
+    WHERE user_id = current_setting('app.current_user_id')::int
+  ));
 
--- similarly for feedback and scale_level
+-- Similar policies for feedback, scale_level, and groups
 ```
 
-In your application, set the current user context on each request (per pooled connection) before queries:
+In the application, a small wrapper sets the GUC just-in-time:
 
 ```sql
-SELECT set_config('app.user_id', $1::text, true);
+SELECT set_config('app.current_user_id', $1::text, false);
 ```
 
-And use a per-request database connection or a transaction so the setting is scoped properly.
+Notes:
 
-Consider Prisma or Knex for migrations and a clean data access layer.
+- We use `false` for the third parameter so the setting applies to the session (suitable for pooled connections where each logical request obtains a fresh connection).
+- The server uses AsyncLocalStorage to propagate the authenticated user id through async handlers and ensure the setting is applied for each query.
+
+### Helper role for administrative operations
+
+Some operations during authentication need to run before the request has an established `current_user_id`. Create a limited helper role `app_admin` and grant it DML + sequence privileges. The app attempts `SET LOCAL ROLE app_admin` for these operations and falls back if not available. See `docs/RLS.md` and `scripts/grant_app_admin_privileges.sql`.
+
+### Migration SQLite → Postgres
+
+1. Provision Postgres (or run `docker compose up -d`).
+2. Apply `migrations/postgres_schema.sql`.
+3. Migrate data with `npm run migrate:sqlite-to-postgres` (see `migrations/README.md`).
+4. Enable RLS and policies (examples above), grant `app_admin` as needed, and verify with `scripts/check_rls.js`.
+
+## Content handling and sanitization
+
+- Stored messages: user content is stored as-is to preserve formatting. Server-side sanitization is applied when building history for model input to remove embedded data URIs, tags, and truncate overly long content.
+- Assistant content: before persisting, assistant markdown is rendered to HTML and lightly sanitized on the server to remove dangerous tags/attributes.
+- Image uploads: validated and size-limited; files are written to `public/uploads/`.
+
+Consider adopting Prisma/Knex for migrations and a more structured data access layer as the app grows.
