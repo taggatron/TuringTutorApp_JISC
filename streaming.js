@@ -860,7 +860,25 @@ Please return only the number and category (e.g., '5. Full AI') that the user's 
         console.log(`Assessment result: ${assessmentResult}`);
 
         // Extract the number from the result and push to scaleLevels
-        const scaleLevel = parseInt(assessmentResult[0], 10); // Extract the first number from the result
+        // Be robust to model phrasing like "4. AI ...", "Level 4 - AI ...", or "AI Editing (3)"
+        let scaleLevel = NaN;
+        try {
+            // Prefer the first standalone digit 1-5 anywhere in the string
+            const digitMatch = assessmentResult.match(/\b([1-5])\b/);
+            if (digitMatch) {
+                scaleLevel = parseInt(digitMatch[1], 10);
+            } else {
+                // Fallback: infer from known labels if a digit wasn't returned
+                const lower = assessmentResult.toLowerCase();
+                if (lower.includes('full ai')) scaleLevel = 5;
+                else if (lower.includes('ai + human') || lower.includes('ai and human')) scaleLevel = 4;
+                else if (lower.includes('editing')) scaleLevel = 3;
+                else if (lower.includes('ideas') || lower.includes('structure')) scaleLevel = 2;
+                else if (lower.includes('no ai')) scaleLevel = 1;
+            }
+        } catch (_) {
+            // keep NaN and fall through to invalid handler
+        }
         if (!isNaN(scaleLevel)) {
             scaleLevels.push(scaleLevel);
 
@@ -884,18 +902,6 @@ Please return only the number and category (e.g., '5. Full AI') that the user's 
 
     async generateFeedback(userMessage) {
         try {
-            const styleSystemPrompt = `You are a highly professional assessor who writes clear, structured, and well-formatted educational content.
-
-STYLE GUIDELINES:
-• Always use Unicode emojis (⚡, 🧠, 💡, 🪞, 🔍, 🧭) as inline section icons before headings — for example, “⚡ Definition” or “🧠 Why It Matters”.
-• All section headings must appear in **bold** (Markdown) or <strong> (HTML) for visual emphasis.
-• Headings can also be wrapped in <h3> or Markdown ### if appropriate.
-• Use **bold** text for key terms, assessment criteria, and emphasis throughout.
-• Use bullet points (• or -) for lists rather than numbered lists, unless sequence matters.
-• Do not use SVG icons, Font Awesome, or any external icon libraries.
-• Output may be in plain text, Markdown, or HTML — whichever best preserves structure and formatting.
-• Maintain a professional, readable layout similar to ChatGPT’s sectioned response style.`;
-
             const feedbackSystemPrompt = `As a supportive chatbot, suggest an alternative prompt based on the user's input that avoid meeting one of the following criteria: AI + Human Evaluation (AI generates content and humans refine/approve) or Full AI Responsibility (AI fully responsible with minimal human input). Create a maximum 50-word response prompt example aligned with either:
 • Ideas and Structure: AI generates ideas or structure while humans create the content, or
 • Research: AI is used as a research tool to find credible resources on a topic.
@@ -906,7 +912,6 @@ Word this as a direct request (not a question). For example: 'Please generate id
             const response = await this.openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
-                    { role: 'system', content: styleSystemPrompt },
                     { role: 'system', content: feedbackSystemPrompt },
                     { role: 'user', content: cleanedUser }
                 ]

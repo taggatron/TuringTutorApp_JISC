@@ -395,6 +395,10 @@ const pendingFeedbackMargins = new Map(); // legacy no-op
 function createFeedbackContainer(feedback) {
   const template = document.getElementById('feedback-container-template');
   const feedbackContainer = template.cloneNode(true);
+  // Remove the template id so CSS rule `#feedback-container-template { display:none }`
+  // does not apply to the cloned instance. Also ensure it renders as a block element.
+  try { feedbackContainer.removeAttribute('id'); } catch (_) {}
+  feedbackContainer.style.display = '';
   feedbackContainer.classList.add('feedback-visible');
   feedbackContainer.classList.add('feedback-relative');
   feedbackContainer.querySelector('.feedback-message').textContent = feedback;
