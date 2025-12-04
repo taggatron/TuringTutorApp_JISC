@@ -645,7 +645,9 @@ async function loadSessions() {
         }
         const button = document.createElement('button');
         button.className = 'session-button';
-        button.textContent = `Session ${index + 1}`;
+        // Label sessions using timestamp format: "Session : dd/yy/mm hh:mm" (24h)
+        const label = formatSessionLabel(session.updated_at);
+        button.textContent = label;
         button.id = `session-${session.id}`;
         button.draggable = true;
         button.ondragstart = drag;
@@ -833,26 +835,29 @@ function addSessionButton(sessionId) {
     }
     return;
   }
-  const sessionButtons = document.querySelectorAll('.session-button');
-  let highestSessionNumber = 0;
-  sessionButtons.forEach(button => {
-    const buttonText = button.textContent.replace('🗑', '').trim();
-    const matches = buttonText.match(/\d+/);
-    if (matches && matches.length > 0) {
-      const sessionNumber = parseInt(matches[0]);
-      if (sessionNumber > highestSessionNumber) highestSessionNumber = sessionNumber;
-    }
-  });
-  const newSessionNumber = highestSessionNumber + 1;
   const button = document.createElement('button');
   button.className = 'session-button';
-  button.textContent = `Session ${newSessionNumber}`;
+  // Label new sessions using current timestamp in 24h format
+  button.textContent = formatSessionLabel(Date.now());
   button.id = `session-${sessionId}`;
   button.draggable = true; button.ondragstart = drag; button.onclick = () => loadSessionHistory(sessionId);
   const deleteIcon = document.createElement('span'); deleteIcon.textContent = '🗑'; deleteIcon.className = 'delete-icon';
   deleteIcon.onclick = (event) => { event.stopPropagation(); deleteSession(sessionId, button.parentElement.id); };
   button.appendChild(deleteIcon);
   newChats.appendChild(button);
+}
+
+// Format: "Session : dd/yy/mm hh:mm" with a 24-hour clock
+function formatSessionLabel(ts) {
+  let d;
+  try { d = new Date(ts); } catch (_) { d = new Date(); }
+  if (isNaN(d.getTime())) d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `Session : ${dd}/${yy}/${mm} ${hh}:${min}`;
 }
 
 async function startTuringMode() {
