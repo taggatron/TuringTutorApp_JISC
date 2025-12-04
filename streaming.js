@@ -389,7 +389,7 @@ function turingSaveDebug(...args) {
 }
 
 app.post('/update-message', async (req, res) => {
-    const { message_id, content, session_id } = req.body;
+    const { message_id, content, session_id, footer_removed } = req.body;
     const username = req.cookies.username;
 
     if (!message_id && !session_id) {
@@ -456,9 +456,10 @@ app.post('/update-message', async (req, res) => {
         is_turing: isTuring,
         refs_len: Array.isArray(refs) ? refs.length : 0,
         prompts_len: Array.isArray(prompts) ? prompts.length : 0,
-        content_len: cleanedContent.length
+        content_len: cleanedContent.length,
+        footer_removed: footer_removed === true
     });
-    await updateMessageContent(targetMessageId, cleanedContent, refs, prompts);
+    await updateMessageContent(targetMessageId, cleanedContent, refs, prompts, footer_removed === true);
     turingSaveDebug('update complete', { targetMessageId });
         res.json({ success: true });
     } catch (err) {

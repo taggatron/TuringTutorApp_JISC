@@ -223,9 +223,9 @@ async function getEmptyAssistantMessage(session_id) {
   return res.rows[0] || null;
 }
 
-async function updateMessageContent(message_id, content, references = null, prompts = null) {
+async function updateMessageContent(message_id, content, references = null, prompts = null, footer_removed = null) {
   // Update content and optional metadata. Keep backwards compatibility for callers that only pass content.
-  if (references === null && prompts === null) {
+  if (references === null && prompts === null && (footer_removed === null)) {
     await query('UPDATE message SET content = $1 WHERE id = $2', [content, message_id]);
     return;
   }
@@ -234,6 +234,7 @@ async function updateMessageContent(message_id, content, references = null, prom
   let idx = 2;
   if (references !== null) { parts.push(`references_json = $${idx++}`); params.push(JSON.stringify(references)); }
   if (prompts !== null) { parts.push(`prompts_json = $${idx++}`); params.push(JSON.stringify(prompts)); }
+  if (footer_removed !== null) { parts.push(`footer_removed = $${idx++}`); params.push(!!footer_removed); }
   params.push(message_id);
   const sql = `UPDATE message SET ${parts.join(', ')} WHERE id = $${params.length}`;
   await query(sql, params);

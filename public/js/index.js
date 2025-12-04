@@ -1733,10 +1733,10 @@ function enterAssistantEditMode(targetAssistant) {
 
   const toolbar = document.createElement('div');
   toolbar.className = 'assistant-edit-toolbar';
-  // Simple toolbar: Save / Cancel
+  // Simple toolbar: Save / Close
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.textContent = 'Save';
+  saveBtn.textContent = '💾 Save';
   saveBtn.addEventListener('click', () => saveEdit());
   // Decipher button: assess content up to References using server feedback
   const decipherBtn = document.createElement('button');
@@ -1769,7 +1769,8 @@ function enterAssistantEditMode(targetAssistant) {
   });
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
-  cancelBtn.textContent = 'Cancel';
+  cancelBtn.textContent = '✖ Close';
+  cancelBtn.title = 'Close editor';
   cancelBtn.addEventListener('click', () => exitAssistantEditMode(wrapper, false, targetAssistant));
   toolbar.appendChild(saveBtn);
   toolbar.appendChild(decipherBtn);
@@ -1788,7 +1789,8 @@ function enterAssistantEditMode(targetAssistant) {
   // area and let the save flow re-extract metadata from this copy.
   try {
     const existingFooter = targetAssistant.querySelector('[data-section="turing-footer"], .turing-footer');
-    if (existingFooter) {
+    const footerRemoved = targetAssistant.dataset.footerRemoved === '1';
+    if (existingFooter && !footerRemoved) {
       const cloned = existingFooter.cloneNode(true);
       editable.appendChild(document.createElement('br'));
       editable.appendChild(cloned);
@@ -1870,10 +1872,21 @@ function enterAssistantEditMode(targetAssistant) {
         const rawMeta = extractFooterFromEditable(editable);
         // Upload any data URL screenshots first, replace with canonical URL-based prompts
         const meta = await uploadDataUrlPrompts(rawMeta);
-        if (meta && Array.isArray(meta.references) && meta.references.length) payload.references = meta.references;
-        if (meta && Array.isArray(meta.prompts) && meta.prompts.length) payload.prompts = meta.prompts;
-        // Apply or refresh footer in the UI using canonical URLs
-        try { applyFooterToAssistant(targetAssistant, meta); } catch (_) {}
+        const hasRefs = meta && Array.isArray(meta.references) && meta.references.length > 0;
+        const hasPrompts = meta && Array.isArray(meta.prompts) && meta.prompts.length > 0;
+        if (hasRefs) payload.references = meta.references;
+        if (hasPrompts) payload.prompts = meta.prompts;
+        // If user removed both sections, ensure footer is removed and remembered
+        if (!hasRefs && !hasPrompts) {
+          try { removeEmbeddedTuringFooters(targetAssistant); } catch(_) {}
+          targetAssistant.dataset.footerRemoved = '1';
+          payload.footer_removed = true;
+        } else {
+          // Apply or refresh footer in the UI using canonical URLs
+          try { applyFooterToAssistant(targetAssistant, meta); } catch (_) {}
+          targetAssistant.dataset.footerRemoved = '0';
+          payload.footer_removed = false;
+        }
       } catch (e) { console.warn('Could not extract/upload editor metadata:', e); }
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
