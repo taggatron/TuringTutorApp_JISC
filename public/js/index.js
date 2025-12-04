@@ -331,6 +331,7 @@ ws.onmessage = (event) => {
         if (editMode) {
           showEditFeedbackPopup(message.content, editMode);
           try { applyTrafficLightsFromFeedback(message.content, editMode); } catch(_) {}
+          try { showCriteriaClipboard(editMode, message.content); } catch(_) {}
         } else {
           displayFeedback(message.content, message.message_id);
         }
@@ -1906,6 +1907,8 @@ function showEditFeedbackPopup(text, editWrapper) {
     const html = renderMarkdownToHtml(text);
     content.innerHTML = sanitizeHtml(html || escapeHtml(text));
     popup.classList.add('visible');
+    // cache last feedback for quick recall
+    editWrapper.__lastFeedbackText = String(text);
   } catch (e) {
     console.error('showEditFeedbackPopup failed', e);
   }
@@ -1937,6 +1940,30 @@ function applyTrafficLightsFromFeedback(text, editWrapper) {
     else if (s === 'pass') chip.classList.add('chip-pass');
     else if (s === 'fail') chip.classList.add('chip-fail');
   });
+}
+
+// Add a small clipboard icon above the first criteria chip that reopens feedback popup
+function showCriteriaClipboard(editWrapper, feedbackText) {
+  if (!editWrapper) editWrapper = document.querySelector('.assistant-edit-mode');
+  const rail = editWrapper ? editWrapper.querySelector('.assistant-edit-criteria-rail') : null;
+  if (!rail) return;
+  // Ensure only one clipboard trigger exists
+  let clip = rail.querySelector('.criteria-clipboard-trigger');
+  const firstChip = rail.querySelector('.criteria-chip');
+  if (!firstChip) return;
+  if (!clip) {
+    clip = document.createElement('button');
+    clip.type = 'button';
+    clip.className = 'criteria-clipboard-trigger';
+    clip.title = 'Show assessment feedback';
+    clip.textContent = '📋';
+    clip.addEventListener('click', () => {
+      const last = editWrapper.__lastFeedbackText || feedbackText || '';
+      if (last) showEditFeedbackPopup(last, editWrapper);
+    });
+    // Insert above the first chip
+    rail.insertBefore(clip, firstChip);
+  }
 }
 
 // Replace any data URL image prompts with uploaded URLs via /upload-image

@@ -134,6 +134,18 @@
     gap: 10px;
     z-index: 3060;
 }
+.criteria-clipboard-trigger {
+    align-self: center;
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #111827;
+    border-radius: 999px;
+    width: 28px; height: 28px;
+    font-size: 16px; line-height: 26px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    cursor: pointer;
+}
+.criteria-clipboard-trigger:hover { background:#e5e7eb; }
 .criteria-chip {
     min-width: 64px;
     padding: 10px 14px;
