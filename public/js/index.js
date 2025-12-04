@@ -327,8 +327,14 @@ ws.onmessage = (event) => {
       }
     } else if (message.type === 'feedback') {
       if (message.content) {
-        displayFeedback(message.content, message.message_id);
-        console.log('Feedback updated in the container:', message.content);
+        const editMode = document.querySelector('.assistant-edit-mode');
+        if (editMode) {
+          showEditFeedbackPopup(message.content, editMode);
+          try { applyTrafficLightsFromFeedback(message.content, editMode); } catch(_) {}
+        } else {
+          displayFeedback(message.content, message.message_id);
+        }
+        console.log('Feedback updated:', message.content);
       } else {
         console.error('Feedback content is empty');
       }
@@ -1810,6 +1816,20 @@ function enterAssistantEditMode(targetAssistant) {
     });
     wrapper.appendChild(rail);
   })();
+  // Feedback popup container inside edit mode
+  const fbPopup = document.createElement('div');
+  fbPopup.className = 'assistant-edit-feedback-popup';
+  const fbInner = document.createElement('div');
+  fbInner.className = 'assistant-edit-feedback-content';
+  const fbClose = document.createElement('button');
+  fbClose.type = 'button';
+  fbClose.className = 'assistant-edit-feedback-close';
+  fbClose.textContent = '×';
+  fbClose.title = 'Close feedback';
+  fbClose.addEventListener('click', () => fbPopup.classList.remove('visible'));
+  fbPopup.appendChild(fbClose);
+  fbPopup.appendChild(fbInner);
+  wrapper.appendChild(fbPopup);
   wrapper.appendChild(editable);
   document.body.appendChild(wrapper);
 
@@ -1871,6 +1891,52 @@ function enterAssistantEditMode(targetAssistant) {
   }
 
   return wrapper;
+}
+
+// Show feedback as a popup within the Turing edit overlay
+function showEditFeedbackPopup(text, editWrapper) {
+  try {
+    if (!editWrapper) editWrapper = document.querySelector('.assistant-edit-mode');
+    if (!editWrapper) return;
+    const popup = editWrapper.querySelector('.assistant-edit-feedback-popup');
+    const content = editWrapper.querySelector('.assistant-edit-feedback-content');
+    if (!popup || !content) return;
+    content.textContent = '';
+    // Render simple markdown to HTML for readability
+    const html = renderMarkdownToHtml(text);
+    content.innerHTML = sanitizeHtml(html || escapeHtml(text));
+    popup.classList.add('visible');
+  } catch (e) {
+    console.error('showEditFeedbackPopup failed', e);
+  }
+}
+
+// Parse feedback lines and apply traffic light classes to criteria chips
+function applyTrafficLightsFromFeedback(text, editWrapper) {
+  if (!editWrapper) editWrapper = document.querySelector('.assistant-edit-mode');
+  const rail = editWrapper ? editWrapper.querySelector('.assistant-edit-criteria-rail') : null;
+  if (!rail) return;
+  const lines = String(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const statuses = {};
+  ['P1','P2','M2','D1'].forEach(k => {
+    const line = lines.find(l => l.toUpperCase().startsWith(k + ':')) || '';
+    const low = line.toLowerCase();
+    let status = null;
+    if (/(distinction|excellent|strong)/.test(low)) status = 'distinction';
+    else if (/(merit|good|adequate)/.test(low)) status = 'merit';
+    else if (/(pass|meets|basic|minimal)/.test(low)) status = 'pass';
+    else if (/(not met|missing|insufficient|needs)/.test(low)) status = 'fail';
+    statuses[k] = status;
+  });
+  rail.querySelectorAll('.criteria-chip').forEach(chip => {
+    const key = chip.textContent.trim();
+    chip.classList.remove('chip-pass','chip-merit','chip-distinction','chip-fail');
+    const s = statuses[key];
+    if (s === 'distinction') chip.classList.add('chip-distinction');
+    else if (s === 'merit') chip.classList.add('chip-merit');
+    else if (s === 'pass') chip.classList.add('chip-pass');
+    else if (s === 'fail') chip.classList.add('chip-fail');
+  });
 }
 
 // Replace any data URL image prompts with uploaded URLs via /upload-image

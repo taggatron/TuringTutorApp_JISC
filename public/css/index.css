@@ -148,6 +148,10 @@
     position: relative;
 }
 .criteria-chip:hover { transform: translateY(-1px); transition: transform 120ms ease; }
+.criteria-chip.chip-pass { border-color:#86efac; background: linear-gradient(180deg,#f0fdf4 0%, #dcfce7 100%); color:#065f46; box-shadow: 0 4px 14px rgba(16,185,129,0.15); }
+.criteria-chip.chip-merit { border-color:#fde68a; background: linear-gradient(180deg,#fffbeb 0%, #fef3c7 100%); color:#92400e; box-shadow: 0 4px 14px rgba(245,158,11,0.15); }
+.criteria-chip.chip-distinction { border-color:#93c5fd; background: linear-gradient(180deg,#eff6ff 0%, #dbeafe 100%); color:#1e3a8a; box-shadow: 0 4px 14px rgba(59,130,246,0.18); }
+.criteria-chip.chip-fail { border-color:#fecaca; background: linear-gradient(180deg,#fff1f2 0%, #fee2e2 100%); color:#7f1d1d; box-shadow: 0 4px 14px rgba(239,68,68,0.18); }
 .criteria-chip::after {
     content: attr(data-tip);
     position: absolute;
@@ -174,6 +178,44 @@
     .criteria-chip { min-width: 56px; padding: 8px 10px; }
     .criteria-chip::after { width: 220px; }
 }
+
+/* Feedback popup inside Turing edit mode */
+.assistant-edit-feedback-popup {
+    position: absolute;
+    top: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 900px;
+    width: calc(100% - 48px);
+    background: rgba(17,24,39,0.5);
+    border-radius: 12px;
+    padding: 8px;
+    display: none;
+    z-index: 3070;
+}
+.assistant-edit-feedback-popup.visible { display: block; }
+.assistant-edit-feedback-content {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    color: #111827;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+    max-height: 40vh;
+    overflow: auto;
+}
+.assistant-edit-feedback-close {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    width: 28px; height: 28px;
+    font-size: 16px; line-height: 26px;
+    color: #6b7280;
+    cursor: pointer;
+}
+.assistant-edit-feedback-close:hover { background:#f3f4f6; }
 .hide-sidebar {
     animation: hideSidebar 0.4s cubic-bezier(.4,2,.6,1) forwards;
 }
