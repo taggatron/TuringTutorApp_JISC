@@ -639,6 +639,8 @@ if (process.env.HTTPS_ENABLED === 'true') {
 }
 
 // Try to listen on the requested port; if taken, try the next port(s) to be developer-friendly
+// Defer WebSocketServer creation until after a successful listen to avoid EADDRINUSE crashes.
+let wss; // initialized after server starts listening
 function tryListen(p, attemptsLeft = 10) {
     server.once('error', (err) => {
         if (err && err.code === 'EADDRINUSE') {
@@ -660,12 +662,15 @@ function tryListen(p, attemptsLeft = 10) {
         server.removeAllListeners('error');
         const proto = (process.env.HTTPS_ENABLED === 'true') ? 'https' : 'http';
         console.log(`Server running at ${proto}://localhost:${p}`);
+
+        // Initialize WebSocket server only after HTTP/S server is successfully listening
+        if (!wss) {
+            wss = new WebSocketServer({ server });
+        }
     });
 }
 
 tryListen(port, 50);
-
-const wss = new WebSocketServer({ server });
 
 class ChatGPTProcessor {
     constructor(openai, ws, session_id, conversationHistory, username) {
@@ -930,7 +935,14 @@ Word this as a direct request (not a question). For example: 'Please generate id
     }
 }
 
-wss.on('connection', async (ws, req) => {
+// Ensure WebSocketServer exists even if server binding was retried
+if (!wss) {
+    try {
+        wss = new WebSocketServer({ server });
+    } catch (_) {}
+}
+
+wss && wss.on('connection', async (ws, req) => {
     let session_id = null;
     let conversationHistory = [];
 
