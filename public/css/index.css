@@ -113,8 +113,67 @@
 .assistant-edit-toolbar button.active { background:#2d8cff; color:#fff; border-color:#2d8cff; }
 .assistant-edit-toolbar button[disabled] { opacity:0.4; cursor:default; }
 
+/* Decipher button variant */
+.assistant-edit-toolbar .decipher-btn {
+    background: #fff7ed; /* warm light */
+    border-color: #fdba74; /* orange-300 */
+    color: #9a3412; /* orange-800 */
+}
+.assistant-edit-toolbar .decipher-btn:hover { background:#ffedd5; }
+
 .assistant-edit-toolbar .spacer { flex:1; }
 .assistant-edit-toolbar .label { font-weight:600; margin-right:4px; }
+
+/* Right-side criteria rail within Turing edit popup */
+.assistant-edit-criteria-rail {
+    position: absolute;
+    right: 18px;
+    top: 110px; /* below toolbar */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 3060;
+}
+.criteria-chip {
+    min-width: 64px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid #c7d2fe; /* indigo-200 */
+    background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+    color: #111827;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    box-shadow: 0 4px 14px rgba(30, 58, 138, 0.12);
+    cursor: default;
+    position: relative;
+}
+.criteria-chip:hover { transform: translateY(-1px); transition: transform 120ms ease; }
+.criteria-chip::after {
+    content: attr(data-tip);
+    position: absolute;
+    right: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: #111827; /* slate-900 */
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+    width: 280px;
+    max-width: 42vw;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms ease;
+    text-align: left;
+    line-height: 1.25;
+}
+.criteria-chip:hover::after { opacity: 1; }
+
+@media (max-width: 960px) {
+    .assistant-edit-criteria-rail { right: 8px; }
+    .criteria-chip { min-width: 56px; padding: 8px 10px; }
+    .criteria-chip::after { width: 220px; }
+}
 .hide-sidebar {
     animation: hideSidebar 0.4s cubic-bezier(.4,2,.6,1) forwards;
 }
@@ -266,6 +325,44 @@
 #turing-mode-container { margin-bottom: 8px; display:flex; flex-direction:column; gap:6px; }
 /* Reusable icon size for Turing logos in sidebar items */
 img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inline-block; }
+
+/* Criteria sidebar buttons (vertical stack) */
+.criteria-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+}
+.criteria-btn {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #111827;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-weight: 600;
+    cursor: default;
+    position: relative;
+}
+.criteria-btn:hover { background: #e5e7eb; }
+.criteria-btn::after {
+    content: attr(title);
+    position: absolute;
+    left: 110%;
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: normal;
+    max-width: 240px;
+    background: #111827;
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+    z-index: 2000;
+}
+.criteria-btn:hover::after { opacity: 1; }
 
 /* Replace border-right blinking caret with a pseudo-element so its height exactly matches the text */
 /* This overrides older rules that used `border-right` and could yield a taller caret due to padding. */

@@ -1731,11 +1731,41 @@ function enterAssistantEditMode(targetAssistant) {
   saveBtn.type = 'button';
   saveBtn.textContent = 'Save';
   saveBtn.addEventListener('click', () => saveEdit());
+  // Decipher button: assess content up to References using server feedback
+  const decipherBtn = document.createElement('button');
+  decipherBtn.type = 'button';
+  decipherBtn.className = 'decipher-btn';
+  decipherBtn.title = 'Decipher and assess (🔍)';
+  decipherBtn.textContent = '🔍 Decipher';
+  decipherBtn.addEventListener('click', () => {
+    try {
+      // Get current editable HTML and trim at References section
+      const editableEl = wrapper.querySelector('.assistant-editable-content');
+      let html = editableEl ? editableEl.innerHTML || '' : '';
+      const lower = html.toLowerCase();
+      const refIdx = lower.indexOf('>references<');
+      if (refIdx > -1) {
+        // Roughly trim content before the heading tag that contains 'References'
+        html = html.slice(0, refIdx);
+      }
+      const cleaned = sanitizeHtml(html);
+      // Send to server via websocket to generate feedback/assessment
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'generateFeedback', content: cleaned, session_id }));
+        showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
+      } else {
+        console.warn('WebSocket not open; cannot send decipher request');
+      }
+    } catch (e) {
+      console.error('Decipher click failed:', e);
+    }
+  });
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => exitAssistantEditMode(wrapper, false, targetAssistant));
   toolbar.appendChild(saveBtn);
+  toolbar.appendChild(decipherBtn);
   toolbar.appendChild(cancelBtn);
 
   const editable = document.createElement('div');
@@ -1760,6 +1790,26 @@ function enterAssistantEditMode(targetAssistant) {
 
   wrapper.appendChild(closeBtn);
   wrapper.appendChild(toolbar);
+  // Criteria rail on the right side of the popup
+  (function addCriteriaRail() {
+    const rail = document.createElement('aside');
+    rail.className = 'assistant-edit-criteria-rail';
+    const items = [
+      { key: 'P1', tip: 'Use research to identify a range of potential diseases for each patient (≥4 per patient).' },
+      { key: 'P2', tip: 'Create a detailed method: tests, techniques, equipment (sizes/quantities/PPE) informed by suspected diseases.' },
+      { key: 'M2', tip: 'Explain the rationale for tests and techniques chosen based on suspected diseases (builds on P2/M1).' },
+      { key: 'D1', tip: 'Justify the choice and settings of appropriate equipment for chosen tests and techniques.' }
+    ];
+    items.forEach(it => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'criteria-chip';
+      b.textContent = it.key;
+      b.setAttribute('data-tip', it.tip);
+      rail.appendChild(b);
+    });
+    wrapper.appendChild(rail);
+  })();
   wrapper.appendChild(editable);
   document.body.appendChild(wrapper);
 
