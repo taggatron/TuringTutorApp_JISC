@@ -770,8 +770,8 @@ Return only the HTML fragment for the requested response — nothing else (no co
                 this.ws.send(JSON.stringify({ type: 'assistant', content: delta, format }));
             }
 
-            // Step 2: Assess the conversation history to determine the scale level
-            const scaleLevels = await this.assessScaleLevel(this.conversationHistory);
+            // Step 2: Assess using the latest user content to ensure accuracy
+            const scaleLevels = await this.assessScaleLevel(this.conversationHistory, userMessage && userMessage.content ? String(userMessage.content) : null);
             this.ws.send(JSON.stringify({ type: 'scale', data: scaleLevels }));
 
             // Step 3: Add the assistant's message to the conversation history
@@ -801,12 +801,25 @@ Return only the HTML fragment for the requested response — nothing else (no co
                     console.log(`Assistant message saved to session ID: ${this.session_id} with collapsed state: ${shouldCollapse} and scale_level: ${scaleLevel}; message_id=${messageId}`);
                 }
 
-                // Step 4: Generate feedback if scale level is 3 or above, now including message_id
-                if (scaleLevels.some(level => level >= 3)) {
-                    const feedback = await this.generateFeedback(userMessage.content);
-                    if (feedback) {
-                            this.ws.send(JSON.stringify({ type: 'feedback', content: feedback, message_id: messageId, format: 'markdown' }));
+                // Step 4: Generate feedback if scale level is 3 or above AND session is not Turing Mode
+                // This preserves Decipher-only behavior for Turing edit mode while keeping
+                // automatic feedback for standard chat sessions.
+                try {
+                    const sessRow = await getSessionById(this.session_id);
+                    const isTuringSession = !!(sessRow && (sessRow.is_turing === 1 || sessRow.is_turing === true));
+                    if (!isTuringSession && scaleLevels.length) {
+                        const topLevel = Math.max(...scaleLevels);
+                        if (topLevel >= 3) {
+                            // For Level 3 and above, provide a short alternative prompt to reduce AI reliance
+                            const alt = await this.generateAlternativePrompt(userMessage.content);
+                            if (alt) {
+                                this.ws.send(JSON.stringify({ type: 'feedback', content: alt, message_id: messageId, format: 'markdown' }));
+                            }
                         }
+                    }
+                } catch (e) {
+                    // If we fail to resolve session type, do not block the message flow
+                    console.warn('Feedback generation skipped due to session lookup error:', e?.message || e);
                 }
                 // Notify client of the saved message id so the UI can reconcile streaming placeholders
                 try { this.ws.send(JSON.stringify({ type: 'message-saved', message_id: messageId })); } catch (notifyErr) { /* ignore */ }
@@ -833,17 +846,34 @@ Return only the HTML fragment for the requested response — nothing else (no co
         }
     }
 
-    async assessScaleLevel(conversationHistory) {
+    async assessScaleLevel(conversationHistory, latestUserContent = null) {
     try {
         const scaleLevels = []; // Example of multiple levels [1, 2, 3]
 
-        // Find the most recent user message
-        const recentUserMessage = [...conversationHistory].reverse().find(message => message.role === "user");
-        const userMessageContent = recentUserMessage ? recentUserMessage.content : "";
+        // Prefer the provided latest user content; otherwise find the most recent 'user' message
+        let userMessageContent = latestUserContent || "";
+        if (!userMessageContent) {
+            const recentUserMessage = [...conversationHistory].reverse().find(message => message.role === "user");
+            userMessageContent = recentUserMessage ? recentUserMessage.content : "";
+        }
+        console.log('[Assessment] Using content:', (userMessageContent || '').slice(0, 200));
 
         // Make the API call to OpenAI
         const MAX_MESSAGE_CHARS = 2000;
         const cleanedUserMessage = this.sanitizeContent(userMessageContent, MAX_MESSAGE_CHARS);
+
+        // Heuristic: classify clear generative requests as Level 5 immediately
+        // Examples: "create/write/generate an essay/paragraph", "compose a report"
+        try {
+            // Expanded heuristic: allow intervening words (e.g., "make me a 2 paragraph essay")
+            // Match verb, then up to ~60 chars before the content type keyword
+            const gen5Pattern = /(create|write|generate|compose|draft|produce|make|build)[^\n]{0,60}\b(essay|paragraph|report|article|poem|story|code|program|script|presentation|slide\s*deck|slides)\b/i;
+            if (gen5Pattern.test(cleanedUserMessage)) {
+                scaleLevels.push(5);
+                try { await saveScaleLevel(this.session_id, this.username, 5); } catch (_) {}
+                return scaleLevels;
+            }
+        } catch (_) {}
         const assessmentResponse = await this.openai.chat.completions.create({
             model: "gpt-4o", // Changed model to gpt-4o
             messages: [
@@ -881,6 +911,13 @@ Please return only the number and category (e.g., '5. Full AI') that the user's 
                 else if (lower.includes('editing')) scaleLevel = 3;
                 else if (lower.includes('ideas') || lower.includes('structure')) scaleLevel = 2;
                 else if (lower.includes('no ai')) scaleLevel = 1;
+                // Additional fallback: if original user text looked generative, treat as 5
+                if (isNaN(scaleLevel)) {
+                    const gen5Pattern2 = /(create|write|generate|compose|draft|produce|make|build)[^\n]{0,60}\b(essay|paragraph|report|article|poem|story|code|program|script|presentation|slide\s*deck|slides)\b/i;
+                    if (gen5Pattern2.test((cleanedUserMessage || ''))) {
+                        scaleLevel = 5;
+                    }
+                }
             }
         } catch (_) {
             // keep NaN and fall through to invalid handler
@@ -905,6 +942,30 @@ Please return only the number and category (e.g., '5. Full AI') that the user's 
     }
 }
 
+
+    // Generate a supportive alternative prompt to reduce AI reliance (used for Level 5)
+    async generateAlternativePrompt(userMessage) {
+        try {
+            const supportivePrompt = `As a supportive chatbot, suggest an alternative prompt based on the user's input that avoid meeting one of the following criteria: AI + Human Evaluation (AI generates content and humans refine/approve) or Full AI Responsibility (AI fully responsible with minimal human input). Create a maximum 50-word response prompt example aligned with either:\n• Ideas and Structure: AI generates ideas or structure while humans create the content, or\n• Research: AI is used as a research tool to find credible resources on a topic.\nWord this as a direct request (not a question). For example: 'Please generate ideas for an essay about (insert topic here)'.`;
+
+            const MAX_MESSAGE_CHARS = 4000;
+            const cleanedUser = this.sanitizeContent(userMessage, MAX_MESSAGE_CHARS);
+            const response = await this.openai.chat.completions.create({
+                model: "gpt-4o",
+                messages: [
+                    { role: 'system', content: supportivePrompt },
+                    { role: 'user', content: cleanedUser }
+                ]
+            });
+
+            const result = response.choices[0].message.content.trim();
+            console.log("Generated Alternative Prompt:", result);
+            return result;
+        } catch (error) {
+            console.error('Error generating alternative prompt:', error);
+            return '';
+        }
+    }
 
     async generateFeedback(userMessage) {
         try {
