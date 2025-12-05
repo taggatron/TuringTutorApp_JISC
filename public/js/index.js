@@ -24,7 +24,9 @@ try {
   const wsUrl = `${wsProtocol}//${location.host}`;
   ws = new WebSocket(wsUrl);
   ws.addEventListener('open', () => console.debug('WebSocket connected to', wsUrl));
-  ws.addEventListener('error', (e) => console.error('WebSocket error', e));
+    // Allow optional markdown bold around the key: **P1:**, and optional headings
+    // Also tolerate an en dash/em dash after the status delimiter
+    let line = lines.find(l => new RegExp(`^\\s*(?:#{0,6}\\s*)?(?:\\*\\*)?${k}(?:\\*\\*)?\\s*(?:[:\\-—])`, 'i').test(l));
 } catch (e) {
   console.error('Failed to create WebSocket:', e);
 }
@@ -328,6 +330,9 @@ ws.onmessage = (event) => {
     } else if (message.type === 'feedback') {
       if (message.content) {
         try { document.querySelector('.assistant-edit-mode .decipher-wait-overlay')?.classList.remove('visible'); } catch(_) {}
+        // Clear loading state and debounce flag when feedback arrives
+        try { setCriteriaLoading(false); } catch(_) {}
+        window.__decipherInFlight = false;
         const editMode = document.querySelector('.assistant-edit-mode');
         if (editMode) {
           showEditFeedbackPopup(message.content, editMode);
@@ -339,6 +344,7 @@ ws.onmessage = (event) => {
         console.log('Feedback updated:', message.content);
       } else {
         console.error('Feedback content is empty');
+        window.__decipherInFlight = false;
       }
     }
     else if (message.type === 'message-saved') {
@@ -1751,7 +1757,12 @@ function enterAssistantEditMode(targetAssistant) {
   decipherBtn.textContent = '🔍 Decipher';
   decipherBtn.addEventListener('click', () => {
     try {
+      // Debounce: prevent overlapping decipher requests
+      if (window.__decipherInFlight) return;
+      window.__decipherInFlight = true;
       showDecipherWait();
+      // Show loading state on criteria chips while awaiting feedback
+      setCriteriaLoading(true, wrapper);
       // Get current editable HTML and trim at References section
       const editableEl = wrapper.querySelector('.assistant-editable-content');
       let html = editableEl ? editableEl.innerHTML || '' : '';
@@ -1768,9 +1779,14 @@ function enterAssistantEditMode(targetAssistant) {
         showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
       } else {
         console.warn('WebSocket not open; cannot send decipher request');
+        // Clear in-flight state and loading if we fail to send
+        setCriteriaLoading(false, wrapper);
+        window.__decipherInFlight = false;
       }
     } catch (e) {
       console.error('Decipher click failed:', e);
+      setCriteriaLoading(false, wrapper);
+      window.__decipherInFlight = false;
     }
   });
   const cancelBtn = document.createElement('button');
@@ -1964,18 +1980,32 @@ function applyTrafficLightsFromFeedback(text, editWrapper) {
   if (!editWrapper) editWrapper = document.querySelector('.assistant-edit-mode');
   const rail = editWrapper ? editWrapper.querySelector('.assistant-edit-criteria-rail') : null;
   if (!rail) return;
-  const lines = String(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // Clear loading state when applying real statuses
+  rail.querySelectorAll('.criteria-chip').forEach(chip => chip.classList.remove('chip-loading'));
+  const rawText = String(text || '').trim();
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const statuses = {};
   ['P1','P2','M2','D1'].forEach(k => {
-    // Accept formats like "P1:", "P1 -", "P1 —" and tolerate leading emojis/spaces
-    const line = lines.find(l => new RegExp(`^\s*${k}\s*(?:[:\-—])`, 'i').test(l)) || '';
+    // Prefer a line that starts with optional markdown heading then the key and a delimiter
+    // Matches: "P1:", "P1 -", "### P1:", "##   D1 —"
+    let line = lines.find(l => new RegExp(`^\\s*#{0,6}\\s*${k}\\s*(?:[:\\-—])`, 'i').test(l));
+    // Fallback: any line containing the key
+    if (!line) line = lines.find(l => new RegExp(`\\b${k}\\b`, 'i').test(l)) || '';
     const low = line.toLowerCase();
     let status = null;
     if (/(distinction|excellent|strong)/.test(low)) status = 'distinction';
     else if (/(merit|good|adequate)/.test(low)) status = 'merit';
     else if (/(pass|meets|basic|minimal)/.test(low)) status = 'pass';
     else if (/(not met|missing|insufficient|needs)/.test(low)) status = 'fail';
-    statuses[k] = status;
+    // If still unknown, infer from global summary keywords
+    if (!status) {
+      const g = rawText.toLowerCase();
+      if (/overall\s+distinction|high distinction/.test(g)) status = 'distinction';
+      else if (/overall\s+merit|solid merit/.test(g)) status = 'merit';
+      else if (/overall\s+pass|meets minimum/.test(g)) status = 'pass';
+      else if (/overall\s+fail|does not meet/.test(g)) status = 'fail';
+    }
+    statuses[k] = status || null;
   });
   // Force a reflow before applying classes to avoid first-click paint issues
   void rail.offsetWidth;
@@ -1987,9 +2017,31 @@ function applyTrafficLightsFromFeedback(text, editWrapper) {
     else if (s === 'merit') chip.classList.add('chip-merit');
     else if (s === 'pass') chip.classList.add('chip-pass');
     else if (s === 'fail') chip.classList.add('chip-fail');
+    else {
+      // No match: briefly toggle to force repaint, leaving neutral state
+      if (typeof window !== 'undefined' && window.__DEV__ !== false) {
+        try {
+          console.debug('[criteria] No status detected for', key, 'from feedback:', rawText);
+        } catch (_) {}
+      }
+      chip.style.transform = 'scale(1.001)';
+      // eslint-disable-next-line no-unused-expressions
+      chip.offsetHeight;
+      chip.style.transform = '';
+    }
   });
   // Ensure the rail is visible and styles applied immediately
   rail.classList.add('criteria-updated');
+}
+
+// Set or clear a temporary loading state on criteria chips
+function setCriteriaLoading(isLoading, editWrapper) {
+  if (!editWrapper) editWrapper = document.querySelector('.assistant-edit-mode');
+  const rail = editWrapper ? editWrapper.querySelector('.assistant-edit-criteria-rail') : null;
+  if (!rail) return;
+  rail.querySelectorAll('.criteria-chip').forEach(chip => {
+    if (isLoading) chip.classList.add('chip-loading'); else chip.classList.remove('chip-loading');
+  });
 }
 
 // Add a small clipboard icon above the first criteria chip that reopens feedback popup
