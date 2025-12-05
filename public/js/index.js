@@ -590,8 +590,10 @@ async function loadChatHistory(messages) {
       messageElement.appendChild(overlayDiv);
       // If this message carries persisted references/prompts metadata, rehydrate a footer
       try {
-        const footerNode = buildFooterFromMessage(msg);
-        if (footerNode) messageElement.appendChild(footerNode);
+        if (!msg.footer_removed) {
+          const footerNode = buildFooterFromMessage(msg);
+          if (footerNode) messageElement.appendChild(footerNode);
+        }
       } catch (e) { /* best-effort */ }
       row.appendChild(messageElement);
       const fb = feedbackByMessageId.get(String(msg.message_id));
@@ -757,8 +759,10 @@ async function loadSessionHistory(sessionId) {
           assistantMessageDiv.appendChild(overlay);
           // Rehydrate persisted references/prompts if present
           try {
-            const footerNode = buildFooterFromMessage(msg);
-            if (footerNode) assistantMessageDiv.appendChild(footerNode);
+            if (!msg.footer_removed) {
+              const footerNode = buildFooterFromMessage(msg);
+              if (footerNode) assistantMessageDiv.appendChild(footerNode);
+            }
           } catch (e) { /* ignore */ }
           if (closeBtn && overlay && contentDiv) {
             closeBtn.addEventListener('click', function(e) {

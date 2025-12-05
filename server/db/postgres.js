@@ -159,7 +159,7 @@ async function saveMessageWithScaleLevel(session_id, username, role, content, co
 
 async function getMessages(session_id) {
   // Explicitly select common columns including metadata jsonb columns if present
-  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts, footer_removed FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
   // Ensure references/prompts are parsed to native JS objects if stored as strings
   return res.rows.map(r => ({
     ...r,
@@ -196,7 +196,7 @@ async function getScaleLevels(session_id) {
 }
 
 async function getSessions(user_id) {
-  const res = await query('SELECT * FROM session WHERE user_id = $1', [user_id]);
+  const res = await query('SELECT * FROM session WHERE user_id = $1 ORDER BY updated_at DESC', [user_id]);
   return res.rows;
 }
 
@@ -226,7 +226,8 @@ async function getEmptyAssistantMessage(session_id) {
 async function updateMessageContent(message_id, content, references = null, prompts = null, footer_removed = null) {
   // Update content and optional metadata. Keep backwards compatibility for callers that only pass content.
   if (references === null && prompts === null && (footer_removed === null)) {
-    await query('UPDATE message SET content = $1 WHERE id = $2', [content, message_id]);
+    await query('UPDATE message SET content = $1, updated_at = now() WHERE id = $2', [content, message_id]);
+    await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]);
     return;
   }
   const parts = ['content = $1'];
@@ -235,9 +236,12 @@ async function updateMessageContent(message_id, content, references = null, prom
   if (references !== null) { parts.push(`references_json = $${idx++}`); params.push(JSON.stringify(references)); }
   if (prompts !== null) { parts.push(`prompts_json = $${idx++}`); params.push(JSON.stringify(prompts)); }
   if (footer_removed !== null) { parts.push(`footer_removed = $${idx++}`); params.push(!!footer_removed); }
+  // Update timestamp directly in SQL to avoid placeholder alignment issues
+  parts.push('updated_at = now()');
   params.push(message_id);
   const sql = `UPDATE message SET ${parts.join(', ')} WHERE id = $${params.length}`;
   await query(sql, params);
+  await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]);
 }
 
 async function updateMessageCollapsedState(message_id, collapsed) {
