@@ -1967,7 +1967,8 @@ function applyTrafficLightsFromFeedback(text, editWrapper) {
   const lines = String(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const statuses = {};
   ['P1','P2','M2','D1'].forEach(k => {
-    const line = lines.find(l => l.toUpperCase().startsWith(k + ':')) || '';
+    // Accept formats like "P1:", "P1 -", "P1 —" and tolerate leading emojis/spaces
+    const line = lines.find(l => new RegExp(`^\s*${k}\s*(?:[:\-—])`, 'i').test(l)) || '';
     const low = line.toLowerCase();
     let status = null;
     if (/(distinction|excellent|strong)/.test(low)) status = 'distinction';
@@ -1976,6 +1977,8 @@ function applyTrafficLightsFromFeedback(text, editWrapper) {
     else if (/(not met|missing|insufficient|needs)/.test(low)) status = 'fail';
     statuses[k] = status;
   });
+  // Force a reflow before applying classes to avoid first-click paint issues
+  void rail.offsetWidth;
   rail.querySelectorAll('.criteria-chip').forEach(chip => {
     const key = chip.textContent.trim();
     chip.classList.remove('chip-pass','chip-merit','chip-distinction','chip-fail');
@@ -1985,6 +1988,8 @@ function applyTrafficLightsFromFeedback(text, editWrapper) {
     else if (s === 'pass') chip.classList.add('chip-pass');
     else if (s === 'fail') chip.classList.add('chip-fail');
   });
+  // Ensure the rail is visible and styles applied immediately
+  rail.classList.add('criteria-updated');
 }
 
 // Add a small clipboard icon above the first criteria chip that reopens feedback popup
