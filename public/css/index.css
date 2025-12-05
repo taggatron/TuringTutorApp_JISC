@@ -1,3 +1,101 @@
+/* Decipher waiting overlay */
+.decipher-wait-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    /* Brighter backdrop: light dim + subtle blur for focus */
+    background: rgba(255, 255, 255, 0.557);
+    backdrop-filter: blur(2px);
+    z-index: 9999;
+}
+.decipher-wait-overlay.visible { display: flex; }
+.decipher-wait-content { width: 380px; max-width: 90vw; }
+.decipher-wait-overlay svg {
+    width: 100%;
+    height: auto;
+    /* Ensure full brightness and vivid colors despite backdrop dim */
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.25)) brightness(1.25) saturate(1.2) !important;
+}
+.decipher-wait-caption { margin-top: 10px; text-align: center; font-weight: 600; color: #2d6cdf; animation: colorShift 1400ms ease-in-out infinite alternate; }
+@keyframes textGlow {
+    0% { filter: drop-shadow(0 0 0px rgba(45,108,223,0.0)); }
+    50% { filter: drop-shadow(0 0 8px rgba(45,108,223,0.55)); }
+    100% { filter: drop-shadow(0 0 0px rgba(45,108,223,0.0)); }
+}
+@keyframes textGlowStrong {
+    0% { filter: drop-shadow(0 0 2px rgba(45,108,223,0.35)); }
+    25% { filter: drop-shadow(0 0 10px rgba(45,108,223,0.70)); }
+    50% { filter: drop-shadow(0 0 14px rgba(45,108,223,0.85)); }
+    75% { filter: drop-shadow(0 0 10px rgba(59,130,246,0.75)); }
+    100% { filter: drop-shadow(0 0 2px rgba(45,108,223,0.35)); }
+}
+/* Glow only the main title text elements in the SVG */
+/* Glow only letters labelled via Inkscape (T,U,R,I,N,G and space separator) */
+/* Glow the letter tspans which are generated with ids like tspanXXXX */
+.decipher-wait-overlay svg tspan[id^="tspan"],
+.decipher-wait-overlay svg [inkscape\:label],
+.decipher-wait-overlay svg [inkscape\:label="T"],
+.decipher-wait-overlay svg [inkscape\:label="U"],
+.decipher-wait-overlay svg [inkscape\:label="R"],
+.decipher-wait-overlay svg [inkscape\:label="I"],
+.decipher-wait-overlay svg [inkscape\:label="N"],
+.decipher-wait-overlay svg [inkscape\:label="G"],
+.decipher-wait-overlay svg [inkscape\:label="T"],
+.decipher-wait-overlay svg [inkscape\:label="O"],
+.decipher-wait-overlay svg [inkscape\:label="R"],
+.decipher-wait-overlay svg [inkscape\:label="U"] {
+    animation: textGlowStrong 1300ms ease-in-out infinite;
+}
+
+/* Assessing… caption: brand shimmer + soft bounce */
+@keyframes assessingShimmer {
+    0% { background-position: -200% 0; }
+    50% { background-position: 0% 0; }
+    100% { background-position: 200% 0; }
+}
+@keyframes assessingBounce {
+    0% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-2px) scale(1.035); }
+    100% { transform: translateY(0) scale(1); }
+}
+.decipher-wait-caption {
+    margin-top: 10px;
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: transparent;
+    background-image: linear-gradient(90deg, #1f4cd9, #2d6cdf, #3b82f6, #2d6cdf, #1f4cd9);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: assessingShimmer 1800ms linear infinite, assessingBounce 1600ms ease-in-out infinite;
+}
+
+@keyframes cogSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+@keyframes cogPulseColor {
+    0% { fill: #2d6cdf; stroke: #2d6cdf; }
+    50% { fill: #3b82f6; stroke: #3b82f6; }
+    100% { fill: #2d6cdf; stroke: #2d6cdf; }
+}
+/* Keep most elements static; animate only cogs/gears by id or class */
+.decipher-wait-overlay svg [id*="cog"],
+.decipher-wait-overlay svg [id*="gear"],
+.decipher-wait-overlay svg .cog,
+.decipher-wait-overlay svg .gear {
+    transform-origin: 50% 50%;
+    animation: cogSpin 3s linear infinite;
+}
+.decipher-wait-overlay svg [id*="cog"] path,
+.decipher-wait-overlay svg [id*="gear"] path,
+.decipher-wait-overlay svg .cog path,
+.decipher-wait-overlay svg .gear path {
+    animation: cogPulseColor 2.4s ease-in-out infinite;
+}
 /* Extracted styles from index.html */
 /* ...existing styles... */
 .prompt-buttons {

@@ -327,6 +327,7 @@ ws.onmessage = (event) => {
       }
     } else if (message.type === 'feedback') {
       if (message.content) {
+        try { document.querySelector('.assistant-edit-mode .decipher-wait-overlay')?.classList.remove('visible'); } catch(_) {}
         const editMode = document.querySelector('.assistant-edit-mode');
         if (editMode) {
           showEditFeedbackPopup(message.content, editMode);
@@ -1750,6 +1751,7 @@ function enterAssistantEditMode(targetAssistant) {
   decipherBtn.textContent = '🔍 Decipher';
   decipherBtn.addEventListener('click', () => {
     try {
+      showDecipherWait();
       // Get current editable HTML and trim at References section
       const editableEl = wrapper.querySelector('.assistant-editable-content');
       let html = editableEl ? editableEl.innerHTML || '' : '';
@@ -1837,6 +1839,17 @@ function enterAssistantEditMode(targetAssistant) {
   fbPopup.appendChild(fbClose);
   fbPopup.appendChild(fbInner);
   wrapper.appendChild(fbPopup);
+  // Decipher waiting overlay (loads and animates the Enigma SVG)
+  const waitOverlay = document.createElement('div');
+  waitOverlay.className = 'decipher-wait-overlay';
+  const waitInner = document.createElement('div');
+  waitInner.className = 'decipher-wait-content';
+  waitOverlay.appendChild(waitInner);
+  const waitCaption = document.createElement('div');
+  waitCaption.className = 'decipher-wait-caption';
+  waitCaption.textContent = 'Assessing learner work according to criteria…';
+  waitOverlay.appendChild(waitCaption);
+  wrapper.appendChild(waitOverlay);
   wrapper.appendChild(editable);
   document.body.appendChild(wrapper);
 
@@ -1907,6 +1920,21 @@ function enterAssistantEditMode(targetAssistant) {
       exitAssistantEditMode(wrapper, true, targetAssistant);
     }
   }
+
+  // Helper: show/hide decipher wait overlay and load inline SVG once
+  async function showDecipherWait() {
+    try {
+      if (!waitInner.dataset.loaded) {
+        const resp = await fetch('/Turing Tutor Enigma.svg');
+        const svgText = await resp.text();
+        // Inline the SVG so CSS animations can target elements
+        waitInner.innerHTML = svgText;
+        waitInner.dataset.loaded = '1';
+      }
+      waitOverlay.classList.add('visible');
+    } catch (e) { console.warn('Could not load Enigma SVG:', e); waitOverlay.classList.add('visible'); }
+  }
+  function hideDecipherWait() { waitOverlay.classList.remove('visible'); }
 
   return wrapper;
 }
