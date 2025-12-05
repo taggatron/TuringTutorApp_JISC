@@ -6,8 +6,8 @@
     align-items: center;
     justify-content: center;
     /* Brighter backdrop: light dim + subtle blur for focus */
-    background: rgba(255, 255, 255, 0.557);
-    backdrop-filter: blur(2px);
+    background: rgba(255, 255, 255, 0.744);
+    backdrop-filter: blur(5px);
     z-index: 9999;
 }
 .decipher-wait-overlay.visible { display: flex; }
@@ -18,18 +18,18 @@
     /* Ensure full brightness and vivid colors despite backdrop dim */
     filter: drop-shadow(0 4px 10px rgba(0,0,0,0.25)) brightness(1.25) saturate(1.2) !important;
 }
-.decipher-wait-caption { margin-top: 10px; text-align: center; font-weight: 600; color: #2d6cdf; animation: colorShift 1400ms ease-in-out infinite alternate; }
+.decipher-wait-caption { margin-top: 10px; text-align: center; font-weight: 600; color: #7c3aed; animation: colorShift 1400ms ease-in-out infinite alternate; }
 @keyframes textGlow {
-    0% { filter: drop-shadow(0 0 0px rgba(45,108,223,0.0)); }
-    50% { filter: drop-shadow(0 0 8px rgba(45,108,223,0.55)); }
-    100% { filter: drop-shadow(0 0 0px rgba(45,108,223,0.0)); }
+    0% { filter: drop-shadow(0 0 0px rgba(124,58,237,0.0)); }
+    50% { filter: drop-shadow(0 0 8px rgba(124,58,237,0.55)); }
+    100% { filter: drop-shadow(0 0 0px rgba(124,58,237,0.0)); }
 }
 @keyframes textGlowStrong {
-    0% { filter: drop-shadow(0 0 2px rgba(45,108,223,0.35)); }
-    25% { filter: drop-shadow(0 0 10px rgba(45,108,223,0.70)); }
-    50% { filter: drop-shadow(0 0 14px rgba(45,108,223,0.85)); }
-    75% { filter: drop-shadow(0 0 10px rgba(59,130,246,0.75)); }
-    100% { filter: drop-shadow(0 0 2px rgba(45,108,223,0.35)); }
+    0% { filter: drop-shadow(0 0 2px rgba(124,58,237,0.35)); }
+    25% { filter: drop-shadow(0 0 10px rgba(124,58,237,0.70)); }
+    50% { filter: drop-shadow(0 0 14px rgba(124,58,237,0.85)); }
+    75% { filter: drop-shadow(0 0 10px rgba(168,85,247,0.75)); }
+    100% { filter: drop-shadow(0 0 2px rgba(124,58,237,0.35)); }
 }
 /* Glow only the main title text elements in the SVG */
 /* Glow only letters labelled via Inkscape (T,U,R,I,N,G and space separator) */
@@ -64,9 +64,11 @@
     margin-top: 10px;
     text-align: center;
     font-weight: 700;
+    font-size: 2rem;
+    line-height: 1.15;
     letter-spacing: 0.3px;
     color: transparent;
-    background-image: linear-gradient(90deg, #1f4cd9, #2d6cdf, #3b82f6, #2d6cdf, #1f4cd9);
+    background-image: linear-gradient(90deg, #6d28d9, #7c3aed, #a855f7, #7c3aed, #6d28d9);
     background-size: 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;
