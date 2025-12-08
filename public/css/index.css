@@ -262,7 +262,7 @@ body > div.container > div.chat-container {
     display: flex;
     flex-direction: column;
     justify-content: flex-start; /* top align */
-    align-items: center;
+    align-items: flex-start; /* allow toolbar + content to use left side */
     animation: expandAssistantMsg 0.4s cubic-bezier(.4,2,.6,1) forwards;
     overflow: hidden; /* child will scroll */
     padding-top: 88px; /* space for toolbar + close button */
@@ -278,22 +278,26 @@ body > div.container > div.chat-container {
 }
 .assistant-edit-close {
     position: absolute;
-    top: 18px;
-    left: 18px;
-    font-size: 2rem;
+    top: 12px;
+    right: 12px;
+    font-size: 1.6rem; /* scaled down to ~80% */
     color: #888;
     background: #fff;
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
+    width: 32px; /* 80% of 40px */
+    height: 32px; /* 80% of 40px */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    z-index: 3100;
+    z-index: 3200;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    transition: background 0.2s;
+    transition: background 0.12s ease, transform 0.12s ease;
 }
 .assistant-edit-close:hover {
     background: #f2f2f2;
+    transform: scale(1.05);
 }
 .assistant-editable-content {
     outline: 2px solid #2d8cff;
@@ -302,25 +306,26 @@ body > div.container > div.chat-container {
     border-radius: 10px;
     min-height: 60px;
     padding: 24px;
-    margin-top: 0;
-    width: 100%;
-    max-width: 900px;
+    margin: 0 320px 14px 24px; /* leave room on right for criteria rail, add bottom margin for blue outline */
+    width: auto;
+    max-width: none;
     box-sizing: border-box;
     font-size: 1.0rem;
     box-shadow: 0 2px 12px rgba(0,0,0,0.07);
     transition: box-shadow 0.2s;
     flex: 1 1 auto; /* allow to fill remaining height */
     overflow-y: auto; /* scroll inner content, prevent overflow */
+    align-self: stretch;
 }
 
 /* Sticky formatting toolbar */
 .assistant-edit-toolbar {
     position: absolute;
     top: 40px; /* below close button area */
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    max-width: 900px;
+    left: 24px; /* align to left side of the overlay */
+    right: 320px; /* reserve space on the right for the criteria rail (match editable-content right margin) */
+    transform: none;
+    width: auto; /* fill between left and right */
     display: flex;
     gap: 6px;
     padding: 8px 10px;
@@ -333,6 +338,24 @@ body > div.container > div.chat-container {
     opacity: 0;
     pointer-events: none;
     transition: opacity 120ms ease;
+}
+
+/* Responsive: when viewport is narrow, center the toolbar and let the editable
+     content use the full width with small side gutters. This prevents overlap
+     between toolbar and the right-side criteria rail on small screens. */
+@media (max-width: 960px) {
+    .assistant-edit-toolbar {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: calc(100% - 48px);
+        max-width: 900px;
+    }
+    .assistant-editable-content {
+        margin: 12px !important;
+        width: calc(100% - 24px);
+        max-width: calc(100% - 24px);
+    }
 }
 .assistant-edit-mode > .assistant-edit-toolbar { opacity:1; pointer-events:auto; }
 .assistant-edit-toolbar button {
@@ -601,20 +624,24 @@ body > div.container > div.chat-container {
 /* Make the header buttons share equal horizontal space */
 /* Meta container padding and rounded corners so it’s not flush */
 body > div.container > div.chat-container > div.meta-container {
-        margin: 12px;            /* pull in from chat-container edges */
-        border-radius: 12px;     /* rounded rectangle edges */
-        overflow: hidden;        /* ensure children respect rounding */
-        border: 1px solid rgba(0,0,0,0.06);
-        background: #ffffff;     /* distinct surface from backdrop */
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    /* Ensure meta-container fits horizontally inside chat-container
+       with 8px margin on each side. Keep top/bottom spacing at 12px. */
+    box-sizing: border-box;
+    width: calc(100% - 16px); /* full width minus 8px margin each side */
+    margin: 12px 8px;         /* 12px top/bottom, 8px left/right */
+    border-radius: 12px;     /* rounded rectangle edges */
+    overflow: hidden;        /* ensure children respect rounding */
+    border: 1px solid rgba(0,0,0,0.06);
+    background: #ffffff;     /* distinct surface from backdrop */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 /* If a sidebar is present on the left, add extra left margin on wide screens */
 @media (min-width: 960px) {
     body > div.container > div.chat-container > div.meta-container {
-            margin-left: 16px;
-            margin-right: 16px;
-            margin-bottom: 16px;
+            /* keep the same horizontal margins on wide screens */
+            margin: 12px 8px 1px 8px; /* top 12, sides 8, bottom 1 */
+            width: calc(100% - 16px);
     }
 }
 .sidebar-header { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
