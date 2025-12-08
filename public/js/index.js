@@ -404,6 +404,47 @@ function resizeInput(event) {
   }
 }
 
+// Expand tools UI when a draggable item is dragged over the tools toggle.
+(() => {
+  const toolsToggle = document.getElementById('tools-toggle');
+  const promptHeader = toolsToggle ? toolsToggle.closest('.prompt-header') : null;
+  if (!toolsToggle || !promptHeader) return;
+
+  function addExpanded() { promptHeader.classList.add('expanded'); }
+  function removeExpanded() { promptHeader.classList.remove('expanded'); }
+
+  toolsToggle.addEventListener('dragenter', (e) => { e.preventDefault(); addExpanded(); });
+  toolsToggle.addEventListener('dragover', (e) => { e.preventDefault(); addExpanded(); });
+  toolsToggle.addEventListener('dragleave', (e) => { removeExpanded(); });
+  toolsToggle.addEventListener('drop', async (e) => {
+    // If a prompt is dropped directly onto the compact Tools button, forward
+    // the drop to the same logic used by the ChatGPT Reference button so
+    // Turing mode receives the prompt + screenshot.
+    e.preventDefault(); e.stopPropagation(); removeExpanded();
+    try {
+      const txt = e.dataTransfer ? e.dataTransfer.getData('text/plain') : null;
+      if (!txt) return;
+      window.__lastDroppedPromptText = txt;
+      // maintain last dragged element if available
+      if (window.__lastDraggedPromptElement && window.__isTuringFlag) {
+        try {
+          const editable = await ensureAssistantEditor();
+          if (editable) {
+            await turingInsertReferenceAndPromptImage(editable, txt, window.__lastDraggedPromptElement);
+            return;
+          }
+        } catch (err) { console.error('Turing insert from tools-toggle failed:', err); }
+      }
+      // fallback to showing the reference popup (non-Turing mode)
+      showChatGPTReferencePopup();
+    } catch (err) { console.error('tools-toggle drop handler error:', err); }
+  });
+
+  // Also listen on the whole promptHeader so a dragged item that moves across
+  // the revealed area collapses correctly.
+  promptHeader.addEventListener('dragleave', (e) => { removeExpanded(); });
+})();
+
 const pendingFeedbackMargins = new Map(); // legacy no-op
 
 function createFeedbackContainer(feedback) {
