@@ -24,9 +24,7 @@ try {
   const wsUrl = `${wsProtocol}//${location.host}`;
   ws = new WebSocket(wsUrl);
   ws.addEventListener('open', () => console.debug('WebSocket connected to', wsUrl));
-    // Allow optional markdown bold around the key: **P1:**, and optional headings
-    // Also tolerate an en dash/em dash after the status delimiter
-    let line = lines.find(l => new RegExp(`^\\s*(?:#{0,6}\\s*)?(?:\\*\\*)?${k}(?:\\*\\*)?\\s*(?:[:\\-—])`, 'i').test(l));
+    // WebSocket opened — ready to receive messages.
 } catch (e) {
   console.error('Failed to create WebSocket:', e);
 }
