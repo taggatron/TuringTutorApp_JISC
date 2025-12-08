@@ -472,17 +472,17 @@ body > div.container > div.chat-container {
 }
 .assistant-edit-feedback-popup.visible { display: block; }
 .assistant-edit-feedback-popup.embedded {
-    position: relative;
-    top: auto;
+    position: sticky;
+    top: 0;
     left: auto;
     transform: none;
     width: 100%;
     max-width: none;
-    background: transparent;
+    background: rgba(255,255,255,0.9);
     padding: 0;
     margin-bottom: 16px;
     display: block;
-    z-index: auto;
+    z-index: 20;
 }
 .assistant-edit-feedback-content {
     background: #ffffff;
