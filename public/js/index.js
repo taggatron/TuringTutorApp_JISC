@@ -1883,6 +1883,7 @@ function enterAssistantEditMode(targetAssistant) {
   // Feedback popup container inside edit mode
   const fbPopup = document.createElement('div');
   fbPopup.className = 'assistant-edit-feedback-popup';
+  fbPopup.setAttribute('contenteditable', 'false');
   const fbInner = document.createElement('div');
   fbInner.className = 'assistant-edit-feedback-content';
   const fbClose = document.createElement('button');
@@ -1890,7 +1891,7 @@ function enterAssistantEditMode(targetAssistant) {
   fbClose.className = 'assistant-edit-feedback-close';
   fbClose.textContent = '×';
   fbClose.title = 'Close feedback';
-  fbClose.addEventListener('click', () => fbPopup.classList.remove('visible'));
+  fbClose.addEventListener('click', () => hideEditFeedbackPopup(wrapper));
   fbPopup.appendChild(fbClose);
   fbPopup.appendChild(fbInner);
   wrapper.appendChild(fbPopup);
@@ -2006,11 +2007,42 @@ function showEditFeedbackPopup(text, editWrapper) {
     // Render simple markdown to HTML for readability
     const html = renderMarkdownToHtml(text);
     content.innerHTML = sanitizeHtml(html || escapeHtml(text));
+    const editable = editWrapper.querySelector('.assistant-editable-content');
+    if (editable) {
+      popup.classList.add('embedded');
+      if (popup.parentElement !== editable) {
+        editable.insertBefore(popup, editable.firstChild || null);
+      }
+      if (typeof editable.scrollTo === 'function') {
+        editable.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        editable.scrollTop = 0;
+      }
+    } else {
+      popup.classList.remove('embedded');
+    }
     popup.classList.add('visible');
     // cache last feedback for quick recall
     editWrapper.__lastFeedbackText = String(text);
   } catch (e) {
     console.error('showEditFeedbackPopup failed', e);
+  }
+}
+
+function hideEditFeedbackPopup(editWrapper) {
+  try {
+    if (!editWrapper) editWrapper = document.querySelector('.assistant-edit-mode');
+    if (!editWrapper) return;
+    const popup = editWrapper.querySelector('.assistant-edit-feedback-popup');
+    if (!popup) return;
+    popup.classList.remove('visible', 'embedded');
+    const editable = editWrapper.querySelector('.assistant-editable-content');
+    if (editable && popup.parentElement === editable) {
+      editable.removeChild(popup);
+      editWrapper.appendChild(popup);
+    }
+  } catch (e) {
+    console.error('hideEditFeedbackPopup failed', e);
   }
 }
 
