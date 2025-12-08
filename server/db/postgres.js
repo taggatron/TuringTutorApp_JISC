@@ -9,6 +9,16 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // active request execution context so query() can set a session GUC.
 const als = new AsyncLocalStorage();
 
+async function touchSessionTimestamp(sessionId) {
+  if (!sessionId) return;
+  try {
+    await query('UPDATE session SET updated_at = now() WHERE id = $1', [sessionId]);
+  } catch (e) {
+    if (e && e.code === '42703') return;
+    console.error('[DB] Failed to bump session updated_at:', e && e.message ? e.message : e);
+  }
+}
+
 async function query(text, params = []) {
   const client = await pool.connect();
   try {
@@ -142,6 +152,7 @@ async function saveMessage(session_id, username, role, content, collapsed = 0, r
   if (prompts !== null) { sql += ', prompts_json'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
   sql += ')' + vals + ' RETURNING id';
   const res = await query(sql, params);
+  await touchSessionTimestamp(session_id);
   return res.rows[0].id;
 }
 
@@ -154,6 +165,7 @@ async function saveMessageWithScaleLevel(session_id, username, role, content, co
   if (prompts !== null) { sql += ', prompts_json'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
   sql += ')' + vals + ' RETURNING id';
   const res = await query(sql, params);
+  await touchSessionTimestamp(session_id);
   return res.rows[0].id;
 }
 
