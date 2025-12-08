@@ -1056,23 +1056,63 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background-color: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.25);
+    background-color: #ffffff;
+    padding: 0; /* inner padding handled for scrollable content */
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
     z-index: 2002; /* Above overlay */
+    width: 92%;
+    max-width: 980px;
+    max-height: 82vh; /* keep popup within viewport */
+    overflow: hidden; /* clip outer corners; inner content will scroll */
+    border: 6px solid rgba(41, 101, 201, 0.08); /* subtle blue ring like the design */
 }
 
 .reference-popup.visible {
     display: block;
 }
 
+/* Content area inside the popup */
+#reference-content {
+    display: block;
+    padding: 26px 28px 18px 28px;
+    box-sizing: border-box;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #0f172a; /* dark slate for high contrast */
+    max-height: calc(82vh - 120px);
+    overflow: auto; /* scroll long text */
+    white-space: pre-wrap; /* respect newlines */
+    hyphens: auto;
+}
+
+.reference-popup .reference-actions {
+    display: flex;
+    gap: 10px;
+    padding: 12px 20px 22px 20px;
+    border-top: 1px solid rgba(15,23,42,0.04);
+    justify-content: flex-end;
+    background: #ffffff;
+    box-sizing: border-box;
+}
+
 .reference-popup .close-button {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 24px;
+    top: -14px; /* float slightly outside the card */
+    right: -14px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 1px solid rgba(15,23,42,0.06);
+    box-shadow: 0 6px 18px rgba(15,23,42,0.14);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #1f2937;
     cursor: pointer;
+    z-index: 2100;
 }
 
 /* Action buttons within the reference popup */
@@ -1252,4 +1292,26 @@ body {
 @media (max-width: 700px) {
     .export-fan-origin { right: 16px; bottom: 92px; }
     .export-fan-item { max-width: 68vw; }
+}
+
+/* Reduce default height of the main message input to save vertical space
+   and prevent it from taking too much of the chat surface by default. */
+#message-input {
+    height: 44px;           /* default compact height */
+    min-height: 40px;
+    max-height: 24vh;       /* allow growth but cap relative to viewport */
+    padding: 10px 56px 10px 14px; /* keep room for send button */
+    font-size: 15px;
+    line-height: 1.35;
+    box-sizing: border-box;
+    overflow-y: auto;       /* enable scroll when content exceeds max-height */
+    transition: height 140ms ease-in-out, box-shadow 140ms ease-in-out;
+    resize: none;           /* consistent with other textarea rules */
+}
+
+/* Slightly increase height on focus for better typing experience */
+#message-input:focus {
+    height: 52px;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+    outline: none;
 }

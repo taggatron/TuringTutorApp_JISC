@@ -158,8 +158,18 @@ async function saveMessageWithScaleLevel(session_id, username, role, content, co
 }
 
 async function getMessages(session_id) {
-  // Explicitly select common columns including metadata jsonb columns if present
-  const res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts, footer_removed FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+  // Explicitly select common columns including metadata jsonb columns if present.
+  // Some deployments may not have the `footer_removed` column (older schema),
+  // so fall back to a query that omits it when Postgres reports unknown column.
+  let res;
+  try {
+    res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts, footer_removed FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+  } catch (e) {
+    if (e && e.code === '42703') {
+      // Column does not exist: retry without footer_removed
+      res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+    } else throw e;
+  }
   // Ensure references/prompts are parsed to native JS objects if stored as strings
   return res.rows.map(r => ({
     ...r,
@@ -196,8 +206,17 @@ async function getScaleLevels(session_id) {
 }
 
 async function getSessions(user_id) {
-  const res = await query('SELECT * FROM session WHERE user_id = $1 ORDER BY updated_at DESC', [user_id]);
-  return res.rows;
+  try {
+    const res = await query('SELECT * FROM session WHERE user_id = $1 ORDER BY updated_at DESC', [user_id]);
+    return res.rows;
+  } catch (e) {
+    if (e && e.code === '42703') {
+      // `updated_at` column missing; fall back to ordering by id (approximate recency)
+      const res = await query('SELECT * FROM session WHERE user_id = $1 ORDER BY id DESC', [user_id]);
+      return res.rows;
+    }
+    throw e;
+  }
 }
 
 async function getSessionById(session_id) {
@@ -226,9 +245,19 @@ async function getEmptyAssistantMessage(session_id) {
 async function updateMessageContent(message_id, content, references = null, prompts = null, footer_removed = null) {
   // Update content and optional metadata. Keep backwards compatibility for callers that only pass content.
   if (references === null && prompts === null && (footer_removed === null)) {
-    await query('UPDATE message SET content = $1, updated_at = now() WHERE id = $2', [content, message_id]);
-    await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]);
-    return;
+    try {
+      await query('UPDATE message SET content = $1, updated_at = now() WHERE id = $2', [content, message_id]);
+      await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]);
+      return;
+    } catch (e) {
+      if (e && e.code === '42703') {
+        // updated_at doesn't exist; fallback to simple update without timestamps
+        await query('UPDATE message SET content = $1 WHERE id = $2', [content, message_id]);
+        try { await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]); } catch(_) {}
+        return;
+      }
+      throw e;
+    }
   }
   const parts = ['content = $1'];
   const params = [content];
@@ -240,8 +269,26 @@ async function updateMessageContent(message_id, content, references = null, prom
   parts.push('updated_at = now()');
   params.push(message_id);
   const sql = `UPDATE message SET ${parts.join(', ')} WHERE id = $${params.length}`;
-  await query(sql, params);
-  await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]);
+  try {
+    await query(sql, params);
+    await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]);
+  } catch (e) {
+    if (e && e.code === '42703') {
+      // A column referenced in the constructed parts doesn't exist (e.g., footer_removed or updated_at)
+      // Fall back to updating core fields one-by-one as supported by the current schema.
+      await query('UPDATE message SET content = $1 WHERE id = $2', [content, message_id]);
+      if (references !== null) {
+        try { await query('UPDATE message SET references_json = $1 WHERE id = $2', [JSON.stringify(references), message_id]); } catch (_) {}
+      }
+      if (prompts !== null) {
+        try { await query('UPDATE message SET prompts_json = $1 WHERE id = $2', [JSON.stringify(prompts), message_id]); } catch (_) {}
+      }
+      if (footer_removed !== null) {
+        try { await query('UPDATE message SET footer_removed = $1 WHERE id = $2', [!!footer_removed, message_id]); } catch (_) {}
+      }
+      try { await query('UPDATE session SET updated_at = now() WHERE id = (SELECT session_id FROM message WHERE id = $1)', [message_id]); } catch (_) {}
+    } else throw e;
+  }
 }
 
 async function updateMessageCollapsedState(message_id, collapsed) {
