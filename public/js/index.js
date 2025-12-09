@@ -667,8 +667,10 @@ async function loadSessions() {
     const response = await fetch('/sessions');
     const data = await response.json();
     if (data.success) {
-      data.sessions.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-      data.sessions.forEach((session, index) => {
+      const sessions = Array.isArray(data.sessions) ? data.sessions.slice() : [];
+      const sessionNumberMap = buildSessionNumberMap(sessions);
+      sessions.sort((a, b) => getSessionSortValue(b) - getSessionSortValue(a));
+      sessions.forEach((session) => {
         if (Number(session.is_turing) === 1) {
           const btn = document.createElement('button');
           btn.className = 'session-button turing-session';
@@ -700,8 +702,9 @@ async function loadSessions() {
         }
         const button = document.createElement('button');
         button.className = 'session-button';
-        // Label sessions using timestamp format: "Session : dd/yy/mm hh:mm" (24h)
-        const label = formatSessionLabel(session.updated_at);
+        const sessionNumber = sessionNumberMap.get(session.id);
+        // Label sessions using persisted timestamp from the database (24-hour clock)
+        const label = formatSessionLabel(sessionNumber, session.created_at || session.updated_at);
         button.textContent = label;
         button.id = `session-${session.id}`;
         button.draggable = true;
@@ -872,7 +875,7 @@ async function startNewChat() {
       const cm = chatMessages || document.getElementById('chat-messages');
       if (cm) cm.innerHTML = '';
       resetScale();
-      addSessionButton(session_id);
+      await loadSessions();
       highlightCurrentSession(session_id);
     } else {
       alert('Failed to start a new session.');
@@ -880,41 +883,56 @@ async function startNewChat() {
   } catch (error) { console.error('Error starting a new session:', error); }
 }
 
-function addSessionButton(sessionId) {
-  const newChats = document.getElementById('new-chats');
-  if (!newChats) { console.error('New chats container not found.'); return; }
-  // If a button for this session already exists, don't create a duplicate.
-  const existing = document.getElementById(`session-${sessionId}`);
-  if (existing) {
-    // Ensure it's placed in the new-chats container (or leave as-is) and return.
-    if (existing.parentElement && existing.parentElement.id !== 'new-chats') {
-      newChats.appendChild(existing);
-    }
-    return;
-  }
-  const button = document.createElement('button');
-  button.className = 'session-button';
-  // Label new sessions using current timestamp in 24h format
-  button.textContent = formatSessionLabel(Date.now());
-  button.id = `session-${sessionId}`;
-  button.draggable = true; button.ondragstart = drag; button.onclick = () => loadSessionHistory(sessionId);
-  const deleteIcon = document.createElement('span'); deleteIcon.textContent = '🗑'; deleteIcon.className = 'delete-icon';
-  deleteIcon.onclick = (event) => { event.stopPropagation(); deleteSession(sessionId, button.parentElement.id); };
-  button.appendChild(deleteIcon);
-  newChats.appendChild(button);
-}
-
-// Format: "Session : dd/yy/mm hh:mm" with a 24-hour clock
-function formatSessionLabel(ts) {
-  let d;
-  try { d = new Date(ts); } catch (_) { d = new Date(); }
-  if (isNaN(d.getTime())) d = new Date();
+// Format: "Session {n} : dd/mm/yy hh:mm" with a 24-hour clock
+function formatSessionLabel(sessionNumber, ts) {
+  let ms = safeTimestampToMs(ts);
+  if (ms === null) ms = Date.now();
+  const d = new Date(ms);
   const dd = String(d.getDate()).padStart(2, '0');
-  const yy = String(d.getFullYear()).slice(-2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
   const hh = String(d.getHours()).padStart(2, '0');
   const min = String(d.getMinutes()).padStart(2, '0');
-  return `Session : ${dd}/${yy}/${mm} ${hh}:${min}`;
+  const prefix = sessionNumber ? `Session ${sessionNumber}` : 'Session';
+  return `${prefix} : ${dd}/${mm}/${yy} ${hh}:${min}`;
+}
+
+function buildSessionNumberMap(sessions = []) {
+  const map = new Map();
+  const standardSessions = sessions.filter((session) => Number(session.is_turing) !== 1);
+  standardSessions.sort((a, b) => {
+    const aTime = safeTimestampToMs(a.created_at) ?? safeTimestampToMs(a.updated_at) ?? Number(a.id) ?? 0;
+    const bTime = safeTimestampToMs(b.created_at) ?? safeTimestampToMs(b.updated_at) ?? Number(b.id) ?? 0;
+    if (aTime === bTime) return (Number(a.id) || 0) - (Number(b.id) || 0);
+    return aTime - bTime;
+  });
+  standardSessions.forEach((session, idx) => {
+    map.set(session.id, idx + 1);
+  });
+  return map;
+}
+
+function getSessionSortValue(session) {
+  const updated = safeTimestampToMs(session && session.updated_at);
+  if (updated !== null) return updated;
+  const created = safeTimestampToMs(session && session.created_at);
+  if (created !== null) return created;
+  const fallback = Number(session && session.id);
+  return Number.isFinite(fallback) ? fallback : 0;
+}
+
+function safeTimestampToMs(value) {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isNaN(ms) ? null : ms;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (!value && value !== 0) return null;
+  const d = new Date(value);
+  const ms = d.getTime();
+  return Number.isNaN(ms) ? null : ms;
 }
 
 async function startTuringMode() {
