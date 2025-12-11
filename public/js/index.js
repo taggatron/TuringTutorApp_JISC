@@ -1851,9 +1851,40 @@ function enterAssistantEditMode(targetAssistant) {
   cancelBtn.textContent = '✖ Close';
   cancelBtn.title = 'Close editor';
   cancelBtn.addEventListener('click', () => exitAssistantEditMode(wrapper, false, targetAssistant));
+  // Left-grouped actions
   toolbar.appendChild(saveBtn);
   toolbar.appendChild(decipherBtn);
   toolbar.appendChild(cancelBtn);
+
+  // Spacer to push unit title to the far right
+  const spacer = document.createElement('div');
+  spacer.className = 'spacer';
+  toolbar.appendChild(spacer);
+
+  // Unit title button on far right (non-interactive)
+  const unitTitleBtn = document.createElement('button');
+  unitTitleBtn.type = 'button';
+  unitTitleBtn.className = 'unit-title-btn';
+  unitTitleBtn.textContent = 'F217: Biomediical Techniques';
+  unitTitleBtn.setAttribute('disabled', 'disabled');
+  toolbar.appendChild(unitTitleBtn);
+
+  // Animate criteria rail on toolbar hover (sequential glow P1→P2→M2→D1)
+  toolbar.addEventListener('mouseenter', () => {
+    const rail = wrapper.querySelector('.assistant-edit-criteria-rail');
+    if (!rail) return;
+    // restart animation by toggling class
+    rail.classList.remove('rail-animate');
+    // force reflow
+    void rail.offsetWidth;
+    rail.classList.add('rail-animate');
+  });
+  toolbar.addEventListener('mouseleave', () => {
+    const rail = wrapper.querySelector('.assistant-edit-criteria-rail');
+    if (!rail) return;
+    // optionally keep subtle state or clear; we clear to allow retrigger
+    rail.classList.remove('rail-animate');
+  });
 
   const editable = document.createElement('div');
   editable.className = 'assistant-editable-content';

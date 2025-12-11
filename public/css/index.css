@@ -388,6 +388,21 @@ body > div.container > div.chat-container {
 
 .assistant-edit-toolbar .spacer { flex:1; }
 .assistant-edit-toolbar .label { font-weight:600; margin-right:4px; }
+/* Unit title button on far right */
+.assistant-edit-toolbar .unit-title-btn {
+    font-weight: 600;
+    opacity: 1; /* ensure readability even when disabled */
+    cursor: default;
+    background: #fff;
+    border-color: #cfd6dd;
+    color: #2d3e50;
+}
+/* Keep unit title bright blue on hover, matching app's blue */
+.assistant-edit-toolbar .unit-title-btn:hover {
+    background: #2d8cff;
+    border-color: #2d8cff;
+    color: #fff;
+}
 
 /* Right-side criteria rail within Turing edit popup */
 .assistant-edit-criteria-rail {
@@ -429,6 +444,14 @@ body > div.container > div.chat-container {
 .criteria-chip.chip-merit { border-color:#fde68a; background: linear-gradient(180deg,#fffbeb 0%, #fef3c7 100%); color:#92400e; box-shadow: 0 4px 14px rgba(245,158,11,0.15); }
 .criteria-chip.chip-distinction { border-color:#93c5fd; background: linear-gradient(180deg,#eff6ff 0%, #dbeafe 100%); color:#1e3a8a; box-shadow: 0 4px 14px rgba(59,130,246,0.18); }
 .criteria-chip.chip-fail { border-color:#fecaca; background: linear-gradient(180deg,#fff1f2 0%, #fee2e2 100%); color:#7f1d1d; box-shadow: 0 4px 14px rgba(239,68,68,0.18); }
+.assistant-edit-criteria-rail.rail-animate .criteria-chip { animation-name: criteriaGlow; animation-duration: 1400ms; animation-iteration-count: 1; }
+.assistant-edit-criteria-rail.rail-animate .criteria-chip:nth-child(1) { animation-delay: 0ms; }
+.assistant-edit-criteria-rail.rail-animate .criteria-chip:nth-child(2) { animation-delay: 250ms; }
+.assistant-edit-criteria-rail.rail-animate .criteria-chip:nth-child(3) { animation-delay: 500ms; }
+.assistant-edit-criteria-rail.rail-animate .criteria-chip:nth-child(4) { animation-delay: 750ms; }
+.assistant-edit-criteria-rail.rail-animate { filter: drop-shadow(0 2px 6px rgba(0,0,0,0.08)); }
+.assistant-edit-criteria-rail.rail-animate .criteria-chip:hover { animation: none; }
+@keyframes criteriaGlow { from { box-shadow: 0 0 0 rgba(0,0,0,0); background: #ffffff; color: #111827; border-color: #c7d2fe; } 25% { box-shadow: 0 0 12px rgba(45,140,255,0.45); background: #e6f0ff; color: #0b3b8c; border-color: #2d8cff; } 50% { box-shadow: 0 0 16px rgba(16,185,129,0.45); background: #e8fff5; color: #065f46; border-color: #10b981; } 75% { box-shadow: 0 0 16px rgba(245,158,11,0.45); background: #fff7e6; color: #92400e; border-color: #f59e0b; } to { box-shadow: 0 0 0 rgba(0,0,0,0); background: #ffffff; color: #111827; border-color: #c7d2fe; } }
 .criteria-chip::after {
     content: attr(data-tip);
     position: absolute;
