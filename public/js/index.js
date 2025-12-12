@@ -1854,7 +1854,6 @@ function enterAssistantEditMode(targetAssistant) {
   // Left-grouped actions
   toolbar.appendChild(saveBtn);
   toolbar.appendChild(decipherBtn);
-  toolbar.appendChild(cancelBtn);
 
   // Spacer to push unit title to the far right
   const spacer = document.createElement('div');
@@ -1866,24 +1865,124 @@ function enterAssistantEditMode(targetAssistant) {
   unitTitleBtn.type = 'button';
   unitTitleBtn.className = 'unit-title-btn';
   unitTitleBtn.textContent = 'F217: Biomediical Techniques';
-  unitTitleBtn.setAttribute('disabled', 'disabled');
   toolbar.appendChild(unitTitleBtn);
 
-  // Animate criteria rail on toolbar hover (sequential glow P1→P2→M2→D1)
-  toolbar.addEventListener('mouseenter', () => {
+  // Animate ONLY P1 chip when hovering the unit-title button
+  unitTitleBtn.addEventListener('mouseenter', () => {
     const rail = wrapper.querySelector('.assistant-edit-criteria-rail');
     if (!rail) return;
-    // restart animation by toggling class
     rail.classList.remove('rail-animate');
-    // force reflow
-    void rail.offsetWidth;
+    void rail.offsetWidth; // restart
     rail.classList.add('rail-animate');
   });
-  toolbar.addEventListener('mouseleave', () => {
+  unitTitleBtn.addEventListener('mouseleave', () => {
     const rail = wrapper.querySelector('.assistant-edit-criteria-rail');
     if (!rail) return;
-    // optionally keep subtle state or clear; we clear to allow retrigger
     rail.classList.remove('rail-animate');
+  });
+
+  // PDF modal for unit specification
+  const pdfModal = document.createElement('div');
+  pdfModal.className = 'unit-pdf-modal';
+  const pdfBackdrop = document.createElement('div');
+  pdfBackdrop.className = 'unit-pdf-backdrop';
+  const pdfDialog = document.createElement('div');
+  pdfDialog.className = 'unit-pdf-dialog';
+  const pdfHeader = document.createElement('div');
+  pdfHeader.className = 'unit-pdf-header';
+  const pdfTitle = document.createElement('div');
+  pdfTitle.className = 'unit-pdf-title';
+  pdfTitle.textContent = 'F217: Biomediial Techniques — Specification';
+  const pdfClose = document.createElement('button');
+  pdfClose.type = 'button';
+  pdfClose.className = 'unit-pdf-close';
+  pdfClose.textContent = '×';
+  const pdfBody = document.createElement('div');
+  pdfBody.className = 'unit-pdf-body';
+  const pdfFrame = document.createElement('iframe');
+  pdfFrame.className = 'unit-pdf-frame';
+  pdfFrame.src = '/AAQ_Specificaiton_cambridge-advanced-national-in-human-biology.pdf';
+  pdfFrame.setAttribute('title', 'Unit Specification PDF');
+  pdfFrame.setAttribute('aria-label', 'Unit Specification PDF');
+  pdfFrame.setAttribute('loading', 'eager');
+  pdfBody.appendChild(pdfFrame);
+  pdfHeader.appendChild(pdfTitle);
+  pdfHeader.appendChild(pdfClose);
+  pdfDialog.appendChild(pdfHeader);
+  pdfDialog.appendChild(pdfBody);
+  pdfModal.appendChild(pdfBackdrop);
+  pdfModal.appendChild(pdfDialog);
+  wrapper.appendChild(pdfModal);
+
+  function openPdfModal() {
+    pdfModal.classList.add('visible');
+    // prevent underlying scroll
+    document.body.style.overflow = 'hidden';
+  }
+  function closePdfModal() {
+    pdfModal.classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+  pdfClose.addEventListener('click', closePdfModal);
+  pdfBackdrop.addEventListener('click', closePdfModal);
+  unitTitleBtn.addEventListener('click', openPdfModal);
+
+  // Text styling dropdown (Heading, Bold, Italic, Underline, Color)
+  const styleMenuWrap = document.createElement('div');
+  styleMenuWrap.className = 'style-menu-wrap';
+  const styleBtn = document.createElement('button');
+  styleBtn.type = 'button';
+  styleBtn.className = 'style-menu-button';
+  styleBtn.textContent = 'Text Style ▾';
+  const styleMenu = document.createElement('div');
+  styleMenu.className = 'style-menu';
+  styleMenu.innerHTML = [
+    '<button data-action="heading">Heading</button>',
+    '<button data-action="bold">Bold</button>',
+    '<button data-action="italic">Italic</button>',
+    '<button data-action="underline">Underline</button>',
+    '<div class="color-row">',
+      '<span class="label">Colour:</span>',
+      '<button data-action="color" data-color="#000000" title="Black" class="color-swatch" style="background:#000"></button>',
+      '<button data-action="color" data-color="#0b3b8c" title="Navy" class="color-swatch" style="background:#0b3b8c"></button>',
+      '<button data-action="color" data-color="#ff0000" title="Red" class="color-swatch" style="background:#ff0000"></button>',
+    '</div>'
+  ].join('');
+  styleMenuWrap.appendChild(styleBtn);
+  styleMenuWrap.appendChild(styleMenu);
+  toolbar.insertBefore(styleMenuWrap, spacer); // place before spacer on left cluster
+
+  function applyStyleAction(action, value) {
+    const editableEl = wrapper.querySelector('.assistant-editable-content');
+    if (!editableEl) return;
+    editableEl.focus();
+    try {
+      if (action === 'heading') {
+        document.execCommand('formatBlock', false, 'h2');
+      } else if (action === 'bold') {
+        document.execCommand('bold');
+      } else if (action === 'italic') {
+        document.execCommand('italic');
+      } else if (action === 'underline') {
+        document.execCommand('underline');
+      } else if (action === 'color' && value) {
+        document.execCommand('foreColor', false, value);
+      }
+    } catch (e) {
+      console.warn('Style action failed:', action, e);
+    }
+  }
+  styleBtn.addEventListener('click', () => {
+    styleMenu.classList.toggle('open');
+  });
+  styleMenu.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    const action = t.getAttribute('data-action');
+    const color = t.getAttribute('data-color');
+    if (!action) return;
+    e.stopPropagation();
+    applyStyleAction(action, color);
   });
 
   const editable = document.createElement('div');
