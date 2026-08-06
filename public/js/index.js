@@ -1864,7 +1864,7 @@ function enterAssistantEditMode(targetAssistant) {
   const unitTitleBtn = document.createElement('button');
   unitTitleBtn.type = 'button';
   unitTitleBtn.className = 'unit-title-btn';
-  unitTitleBtn.textContent = 'F217: Biomediical Techniques';
+  unitTitleBtn.textContent = 'F217: Biomedical Techniques';
   toolbar.appendChild(unitTitleBtn);
 
   // Animate ONLY P1 chip when hovering the unit-title button
