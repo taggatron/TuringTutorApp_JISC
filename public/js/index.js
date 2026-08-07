@@ -41,6 +41,7 @@ function showPopup(element, message) {
   fadeTimeout = setTimeout(() => { if (popup) popup.classList.remove('visible'); }, 4500);
 }
 let session_id = null;
+let isNewSession = false;
 let __turingInitialMessageId = null; // for newly created turing sessions
 let botMessageDiv = null;
 let activeLevels = new Set();
@@ -516,7 +517,24 @@ function sendMessage() {
       input.style.height = 'auto';
     }
     try {
-      ws.send(JSON.stringify({ content: message, session_id })); 
+      ws.send(JSON.stringify({ content: message, session_id }));
+
+    if (isNewSession) {
+      isNewSession = false;
+      fetch('/generate-session-title', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CSRF-Token': window.csrfToken || ''
+        },
+        body: JSON.stringify({ session_id, prompt: message })
+      }).then(res => res.json()).then(data => {
+        if(data.success) {
+          loadSessions(); // reload to show new name
+        }
+      });
+    }
+ 
     } catch (err) {
       console.error('WebSocket send failed:', err);
     }
@@ -705,15 +723,37 @@ async function loadSessions() {
         const sessionNumber = sessionNumberMap.get(session.id);
         // Label sessions using persisted timestamp from the database (24-hour clock)
         const label = formatSessionLabel(sessionNumber, session.created_at || session.updated_at);
-        button.textContent = label;
         button.id = `session-${session.id}`;
         button.draggable = true;
         button.ondragstart = drag;
+        const labelText = session.session_name || formatSessionLabel(sessionNumber, session.created_at || session.updated_at);
+        button.innerHTML = `
+          <div class="session-name-container" style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span class="session-name" contenteditable="true" spellcheck="false" style="outline: none;">${escapeHtml(labelText)}</span>
+          </div>
+          <span class="edit-icon" title="Edit" style="margin-right: 4px; cursor: pointer; opacity: 0.6;">✏️</span>
+          <span class="delete-icon" title="Delete">🗑</span>
+        `;
         button.onclick = () => loadSessionHistory(session.id);
-        const deleteIcon = document.createElement('span');
-        deleteIcon.textContent = '🗑'; deleteIcon.className = 'delete-icon';
+        
+        button.querySelector('.session-name').addEventListener('blur', (e) => {
+            const newName = (e.target.textContent || '').trim() || labelText;
+            renameSessionOnServer(session.id, newName);
+        });
+        button.querySelector('.session-name').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+        });
+        button.querySelector('.session-name').addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        button.querySelector('.edit-icon').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const span = button.querySelector('.session-name');
+            span.focus();
+            document.execCommand('selectAll', false, null);
+        });
+        const deleteIcon = button.querySelector('.delete-icon');
         deleteIcon.onclick = (event) => { event.stopPropagation(); deleteSession(session.id, button.parentElement.id); };
-        button.appendChild(deleteIcon);
         if (session.group_id) {
           const groupList = document.getElementById(`session-list-group-${session.group_id}`);
           if (groupList) groupList.appendChild(button); else document.getElementById('new-chats').appendChild(button);
@@ -871,6 +911,7 @@ async function startNewChat() {
     const data = await response.json();
     if (data.success) {
       session_id = data.session_id;
+      isNewSession = true;
       // Ensure chatMessages element exists (fall back to querying DOM)
       const cm = chatMessages || document.getElementById('chat-messages');
       if (cm) cm.innerHTML = '';
@@ -940,7 +981,8 @@ async function startTuringMode() {
     const res = await fetch('/start-turing', { method: 'POST' });
     const data = await res.json();
     if (!data.success) { alert('Failed to start Turing Mode'); return; }
-    session_id = data.session_id; __turingInitialMessageId = data.message_id || null;
+    session_id = data.session_id;
+      isNewSession = true; __turingInitialMessageId = data.message_id || null;
     await loadSessions();
     highlightCurrentSession(session_id);
     await loadSessionHistory(session_id);

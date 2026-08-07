@@ -182,48 +182,46 @@ body {
 .chat-input {
     display: flex;
     box-sizing: border-box;
-    border: none;
-    position: relative;
+    align-items: center; /* or flex-end depending on multiline behavior */
     width: 100%;
-    align-items: flex-end;
-}
-
-
-
-
-
-.chat-input textarea {
-    flex: 1;
-    padding: 14px 50px 14px 44px; /* Space for cogwheel and send button */
-    font-size: 15px;
-    font-family: var(--font-family);
-    vertical-align: top;
-    resize: none;
-    overflow-y: hidden;
-    outline: none;
+    padding: 8px 12px;
     border-radius: var(--radius-pill);
     border: 1px solid rgba(139, 92, 246, 0.3);
     background: linear-gradient(to right, rgba(243, 232, 255, 0.6), rgba(250, 245, 255, 0.9));
-    line-height: 1.4;
-    max-height: 35vh;
-    box-sizing: border-box;
     transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
     box-shadow: 0 4px 12px rgba(139, 92, 246, 0.05);
-    color: var(--color-text-main);
 }
 
-
-.chat-input textarea:focus {
+.chat-input:focus-within {
     box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
     border-color: rgba(139, 92, 246, 0.6);
     background: linear-gradient(to right, rgba(243, 232, 255, 0.8), rgba(255, 255, 255, 1));
 }
 
+.chat-input textarea {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 15px;
+    font-family: var(--font-family);
+    vertical-align: middle;
+    resize: none;
+    overflow-y: hidden;
+    outline: none;
+    border: none;
+    background: transparent;
+    line-height: 1.4;
+    max-height: 35vh;
+    box-sizing: border-box;
+    color: var(--color-text-main);
+    margin: 0;
+    box-shadow: none;
+}
 
 .chat-input textarea:focus {
-    box-shadow: var(--shadow-glow);
-    border-color: rgba(59, 130, 246, 0.5);
-    background: #ffffff;
+    /* Focus handled by .chat-input:focus-within */
+    box-shadow: none;
+    border: none;
+    background: transparent;
 }
 
 
@@ -293,6 +291,7 @@ body {
     box-shadow: none;
     padding-left: 0;
     padding-right: 0;
+    max-width: 100%; /* Ensure it spans the full grid column */
 }
 
 
@@ -1482,9 +1481,6 @@ body {
 }
 
 .chat-input .tools-toggle {
-    position: absolute;
-    left: 8px;
-    bottom: 8px;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -1499,10 +1495,7 @@ body {
 }
 
 .chat-input .send-message-button {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    background: var(--gradient-ai);
+    background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);
     color: white;
     border: none;
     border-radius: var(--radius-pill);

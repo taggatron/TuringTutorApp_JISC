@@ -746,9 +746,9 @@ body > div.container > div.chat-container > div.meta-container {
     margin: 12px 8px;         /* 12px top/bottom, 8px left/right */
     border-radius: 12px;     /* rounded rectangle edges */
     overflow: hidden;        /* ensure children respect rounding */
-    border: 1px solid rgba(0,0,0,0.06);
-    background: #ffffff;     /* distinct surface from backdrop */
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: none;
+    background: transparent;
+    box-shadow: none;
 }
 
 /* If a sidebar is present on the left, add extra left margin on wide screens */
