@@ -396,13 +396,18 @@ body {
     background-color: #ccc;
 }
 
-.session-button:hover .delete-icon {
+.session-button:hover .delete-icon,
+.session-button:hover .edit-icon {
     opacity: 1;
     pointer-events: auto;
 }
 
-/* Ensure the Turing session inherits the same hover delete behavior */
-.turing-session:hover .delete-icon { opacity: 1; pointer-events: auto; }
+/* Ensure the Turing session inherits the same hover delete/edit behavior */
+.turing-session:hover .delete-icon,
+.turing-session:hover .edit-icon { 
+    opacity: 1; 
+    pointer-events: auto; 
+}
 
 /* Make sure icon sits left and text starts immediately after for Turing sessions */
 .turing-session { justify-content: flex-start; }
@@ -414,6 +419,18 @@ body {
     font-size: 14px;
     position: absolute;
     right: 10px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.edit-icon {
+    margin-left: 10px;
+    color: var(--text-primary, #666);
+    cursor: pointer;
+    font-size: 14px;
+    position: absolute;
+    right: 32px;
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;

@@ -697,8 +697,9 @@ async function loadSessions() {
           btn.innerHTML = `
             <div class="turing-left">
               <img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt="">
-              <span class="turing-name" contenteditable="true">${escapeHtml(name)}</span>
+              <span class="turing-name" contenteditable="true" spellcheck="false" style="outline: none;">${escapeHtml(name)}</span>
             </div>
+            <span class="edit-icon" title="Edit">✎</span>
             <span class="delete-icon" title="Delete">🗑</span>`;
           btn.onclick = () => {
             loadSessionHistory(session.id).then(() => {
@@ -710,8 +711,25 @@ async function loadSessions() {
             });
           };
           btn.querySelector('.turing-name').addEventListener('blur', (e) => {
-            const newName = (e.target.textContent || '').trim() || 'Turing Mode';
-            renameSessionOnServer(session.id, newName);
+              const newName = (e.target.textContent || '').trim() || name;
+              renameSessionOnServer(session.id, newName);
+          });
+          btn.querySelector('.turing-name').addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+          });
+          btn.querySelector('.turing-name').addEventListener('click', (e) => {
+              e.stopPropagation();
+          });
+          btn.querySelector('.edit-icon').addEventListener('click', (e) => {
+              e.stopPropagation();
+              const span = btn.querySelector('.turing-name');
+              span.focus();
+              const range = document.createRange();
+              range.selectNodeContents(span);
+              range.collapse(false);
+              const sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(range);
           });
           const del = btn.querySelector('.delete-icon');
           del.onclick = (event) => { event.stopPropagation(); deleteSession(session.id, btn.parentElement.id); };
@@ -731,7 +749,7 @@ async function loadSessions() {
           <div class="session-name-container" style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             <span class="session-name" contenteditable="true" spellcheck="false" style="outline: none;">${escapeHtml(labelText)}</span>
           </div>
-          <span class="edit-icon" title="Edit" style="margin-right: 4px; cursor: pointer; opacity: 0.6;">✏️</span>
+          <span class="edit-icon" title="Edit">✎</span>
           <span class="delete-icon" title="Delete">🗑</span>
         `;
         button.onclick = () => loadSessionHistory(session.id);
