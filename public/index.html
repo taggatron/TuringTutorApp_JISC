@@ -1,6 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,24 +9,30 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <link rel="stylesheet" href="style.css?v=2">
     <link rel="stylesheet" href="/css/index.css">
     <script defer src="/js/csrf-auto.js"></script>
     <!-- moved inline styles to /css/index.css -->
-    
+
 </head>
+
 <body>
-    
+
     <div class="container">
         <div class="sidebar" id="sidebar">
-            <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Toggle sidebar" aria-label="Toggle sidebar">
-                <span class="sidebar-brackets" id="sidebar-brackets-icon"><span style="color:#7c3aed; font-weight:900; font-size:1.4rem; letter-spacing:-2px;">[&nbsp;]</span></span>
+            <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Toggle sidebar"
+                aria-label="Toggle sidebar">
+                <span class="sidebar-brackets" id="sidebar-brackets-icon"><span
+                        style="color:#7c3aed; font-weight:900; font-size:1.4rem; letter-spacing:-2px;">[&nbsp;]</span></span>
                 <span class="sidebar-collapse-arrow" id="sidebar-collapse-arrow">◀</span>
             </button>
             <div class="sidebar-header">
-                <div id="sidebar-logo" style="grid-column: 1 / -1; display: flex; justify-content: center; padding-bottom: 10px;"><img src="sdc-logo.svg" alt="SDC Logo" height="25"></div>
-                <button class="turing-mode-button" id="turing-mode-button" title="Start Turing Mode (editor)" aria-label="Start Turing Mode">
+                <div id="sidebar-logo"
+                    style="grid-column: 1 / -1; display: flex; justify-content: left; padding-bottom: 10px;"><img
+                        src="sdc-logo.svg" alt="SDC Logo" height="25"></div>
+                <button class="turing-mode-button" id="turing-mode-button" title="Start Turing Mode (editor)"
+                    aria-label="Start Turing Mode">
                     <span class="plus">+</span>
                     <img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt="">
                 </button>
@@ -55,17 +61,23 @@
                             <h2 class="chat-welcome-title">How can I help you today?</h2>
                             <p class="chat-welcome-subtitle">Start a conversation or try one of these prompts:</p>
                             <div class="chat-starter-prompts">
-                                <button class="chat-starter-btn" data-prompt="Explain this topic in a way a student can understand and give me 3 key points to remember.">
+                                <button class="chat-starter-btn"
+                                    data-prompt="Explain this topic in a way a student can understand and give me 3 key points to remember.">
                                     <span class="starter-icon">📚</span>
-                                    <span class="starter-text">Explain a topic simply<br><small>Get a clear breakdown with key points</small></span>
+                                    <span class="starter-text">Explain a topic simply<br><small>Get a clear breakdown
+                                            with key points</small></span>
                                 </button>
-                                <button class="chat-starter-btn" data-prompt="Help me plan a lesson on this subject. Include learning objectives, activities and assessment ideas.">
+                                <button class="chat-starter-btn"
+                                    data-prompt="Help me plan a lesson on this subject. Include learning objectives, activities and assessment ideas.">
                                     <span class="starter-icon">📝</span>
-                                    <span class="starter-text">Plan a lesson<br><small>Get learning objectives & activities</small></span>
+                                    <span class="starter-text">Plan a lesson<br><small>Get learning objectives &
+                                            activities</small></span>
                                 </button>
-                                <button class="chat-starter-btn" data-prompt="Give me feedback on this work. Highlight strengths and areas for improvement.">
+                                <button class="chat-starter-btn"
+                                    data-prompt="Give me feedback on this work. Highlight strengths and areas for improvement.">
                                     <span class="starter-icon">💡</span>
-                                    <span class="starter-text">Get feedback on work<br><small>Strengths & areas to improve</small></span>
+                                    <span class="starter-text">Get feedback on work<br><small>Strengths & areas to
+                                            improve</small></span>
                                 </button>
                             </div>
                         </div>
@@ -74,7 +86,8 @@
             </div>
             <div class="meta-container">
                 <div class="chat-input">
-                    <button class="tools-toggle" id="tools-toggle" title="Tools" aria-label="Tools" tabindex="0">⚙️</button>
+                    <button class="tools-toggle" id="tools-toggle" title="Tools" aria-label="Tools"
+                        tabindex="0">⚙️</button>
                     <textarea id="message-input" type="text" placeholder="Type your message..."></textarea>
                     <button class="send-message-button"></button>
                 </div>
@@ -145,4 +158,5 @@
     <!-- Load main client script -->
     <script defer src="/js/index.js"></script>
 </body>
+
 </html>
