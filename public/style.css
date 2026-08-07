@@ -87,6 +87,8 @@ body {
     width: 100%;
     flex-shrink: 0;
     background: transparent;
+    z-index: 100;
+    overflow: visible;
 }
 
 .meta-container:focus-within {
