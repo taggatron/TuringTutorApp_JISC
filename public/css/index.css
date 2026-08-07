@@ -953,9 +953,13 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
     top: 10px;
 }
 
-/* Show the brackets icon more prominently when collapsed */
+/* Hide brackets when expanded; show only when collapsed */
 .sidebar-brackets {
+    display: none;
     transition: opacity 0.2s ease;
+}
+.sidebar.collapsed .sidebar-brackets {
+    display: inline;
 }
 
 /* ============================================================

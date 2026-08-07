@@ -16,6 +16,12 @@ let fadeTimeout;
 // Core DOM references used throughout the script
 const chatMessages = document.getElementById('chat-messages');
 
+// Hide the welcome screen once the first message is appended
+function hideWelcomeState() {
+  const welcome = document.getElementById('chat-welcome');
+  if (welcome) welcome.style.display = 'none';
+}
+
 // Initialize WebSocket connection to the same host. Use wss when on https.
 let ws = null;
 try {
@@ -547,6 +553,7 @@ function sendMessage() {
     const oldPlaceholder = chatMessages.querySelector('.user.placeholder-message');
     if (oldPlaceholder) oldPlaceholder.remove();
     chatMessages.appendChild(userMessage);
+    hideWelcomeState();
     const feedbackContainer = createFeedbackContainer('');
     feedbackMapping.push({ messageElement: userMessage, feedbackContainer });
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -2451,6 +2458,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   // When in a Turing session, set up sticky turing message behavior after DOM is ready
   // Sticky Turing header disabled: allow assistant messages to scroll normally
+
+  // ---- Sidebar collapse toggle ----
+  const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+  const sidebar = document.getElementById('sidebar');
+  if (sidebarToggleBtn && sidebar) {
+    // Restore state from localStorage
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
+      sidebar.classList.add('collapsed');
+    }
+    sidebarToggleBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+    });
+  }
+
+  // ---- Starter prompt buttons (welcome state) ----
+  document.querySelectorAll('.chat-starter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prompt = btn.dataset.prompt;
+      if (prompt) {
+        const msgInput = document.getElementById('message-input');
+        if (msgInput) {
+          msgInput.value = prompt;
+          msgInput.focus();
+          // Trigger auto-resize
+          msgInput.dispatchEvent(new Event('input'));
+        }
+      }
+    });
+  });
 });
 
 // ----- Turing Message (sticky, collapsible, aggregates screenshots) -----
