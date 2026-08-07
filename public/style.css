@@ -1,38 +1,77 @@
+
+:root {
+    --bg-main: #f9f9fb;
+    --bg-glass: rgba(255, 255, 255, 0.65);
+    --bg-sidebar: rgba(247, 247, 249, 0.75);
+    --border-light: rgba(220, 220, 225, 0.5);
+    
+    --color-primary: #3b82f6;
+    --color-primary-hover: #2563eb;
+    --color-text-main: #1e293b;
+    --color-text-muted: #64748b;
+    
+    --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.04);
+    --shadow-glow: 0 0 15px rgba(59, 130, 246, 0.3);
+    
+    --radius-lg: 16px;
+    --radius-md: 12px;
+    --radius-sm: 8px;
+    --radius-pill: 9999px;
+    
+    --font-family: 'Inter', system-ui, sans-serif;
+    
+    --gradient-ai: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    --gradient-scale: linear-gradient(to right, #10b981, #f59e0b, #ef4444);
+}
+
 body {
-    font-family: Arial, sans-serif;
+    font-family: var(--font-family);
     display: flex;
     flex-direction: column;
     align-items: center;
     height: 100vh;
-    background-color: #f4f4f4;
+    background: var(--bg-main);
+    background-image: radial-gradient(circle at 10% 10%, rgba(59,130,246,0.05) 0%, transparent 40%),
+                      radial-gradient(circle at 90% 90%, rgba(139,92,246,0.05) 0%, transparent 40%);
     margin: 0;
-    overflow: hidden; /* Disable main window scroll bar */
+    overflow: hidden;
+    color: var(--color-text-main);
 }
 
+
 /* Restored container & sidebar definitions (accidentally removed during patch) */
+
 .container {
     display: flex;
     width: 95%;
-    flex: 1 1 auto; /* allow to stretch to available height */
-    min-height: 0; /* allow children to shrink and scroll */
-    border: 1px solid #ccc;
-    border-radius: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    background-color: #fff;
-    margin-bottom: 8px; /* a little more breathing room above scale bar */
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-soft);
+    margin-bottom: 8px;
     position: relative;
+    transition: all 0.3s ease;
 }
+
+
 
 .sidebar {
     width: 20%;
-    background-color: #f7f7f7;
-    border-right: 1px solid #ccc;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-light);
     display: flex;
     flex-direction: column;
-    overflow-y: auto; /* Enable vertical scrolling */
-    overflow-x: hidden; /* Prevent horizontal scrolling */
+    overflow-y: auto;
+    overflow-x: hidden;
     box-sizing: border-box;
+    backdrop-filter: blur(4px);
 }
+
 
 .meta-container {
     display: flex;
@@ -95,18 +134,15 @@ body {
     /* Remove heavy borders/shadows from chat-messages; provide via background instead */
 }
 
+
 .chat-surface::before {
     content: '';
     position: absolute;
     inset: 0;
-    /* Use a subtle SVG-ish background via gradients to emulate rounded card + overlap */
-    background-image:
-        radial-gradient(120% 30% at 50% 110%, rgba(0,0,0,0.18), transparent 60%),
-        linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,252,0.98));
-    border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    background: transparent;
     pointer-events: none;
 }
+
 
 /* Hide scrollbar for chat-container */
 .chat-container::-webkit-scrollbar {
@@ -149,23 +185,32 @@ body {
     width: 100%;
 }
 
+
 .chat-input textarea {
     flex: 1;
-    padding: 14px 56px 14px 14px; /* room for send button */
-    font-size: 16px;
-    font-family: Arial, sans-serif;
-    vertical-align: top; /* Align text to the top */
-    resize: none; /* Prevent manual resizing */
-    overflow-y: hidden; /* let height auto expand; JS will toggle scroll if needed */
-    outline: none; /* Remove default outline */
-    border-radius: 14px; /* Rounded edges */
-    border: 1px solid #e0e0e0; /* subtle border */
-    background: #fff;
-    line-height: 1.35;
-    max-height: 35vh; /* cap so messages remain visible */
+    padding: 14px 56px 14px 20px;
+    font-size: 15px;
+    font-family: var(--font-family);
+    vertical-align: top;
+    resize: none;
+    overflow-y: hidden;
+    outline: none;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-light);
+    background: rgba(255, 255, 255, 0.9);
+    line-height: 1.4;
+    max-height: 35vh;
     box-sizing: border-box;
-    transition: height 140ms ease-in-out, box-shadow 140ms ease-in-out; /* smooth growth */
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
 }
+
+.chat-input textarea:focus {
+    box-shadow: var(--shadow-glow);
+    border-color: rgba(59, 130, 246, 0.5);
+    background: #ffffff;
+}
+
 
 /* Shadow hint wrapper when input at max height */
 .meta-container.input-overflow::before {
@@ -187,32 +232,49 @@ body {
 
 .meta-container.input-overflow .chat-input textarea { overflow-y: auto; }
 
+
 .message {
-    max-width: 100%;
-    padding: 10px;
-    margin: 4px 0;
-    border-radius: 15px;
+    max-width: 85%;
+    padding: 12px 18px;
+    margin: 6px 0;
+    border-radius: var(--radius-lg);
     word-wrap: break-word;
     box-sizing: border-box;
     position: relative;
-    background-clip: padding-box; /* avoid bleed when dragging */
+    background-clip: padding-box;
+    line-height: 1.5;
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
 }
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(15px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+
 
 .message.user {
     align-self: flex-end;
-    background-color: #007bff;
+    background: var(--gradient-ai);
     color: #fff;
     text-align: right;
-    display: inline-block; /* confine bubble width to content */
+    display: inline-block;
+    border-bottom-right-radius: 4px;
 }
+
+
 
 .message.assistant {
     align-self: stretch;
-    background-color: #f1f1f1; /* default neutral background */
-    color: #000;
+    background-color: #ffffff;
+    color: var(--color-text-main);
     text-align: left;
     box-sizing: border-box;
+    border: 1px solid var(--border-light);
+    border-bottom-left-radius: 4px;
 }
+
 
 /* Make message content headings visually hierarchical
    - h1 is the title and should be larger than subsequent headings
@@ -277,32 +339,38 @@ body {
 }
 
 
+
 .session-button {
     display: flex;
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    padding: 7px;
-    margin-bottom: 5px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
     text-align: left;
-    background-color: #e2e2e2;
-    border: none;
-    border-radius: 5px;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 0.9em;
+    font-weight: 500;
     position: relative;
-    /* Add styles for dragging */
-    transition: background-color 0.3s ease;
+    transition: all 0.2s ease;
+    color: var(--color-text-main);
 }
+
 
 /* Add margin-top to the highest up session button not in a group */
 #new-chats .session-button:first-child {
     margin-top: 15px;
 }
 
+
 .session-button:hover {
-    background-color: #ccc;
+    background-color: rgba(0, 0, 0, 0.04);
+    border-color: var(--border-light);
 }
+
 
 .session-button:active {
     background-color: #ccc;
@@ -331,55 +399,74 @@ body {
     pointer-events: none;
 }
 
+
 .new-chat-button {
     display: flex;
     justify-content: center;
     align-items: center;
     width: 100%;
-    height: 38px;
+    height: 42px;
     padding: 5px;
     margin-bottom: 5px;
     text-align: left;
-    background-color: #e6e6fa;
-    border: none;
-    border-radius: 5px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    font-size: 1.2em;
-    color: #4b0082;
+    font-size: 1.1em;
+    color: var(--color-text-main);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
+
+
 
 .new-chat-button:hover {
-    background-color: #d8bfd8;
+    background-color: #ffffff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    transform: translateY(-1px);
 }
 
+
 /* Add new group button styling */
+
 .new-group-button {
     display: flex;
     justify-content: center;
     align-items: center;
     width: 100%;
-    height: 38px;
+    height: 42px;
     padding: 5px;
     margin-bottom: 5px;
     text-align: left;
-    background-color: #66c2ff; /* Blue coloration */
-    border: none;
-    border-radius: 5px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    font-size: 1.2em;
-    color: #fff;
+    font-size: 1.1em;
+    color: var(--color-text-main);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
+
+
 
 .new-group-button:hover {
-    background-color: #3399ff; /* Darker blue on hover */
+    background-color: #ffffff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    transform: translateY(-1px);
 }
 
+
+
 .active-session {
-    background-color: limegreen;
-    color: white;
-    border: 2px solid limegreen;
-    font-weight: bold;
+    background-color: #ffffff;
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+    box-shadow: var(--shadow-glow);
+    font-weight: 600;
 }
+
 
 #header {
     position: relative;
@@ -599,17 +686,22 @@ body {
 }
 
 /* AI Assessment Scale */
+
 .ai-assessment-scale {
     display: flex;
-    justify-content: space-around;
-    width: 90%;
-    padding: 5px;
-    background-color: #7c16c5; /* Indigo - bold and complementary */
-    border-radius: 10px;
-    margin-top: auto; /* push to bottom */
-    margin-bottom: 4px;
-    filter: saturate(0.7); /* Reduce saturation */
+    justify-content: space-between;
+    width: 95%;
+    margin: 8px 0;
+    background: var(--bg-glass);
+    padding: 10px 16px;
+    border-radius: var(--radius-pill);
+    box-sizing: border-box;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid var(--border-light);
+    position: relative;
+    backdrop-filter: blur(8px);
 }
+
 
 /* For very tall viewports, tighten bottom gap further and expand interior */
 @media (min-height: 900px) {
@@ -617,15 +709,27 @@ body {
     .ai-assessment-scale { margin-bottom: 8px; }
 }
 
+
 .scale-item {
-    padding: 10px 15px;
-    border-radius: 8px;
-    font-size: 14px;
+    flex: 1;
     text-align: center;
+    padding: 8px 12px;
+    margin: 0 4px;
+    border-radius: var(--radius-pill);
     cursor: pointer;
-    transition: background-color 0.3s ease;
-    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.3), inset -2px -2px 5px rgba(255, 255, 255, 0.5); /* Engraved effect */
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 1px solid transparent;
 }
+
+.scale-item:hover {
+    background: rgba(0,0,0,0.03);
+    color: var(--color-text-main);
+}
+
 
 #scale-1.scale-item {
     background-color: #c3e6cb; /* Slightly bolder green */
@@ -653,10 +757,14 @@ body {
 }
 
 #scale-1.scale-item:hover,
-#scale-1.scale-item.active {
-    background-color: #5cb85c; /* Complementary green */
-    color: #fff;
+#scale-1
+.scale-item.active {
+    background: var(--gradient-ai);
+    color: white;
+    box-shadow: var(--shadow-glow);
+    transform: scale(1.05);
 }
+
 
 #scale-2.scale-item:hover,
 #scale-2.scale-item.active {
@@ -1314,4 +1422,21 @@ body {
     height: 52px;
     box-shadow: 0 6px 18px rgba(15,23,42,0.06);
     outline: none;
+}
+
+.send-message-button {
+    background: var(--gradient-ai);
+    color: white;
+    border: none;
+    border-radius: var(--radius-pill);
+    padding: 10px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.send-message-button:hover {
+    box-shadow: var(--shadow-glow);
+    transform: scale(1.05);
 }
