@@ -5,7 +5,7 @@
   "main": "streaming.js",
   "type": "module",
   "scripts": {
-    "start": "node streaming.js",
+    "start": "node --env-file=APIkey.env streaming.js",
     "migrate:sqlite-to-postgres": "node migrations/sqlite_to_postgres.js",
     "db:create-app-admin": "bash ./scripts/create_app_admin_local.sh"
   },

@@ -1,7 +1,6 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import path from 'path';
-import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
@@ -20,9 +19,103 @@ import { checkAuth } from './server/middleware/auth.js';
 
 dotenv.config({ path: './APIkey.env' });
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
+// Helper to map OpenAI chat completions to Azure Responses API
+const openai = {
+    chat: {
+        completions: {
+            create: async (params) => {
+                const url = process.env.AZURE_OPENAI_ENDPOINT;
+                const apiKey = process.env.AZURE_OPENAI_API_KEY;
+                const model = process.env.AZURE_OPENAI_MODEL || 'gpt-4.1';
+
+                const input = params.messages.map(m => ({
+                    type: "message",
+                    role: m.role,
+                    content: m.content
+                }));
+
+                const body = {
+                    model: model,
+                    input: input
+                };
+
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'api-key': apiKey
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) {
+                    const txt = await res.text();
+                    throw new Error(`Azure API error: ${res.status} - ${txt}`);
+                }
+
+                if (params.stream) {
+                    // Create an async generator that mimics OpenAI's stream
+                    async function* generateStream() {
+                        const reader = res.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop(); // keep the last incomplete line in buffer
+                            for (const line of lines) {
+                                if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+                                    try {
+                                        const data = JSON.parse(line.slice(6));
+                                        let text = '';
+                                        if (data.type === 'response.content_part.added' && data.part && data.part.text) {
+                                            text = data.part.text;
+                                        } else if (data.type === 'response.content.delta' && data.delta && data.delta.text) {
+                                            text = data.delta.text;
+                                        }
+                                        if (text) {
+                                            yield { choices: [{ delta: { content: text } }] };
+                                        }
+                                    } catch (e) {
+                                        // ignore parse errors
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return generateStream();
+                } else {
+                    let fullContent = '';
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // keep the last incomplete line in buffer
+                        for (const line of lines) {
+                            if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    if (data.type === 'response.content_part.added' && data.part && data.part.text) {
+                                        fullContent += data.part.text;
+                                    } else if (data.type === 'response.content.delta' && data.delta && data.delta.text) {
+                                        fullContent += data.delta.text;
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                    return { choices: [{ message: { content: fullContent } }] };
+                }
+            }
+        }
+    }
+};
 
 const app = express();
 // Allow overriding the port via env; default to 3000
