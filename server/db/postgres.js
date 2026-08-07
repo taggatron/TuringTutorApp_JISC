@@ -373,6 +373,12 @@ function setCurrentUserId(userId) {
   als.enterWith({ userId: userId ? String(userId) : null });
 }
 
+// Helper to reliably scope an entire async context to a given user id.
+// Ideal for long-lived WebSocket handlers or background tasks.
+function runWithUserId(userId, cb) {
+  return als.run({ userId: userId ? String(userId) : null }, cb);
+}
+
 export {
   registerUser,
   getUser,
@@ -404,6 +410,6 @@ export {
   query,
   pool,
   attachDbUser,
-  setCurrentUserId, ensureMessageMetadataColumns
+  setCurrentUserId, runWithUserId, ensureMessageMetadataColumns
 };
 

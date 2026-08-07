@@ -14,7 +14,7 @@ import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
-import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel, getEmptyAssistantMessage, ensureMessageMetadataColumns } from './server/db/postgres.js';
+import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel, getEmptyAssistantMessage, ensureMessageMetadataColumns, runWithUserId } from './server/db/postgres.js';
 import { checkAuth } from './server/middleware/auth.js';
 
 dotenv.config({ path: './APIkey.env' });
@@ -1131,84 +1131,80 @@ wss && wss.on('connection', async (ws, req) => {
     }
 
     ws.on('message', async (message) => {
-        // Ensure AsyncLocalStorage contains current user id for DB RLS checks
-        try {
-            setCurrentUserId(wsUser.id);
-        } catch (e) {
-            console.error('Could not set DB context for WebSocket message:', e);
-        }
-        let userMessage;
-        try {
-            userMessage = JSON.parse(message);
-        } catch (parseErr) {
-            console.error('Invalid JSON in WS message:', parseErr);
-            ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
-            return;
-        }
-
-        if (userMessage.action === "generateFeedback") {
-            // Generate feedback without saving the user message again
-            const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory);
-            const feedback = await processor.generateFeedback(userMessage.content);
-            if (feedback) {
-                ws.send(JSON.stringify({ type: 'feedback', content: feedback }));
+        // Ensure AsyncLocalStorage safely encapsulates all async DB queries for this message
+        runWithUserId(wsUser.id, async () => {
+            let userMessage;
+            try {
+                userMessage = JSON.parse(message);
+            } catch (parseErr) {
+                console.error('Invalid JSON in WS message:', parseErr);
+                ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+                return;
             }
-        } else {
-            // Ensure session ID and message processing logic
-            if (userMessage.session_id) {
-                session_id = userMessage.session_id;
-                conversationHistory = await loadSessionHistory(session_id);
-                    if (userMessage.content) {
-                    const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
-                    await processor.addUserMessage(userMessage);
-                    await processor.processUserMessage(userMessage);
-                } else {
-                    // Send a richer history payload including DB-backed messages, feedback and scale levels
-                        const [messages, feedbackData, scaleRows] = await Promise.all([
-                        getMessages(session_id),
-                        getFeedback(session_id),
-                        getScaleLevels(session_id)
-                    ]);
-                    const scaleLevels = [...new Set(scaleRows.map(r => r.scale_level))];
-                    ws.send(JSON.stringify({
-                        type: 'history',
-                        data: {
-                            messages: messages.map(m => ({ ...m, message_id: m.id ?? m.message_id, scale_level: m.scale_level || 1, collapsed: m.collapsed || 0 })),
-                            feedbackData,
-                            scale_levels: scaleLevels
-                        }
-                    }));
+
+            if (userMessage.action === "generateFeedback") {
+                // Generate feedback without saving the user message again
+                const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory);
+                const feedback = await processor.generateFeedback(userMessage.content);
+                if (feedback) {
+                    ws.send(JSON.stringify({ type: 'feedback', content: feedback }));
                 }
             } else {
-                // Handle cases when there's no session_id provided (new session)
-                if (!session_id) {
-                    session_id = await getNextSessionId();
-                    // We only have the username from the WebSocket cookie here —
-                    // look up the user's numeric id before creating the session.
-                    try {
-                        const user = await getUser(username);
-                        if (!user) {
-                            console.error('Could not find user for username when creating session over WS:', username);
-                            ws.send(JSON.stringify({ type: 'error', message: 'User not found' }));
-                            return;
-                        }
-                        const newSessionId = await createSession(user.id, username, `Session ${session_id}`);
-                        session_id = newSessionId;
+                // Ensure session ID and message processing logic
+                if (userMessage.session_id) {
+                    session_id = userMessage.session_id;
+                    conversationHistory = await loadSessionHistory(session_id);
+                    if (userMessage.content) {
                         const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
-                        processor.addUserMessage(userMessage);
+                        await processor.addUserMessage(userMessage);
                         await processor.processUserMessage(userMessage);
-                    } catch (err) {
-                        console.error('Error creating session over WS:', err);
-                        ws.send(JSON.stringify({ type: 'error', message: 'Could not create session' }));
-                        return;
+                    } else {
+                        // Send a richer history payload including DB-backed messages, feedback and scale levels
+                        const [messages, feedbackData, scaleRows] = await Promise.all([
+                            getMessages(session_id),
+                            getFeedback(session_id),
+                            getScaleLevels(session_id)
+                        ]);
+                        const scaleLevels = scaleRows.map(r => Number(r.scale_level));
+                        ws.send(JSON.stringify({
+                            type: 'history',
+                            data: {
+                                messages: messages.map(m => ({ ...m, message_id: m.id ?? m.message_id, scale_level: m.scale_level || 1, collapsed: m.collapsed || 0 })),
+                                feedbackData,
+                                scale_levels: scaleLevels
+                            }
+                        }));
                     }
                 } else {
-                    const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
-                    processor.addUserMessage(userMessage);
-                    await processor.processUserMessage(userMessage);
+                    // Handle cases when there's no session_id provided (new session)
+                    if (!session_id) {
+                        session_id = await getNextSessionId();
+                        // We only have the username from the WebSocket cookie here —
+                        // look up the user's numeric id before creating the session.
+                        try {
+                            const user = await getUser(username);
+                            if (!user) {
+                                console.error('Could not find user for username when creating session over WS:', username);
+                                ws.send(JSON.stringify({ type: 'error', message: 'User not found' }));
+                                return;
+                            }
+                            const newSessionId = await createSession(user.id, username, `Session ${session_id}`);
+                            session_id = newSessionId;
+                        } catch (err) {
+                            console.error('Error creating session over WS:', err);
+                            ws.send(JSON.stringify({ type: 'error', message: 'Could not create session' }));
+                            return;
+                        }
+                    }
+
+                    if (userMessage.content) {
+                        const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
+                        await processor.addUserMessage(userMessage);
+                        await processor.processUserMessage(userMessage);
+                    }
                 }
             }
-        }
+        });
     });
 
     ws.on('close', () => {
