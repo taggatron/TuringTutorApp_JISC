@@ -36,7 +36,8 @@ const openai = {
 
                 const body = {
                     model: model,
-                    input: input
+                    input: input,
+                    stream: !!params.stream
                 };
 
                 const res = await fetch(url, {
@@ -72,8 +73,8 @@ const openai = {
                                         let text = '';
                                         if (data.type === 'response.content_part.added' && data.part && data.part.text) {
                                             text = data.part.text;
-                                        } else if (data.type === 'response.content.delta' && data.delta && data.delta.text) {
-                                            text = data.delta.text;
+                                        } else if (data.type === 'response.output_text.delta' && typeof data.delta === 'string') {
+                                            text = data.delta;
                                         }
                                         if (text) {
                                             yield { choices: [{ delta: { content: text } }] };
@@ -87,30 +88,12 @@ const openai = {
                     }
                     return generateStream();
                 } else {
-                    let fullContent = '';
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder();
-                    let buffer = '';
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop(); // keep the last incomplete line in buffer
-                        for (const line of lines) {
-                            if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
-                                try {
-                                    const data = JSON.parse(line.slice(6));
-                                    if (data.type === 'response.content_part.added' && data.part && data.part.text) {
-                                        fullContent += data.part.text;
-                                    } else if (data.type === 'response.content.delta' && data.delta && data.delta.text) {
-                                        fullContent += data.delta.text;
-                                    }
-                                } catch (e) {}
-                            }
-                        }
+                    const json = await res.json();
+                    let text = '';
+                    if (json.output && json.output[0] && json.output[0].content && json.output[0].content[0]) {
+                        text = json.output[0].content[0].text || '';
                     }
-                    return { choices: [{ message: { content: fullContent } }] };
+                    return { choices: [{ message: { content: text } }] };
                 }
             }
         }
