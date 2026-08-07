@@ -745,7 +745,7 @@ body > div.container > div.chat-container > div.meta-container {
     width: calc(100% - 16px); /* full width minus 8px margin each side */
     margin: 12px 8px;         /* 12px top/bottom, 8px left/right */
     border-radius: 12px;     /* rounded rectangle edges */
-    overflow: hidden;        /* ensure children respect rounding */
+    overflow: visible;        /* allow popup to overflow above input */
     border: none;
     background: transparent;
     box-shadow: none;
@@ -884,4 +884,194 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
 }
 .message {
     margin: 4px 0; /* Reduced from 6px */
+}
+
+
+/* ============================================================
+   COLLAPSIBLE SIDEBAR
+   ============================================================ */
+
+.sidebar {
+    position: relative;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 20%;
+    min-width: 200px;
+    overflow: hidden;
+}
+
+.sidebar.collapsed {
+    width: 52px !important;
+    min-width: 52px !important;
+    flex-shrink: 0;
+}
+
+/* The toggle button sits at the top of the sidebar */
+.sidebar-toggle-btn {
+    position: absolute;
+    top: 10px;
+    right: 8px;
+    z-index: 200;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+    color: #7c3aed;
+}
+
+.sidebar-toggle-btn:hover {
+    background: rgba(124, 58, 237, 0.08);
+}
+
+.sidebar-collapse-arrow {
+    font-size: 11px;
+    color: #7c3aed;
+    opacity: 0.7;
+    transition: transform 0.3s ease, opacity 0.2s;
+}
+
+.sidebar.collapsed .sidebar-collapse-arrow {
+    transform: rotate(180deg);
+}
+
+/* When collapsed, hide all sidebar content except the toggle button */
+.sidebar.collapsed .sidebar-header,
+.sidebar.collapsed .sidebar-content {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+/* When collapsed, center the toggle button */
+.sidebar.collapsed .sidebar-toggle-btn {
+    right: 50%;
+    transform: translateX(50%);
+    top: 10px;
+}
+
+/* Show the brackets icon more prominently when collapsed */
+.sidebar-brackets {
+    transition: opacity 0.2s ease;
+}
+
+/* ============================================================
+   CHAT WELCOME / EMPTY STATE
+   ============================================================ */
+
+.chat-welcome {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Hide when chat has messages */
+.chat-messages.has-messages .chat-welcome {
+    display: none;
+}
+
+.chat-welcome-inner {
+    pointer-events: auto;
+    text-align: center;
+    max-width: 560px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    animation: welcomeFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes welcomeFadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-welcome-logo {
+    margin-bottom: 8px;
+    opacity: 0.85;
+}
+
+.chat-welcome-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+}
+
+.chat-welcome-subtitle {
+    font-size: 0.95rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.chat-starter-prompts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.chat-starter-btn {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(248,250,252,0.9));
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    border-radius: 14px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: all 0.18s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-family: inherit;
+}
+
+.chat-starter-btn:hover {
+    background: linear-gradient(180deg, #ffffff, #f0f4ff);
+    border-color: rgba(124, 58, 237, 0.35);
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.12);
+    transform: translateY(-2px);
+}
+
+.chat-starter-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.08);
+}
+
+.starter-icon {
+    font-size: 1.6rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.starter-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #1e293b;
+    line-height: 1.4;
+}
+
+.starter-text small {
+    font-size: 0.78rem;
+    color: #64748b;
+    font-weight: 400;
+    display: block;
+    margin-top: 2px;
 }

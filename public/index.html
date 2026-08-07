@@ -19,7 +19,11 @@
 <body>
     
     <div class="container">
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
+            <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Toggle sidebar" aria-label="Toggle sidebar">
+                <span class="sidebar-brackets" id="sidebar-brackets-icon"><span style="color:#7c3aed; font-weight:900; font-size:1.4rem; letter-spacing:-2px;">[&nbsp;]</span></span>
+                <span class="sidebar-collapse-arrow" id="sidebar-collapse-arrow">◀</span>
+            </button>
             <div class="sidebar-header">
                 <div id="sidebar-logo" style="grid-column: 1 / -1; display: flex; justify-content: center; padding-bottom: 10px;"><img src="sdc-logo.svg" alt="SDC Logo" height="25"></div>
                 <button class="turing-mode-button" id="turing-mode-button" title="Start Turing Mode (editor)" aria-label="Start Turing Mode">
@@ -41,7 +45,32 @@
         </div>
         <div class="chat-container">
             <div class="chat-surface">
-                <div id="chat-messages" class="chat-messages"></div>
+                <div id="chat-messages" class="chat-messages">
+                    <!-- Welcome state shown when no messages exist -->
+                    <div id="chat-welcome" class="chat-welcome">
+                        <div class="chat-welcome-inner">
+                            <div class="chat-welcome-logo">
+                                <img src="sdc-logo.svg" alt="SDC Logo" height="40">
+                            </div>
+                            <h2 class="chat-welcome-title">How can I help you today?</h2>
+                            <p class="chat-welcome-subtitle">Start a conversation or try one of these prompts:</p>
+                            <div class="chat-starter-prompts">
+                                <button class="chat-starter-btn" data-prompt="Explain this topic in a way a student can understand and give me 3 key points to remember.">
+                                    <span class="starter-icon">📚</span>
+                                    <span class="starter-text">Explain a topic simply<br><small>Get a clear breakdown with key points</small></span>
+                                </button>
+                                <button class="chat-starter-btn" data-prompt="Help me plan a lesson on this subject. Include learning objectives, activities and assessment ideas.">
+                                    <span class="starter-icon">📝</span>
+                                    <span class="starter-text">Plan a lesson<br><small>Get learning objectives & activities</small></span>
+                                </button>
+                                <button class="chat-starter-btn" data-prompt="Give me feedback on this work. Highlight strengths and areas for improvement.">
+                                    <span class="starter-icon">💡</span>
+                                    <span class="starter-text">Get feedback on work<br><small>Strengths & areas to improve</small></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="meta-container">
                 <div class="chat-input">
