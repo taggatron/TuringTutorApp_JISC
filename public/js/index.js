@@ -1790,28 +1790,22 @@ function setupReferenceImageActions() {
 function togglePromptButtons() {
   const button = document.querySelector('.prompt-examples-button');
   const promptButtons = document.querySelector('.prompt-buttons');
-  button.classList.toggle('active');
-  promptButtons.style.display = button.classList.contains('active') ? 'flex' : 'none';
-  const buttonRect = button.getBoundingClientRect();
-  promptButtons.style.position = 'fixed';
-  promptButtons.style.left = `${buttonRect.right}px`;
-  promptButtons.style.top = `${buttonRect.top}px`;
+  if (button && promptButtons) {
+      button.classList.toggle('active');
+  }
 }
 
 document.addEventListener('click', (event) => {
   const button = document.querySelector('.prompt-examples-button');
   const promptButtons = document.querySelector('.prompt-buttons');
-  if (!button.contains(event.target) && !promptButtons.contains(event.target)) {
-    promptButtons.style.display = 'none';
+  if (button && promptButtons && !button.contains(event.target) && !promptButtons.contains(event.target)) {
     button.classList.remove('active');
   }
 });
 
 window.addEventListener('resize', () => {
   const button = document.querySelector('.prompt-examples-button');
-  const promptButtons = document.querySelector('.prompt-buttons');
-  promptButtons.style.display = 'none';
-  button.classList.remove('active');
+  if (button) button.classList.remove('active');
 });
 
 function highlightCurrentSession(sessionId) {
@@ -2493,3 +2487,19 @@ function updateTuringBarCounts(assistantEl) {
   const r1 = assistantEl.querySelector('.turing-bar .count-refs'); if (r1) r1.textContent = `Refs: ${refs}`;
   const r2 = assistantEl.querySelector('.turing-bar .count-prompts'); if (r2) r2.textContent = `Shots: ${shots}`;
 }
+
+
+  // Tools popup toggle
+  const tToggle = document.getElementById('tools-toggle');
+  const exPrompts = document.querySelector('.example-prompts');
+  if (tToggle && exPrompts) {
+      tToggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          exPrompts.classList.toggle('show-popup');
+      });
+      document.addEventListener('click', (e) => {
+          if (!exPrompts.contains(e.target) && e.target !== tToggle) {
+              exPrompts.classList.remove('show-popup');
+          }
+      });
+  }

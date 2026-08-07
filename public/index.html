@@ -64,15 +64,7 @@
             </div>
         </div>
 
-        <!-- Reference Pop-up -->
-        <div id="reference-popup" class="reference-popup">
-            <span class="close-button">&times;</span>
-            <p id="reference-content"></p>
-            <div class="reference-actions">
-                <button id="copy-image-btn" type="button">Copy prompt + AI as image</button>
-                <button id="download-image-btn" type="button">Download PNG</button>
-            </div>
-        </div>
+
     </div>
 
     <!-- Pop-up for scale explanations -->
@@ -110,6 +102,16 @@
 
     <!-- global popup overlay used by prompt/reference popups -->
     <div id="popup-overlay" class="popup-overlay" aria-hidden="true"></div>
+
+    <!-- Reference Pop-up -->
+    <div id="reference-popup" class="reference-popup">
+        <span class="close-button">&times;</span>
+        <p id="reference-content"></p>
+        <div class="reference-actions">
+            <button id="copy-image-btn" type="button">Copy prompt + AI as image</button>
+            <button id="download-image-btn" type="button">Download PNG</button>
+        </div>
+    </div>
 
     <!-- Load main client script -->
     <script defer src="/js/index.js"></script>
