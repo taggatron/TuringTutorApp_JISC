@@ -561,15 +561,35 @@ body > div.container > div.chat-container {
     overflow: auto;
 }
 
+
 .assistant-edit-feedback-popup.embedded .assistant-edit-feedback-content {
-    background: linear-gradient(135deg, rgba(238, 242, 255, 0.8) 0%, rgba(243, 232, 255, 0.8) 100%);
-    border: 1px solid rgba(139, 92, 246, 0.2);
-    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+    background: linear-gradient(135deg, rgba(238, 242, 255, 0.95) 0%, rgba(243, 232, 255, 0.95) 100%);
+    border: 2px solid transparent;
     border-radius: 12px;
     padding: 20px 24px;
     color: #1e293b;
-    backdrop-filter: blur(8px);
+    position: relative;
+    background-clip: padding-box;
 }
+
+.assistant-edit-feedback-popup.embedded .assistant-edit-feedback-content::before {
+    content: '';
+    position: absolute;
+    top: -2px; left: -2px; right: -2px; bottom: -2px;
+    background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+    background-size: 400%;
+    z-index: -1;
+    border-radius: 14px;
+    animation: glowing-border 3s linear infinite;
+    opacity: 0.8;
+}
+
+@keyframes glowing-border {
+    0% { background-position: 0 0; }
+    50% { background-position: 100% 0; }
+    100% { background-position: 0 0; }
+}
+
 
 .assistant-edit-feedback-close {
     position: absolute;
@@ -858,3 +878,10 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
 /* Ensure turing footer images remain constrained */
 .message.assistant .turing-footer .reference-image-wrapper { max-width: 760px; width:100%; }
 .message.assistant .turing-footer img.reference-image { width: 100%; height: auto; display: block; }
+
+.message-row {
+    margin: 4px 0; /* Reduced from 8px */
+}
+.message {
+    margin: 4px 0; /* Reduced from 6px */
+}

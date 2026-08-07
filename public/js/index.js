@@ -306,7 +306,7 @@ ws.onmessage = (event) => {
             const overlay = document.createElement('div');
             overlay.className = 'message-assistant-overlay overlay-shown';
             const span = document.createElement('span');
-            span.textContent = 'Copying or directly using this response breaches academic integrity guidelines';
+            span.innerHTML = '🔑 Copying or directly using this response breaches academic integrity guidelines';
             const closeBtn = document.createElement('button');
             closeBtn.className = 'close-overlay-btn';
             closeBtn.title = 'Remove warning';
@@ -571,7 +571,7 @@ function displayFeedback(feedback, messageId = null) {
   if (overlay) {
     overlay.classList.add('overlay-shown');
     overlay.innerHTML = `
-      <span>Copying or directly using this response breaches academic integrity guidelines</span>
+      <span>🔑 Copying or directly using this response breaches academic integrity guidelines</span>
       <button class="close-overlay-btn" title="Remove warning">&times;</button>`;
     overlay.addEventListener('click', function(e){
       e.stopPropagation();
@@ -797,7 +797,7 @@ async function loadSessionHistory(sessionId) {
           const overlay = document.createElement('div');
           overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
           const overlayText = document.createElement('span');
-          overlayText.textContent = 'Copying or directly using this response breaches academic integrity guidelines';
+          overlayText.innerHTML = '🔑 Copying or directly using this response breaches academic integrity guidelines';
           const closeBtn = document.createElement('button');
           closeBtn.className = 'close-overlay-btn';
           closeBtn.type = 'button';

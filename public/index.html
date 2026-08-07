@@ -17,12 +17,11 @@
     
 </head>
 <body>
-    <div id="header">
-        <img src="sdc-logo.svg" alt="SDC Logo" height="25">
-    </div>
+    
     <div class="container">
         <div class="sidebar">
             <div class="sidebar-header">
+                <div id="sidebar-logo" style="grid-column: 1 / -1; display: flex; justify-content: center; padding-bottom: 10px;"><img src="sdc-logo.svg" alt="SDC Logo" height="25"></div>
                 <button class="turing-mode-button" id="turing-mode-button" title="Start Turing Mode (editor)" aria-label="Start Turing Mode">
                     <span class="plus">+</span>
                     <img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt="">
@@ -47,7 +46,9 @@
             </div>
             <div class="meta-container">
                 <div class="chat-input">
+                    
                     <textarea id="message-input" type="text" placeholder="Type your message..."></textarea>
+                    
                     
                 </div>
                 <!-- Example Prompts Section -->
