@@ -186,6 +186,7 @@ body {
 }
 
 
+
 .chat-input textarea {
     flex: 1;
     padding: 14px 56px 14px 20px;
@@ -196,14 +197,22 @@ body {
     overflow-y: hidden;
     outline: none;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--border-light);
-    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(139, 92, 246, 0.3); /* subtle purple border */
+    background: linear-gradient(to right, rgba(243, 232, 255, 0.6), rgba(250, 245, 255, 0.9)); /* light purple gradient */
     line-height: 1.4;
     max-height: 35vh;
     box-sizing: border-box;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.05); /* subtle purple shadow */
+    color: var(--color-text-main);
 }
+
+.chat-input textarea:focus {
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+    border-color: rgba(139, 92, 246, 0.6);
+    background: linear-gradient(to right, rgba(243, 232, 255, 0.8), rgba(255, 255, 255, 1));
+}
+
 
 .chat-input textarea:focus {
     box-shadow: var(--shadow-glow);

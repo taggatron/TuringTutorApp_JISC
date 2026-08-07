@@ -250,23 +250,27 @@ body > div.container > div.chat-container {
     .create-reference-button, .prompt-examples-button { display: none; } /* keep compact on narrow screens */
 }
 /* Assistant message edit mode styles */
+
 .assistant-edit-mode {
     position: fixed !important;
-    top: 0; /* Start at very top, above AI assessment bar */
-    left: var(--sidebar-left, 0px); /* Align with sidebar */
+    top: 0;
+    left: var(--sidebar-left, 0px);
     width: 100vw !important;
-    height: var(--assistant-edit-height, calc(100vh - 120px)) !important; /* dynamic height */
+    height: var(--assistant-edit-height, calc(100vh - 120px)) !important;
     z-index: 3000;
-    background: #fff;
+    background: #f4f5f7; /* Soft gray document backdrop */
     box-shadow: 0 0 40px rgba(0,0,0,0.2);
     display: flex;
     flex-direction: column;
-    justify-content: flex-start; /* top align */
-    align-items: flex-start; /* allow toolbar + content to use left side */
+    justify-content: flex-start;
+    align-items: center; /* Center the document horizontally */
     animation: expandAssistantMsg 0.4s cubic-bezier(.4,2,.6,1) forwards;
-    overflow: hidden; /* child will scroll */
-    padding-top: 88px; /* space for toolbar + close button */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-top: 100px; /* Space for the floating toolbar */
+    padding-bottom: 60px;
 }
+
 
 /* Hide DOM template elements that were previously controlled inline */
 #feedback-container-template {
@@ -299,64 +303,68 @@ body > div.container > div.chat-container {
     background: #f2f2f2;
     transform: scale(1.05);
 }
+
 .assistant-editable-content {
-    outline: 2px solid #2d8cff;
-    background: #ecfdf5; /* light green to match assistant messages */
- /* revert to neutral; only top Turing chat gets green */
-    border-radius: 10px;
-    min-height: 60px;
-    padding: 24px;
-    margin: 0 320px 14px 24px; /* leave room on right for criteria rail, add bottom margin for blue outline */
-    width: auto;
-    max-width: none;
+    background: #ffffff;
+    border-radius: 12px;
+    min-height: 80vh;
+    padding: 60px 80px; /* Generous document padding */
+    margin: 0 auto; /* Center on page */
+    width: 100%;
+    max-width: 900px;
     box-sizing: border-box;
-    font-size: 1.0rem;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: #1e293b;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.08); /* Soft elevated page shadow */
+    border: 1px solid rgba(226, 232, 240, 0.8);
     transition: box-shadow 0.2s;
-    flex: 1 1 auto; /* allow to fill remaining height */
-    overflow-y: auto; /* scroll inner content, prevent overflow */
-    align-self: stretch;
+    outline: none !important; /* Remove the blue outline */
 }
 
+
 /* Sticky formatting toolbar */
+
 .assistant-edit-toolbar {
-    position: absolute;
-    top: 40px; /* below close button area */
-    left: 24px; /* align to left side of the overlay */
-    right: 320px; /* reserve space on the right for the criteria rail (match editable-content right margin) */
-    transform: none;
-    width: auto; /* fill between left and right */
+    position: fixed; /* Fix to top of viewport */
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) !important; /* Force center */
+    width: auto;
     display: flex;
-    gap: 6px;
-    padding: 8px 10px;
-    background: linear-gradient(180deg,#ffffff 0%,#f7f9fb 100%);
-    border: 1px solid #d9dfe5;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.85); /* Glassmorphism */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 9999px; /* Pill shape */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.02);
     box-sizing: border-box;
     z-index: 3050;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 120ms ease;
+    transition: opacity 120ms ease, transform 0.2s ease;
 }
+
 
 /* Responsive: when viewport is narrow, center the toolbar and let the editable
      content use the full width with small side gutters. This prevents overlap
      between toolbar and the right-side criteria rail on small screens. */
+
 @media (max-width: 960px) {
     .assistant-edit-toolbar {
         left: 50%;
-        right: auto;
-        transform: translateX(-50%);
-        width: calc(100% - 48px);
-        max-width: 900px;
+        transform: translateX(-50%) !important;
+        width: 90%;
+        max-width: 600px;
     }
     .assistant-editable-content {
-        margin: 12px !important;
-        width: calc(100% - 24px);
-        max-width: calc(100% - 24px);
+        padding: 40px 30px;
+        width: 95%;
     }
 }
+
 .assistant-edit-mode > .assistant-edit-toolbar { opacity:1; pointer-events:auto; }
 .assistant-edit-toolbar button {
     background: #fff;
@@ -421,15 +429,17 @@ body > div.container > div.chat-container {
 }
 
 /* Right-side criteria rail within Turing edit popup */
+
 .assistant-edit-criteria-rail {
-    position: absolute;
-    right: 18px;
-    top: 110px; /* below toolbar */
+    position: fixed; /* Keep fixed to viewport */
+    right: max(20px, calc(50% - 450px - 140px)); /* Align relative to max-width document page (900/2 + chip width) */
+    top: 120px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     z-index: 3060;
 }
+
 .criteria-clipboard-trigger {
     align-self: center;
     background: #f3f4f6;
@@ -442,24 +452,36 @@ body > div.container > div.chat-container {
     cursor: pointer;
 }
 .criteria-clipboard-trigger:hover { background:#e5e7eb; }
+
 .criteria-chip {
-    min-width: 64px;
-    padding: 10px 14px;
+    min-width: 70px;
+    padding: 12px 16px;
     border-radius: 12px;
-    border: 1px solid #c7d2fe; /* indigo-200 */
-    background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
-    color: #111827;
-    font-weight: 800;
-    letter-spacing: 0.4px;
-    box-shadow: 0 4px 14px rgba(30, 58, 138, 0.12);
+    border: 1px solid rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px);
+    color: #1e293b;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     cursor: default;
     position: relative;
+    transition: all 0.2s ease;
 }
+
 .criteria-chip:hover { transform: translateY(-1px); transition: transform 120ms ease; }
-.criteria-chip.chip-pass { border-color:#86efac; background: linear-gradient(180deg,#f0fdf4 0%, #dcfce7 100%); color:#065f46; box-shadow: 0 4px 14px rgba(16,185,129,0.15); }
-.criteria-chip.chip-merit { border-color:#fde68a; background: linear-gradient(180deg,#fffbeb 0%, #fef3c7 100%); color:#92400e; box-shadow: 0 4px 14px rgba(245,158,11,0.15); }
-.criteria-chip.chip-distinction { border-color:#93c5fd; background: linear-gradient(180deg,#eff6ff 0%, #dbeafe 100%); color:#1e3a8a; box-shadow: 0 4px 14px rgba(59,130,246,0.18); }
-.criteria-chip.chip-fail { border-color:#fecaca; background: linear-gradient(180deg,#fff1f2 0%, #fee2e2 100%); color:#7f1d1d; box-shadow: 0 4px 14px rgba(239,68,68,0.18); }
+
+.criteria-chip.chip-pass { background: rgba(220, 252, 231, 0.85); color: #166534; box-shadow: 0 4px 15px rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.3); }
+
+
+.criteria-chip.chip-merit { background: rgba(254, 243, 199, 0.85); color: #92400e; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.3); }
+
+
+.criteria-chip.chip-distinction { background: rgba(219, 234, 254, 0.85); color: #1e40af; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.3); }
+
+
+.criteria-chip.chip-fail { background: rgba(254, 226, 226, 0.85); color: #991b1b; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.3); }
+
 .assistant-edit-criteria-rail.rail-animate .criteria-chip { animation-name: criteriaGlow; animation-duration: 1400ms; animation-iteration-count: 1; }
 .assistant-edit-criteria-rail.rail-animate .criteria-chip:nth-child(1) { animation-delay: 0ms; }
 .assistant-edit-criteria-rail.rail-animate .criteria-chip:nth-child(2) { animation-delay: 250ms; }
@@ -520,19 +542,15 @@ body > div.container > div.chat-container {
     z-index: 3070;
 }
 .assistant-edit-feedback-popup.visible { display: block; }
+
 .assistant-edit-feedback-popup.embedded {
-    position: sticky;
-    top: 0;
-    left: auto;
-    transform: none;
+    position: relative;
     width: 100%;
-    max-width: none;
-    background: rgba(255,255,255,0.9);
-    padding: 0;
-    margin-bottom: 16px;
+    margin-bottom: 24px;
     display: block;
     z-index: 20;
 }
+
 .assistant-edit-feedback-content {
     background: #ffffff;
     border-radius: 10px;
@@ -542,10 +560,17 @@ body > div.container > div.chat-container {
     max-height: 40vh;
     overflow: auto;
 }
+
 .assistant-edit-feedback-popup.embedded .assistant-edit-feedback-content {
-    border: 1px solid rgba(45,140,255,0.25);
-    box-shadow: 0 8px 18px rgba(45,140,255,0.08);
+    background: linear-gradient(135deg, rgba(238, 242, 255, 0.8) 0%, rgba(243, 232, 255, 0.8) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+    border-radius: 12px;
+    padding: 20px 24px;
+    color: #1e293b;
+    backdrop-filter: blur(8px);
 }
+
 .assistant-edit-feedback-close {
     position: absolute;
     top: 6px;
