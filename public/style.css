@@ -192,7 +192,7 @@ body {
 .chat-input {
     display: flex;
     box-sizing: border-box;
-    align-items: center; /* or flex-end depending on multiline behavior */
+    align-items: flex-end;
     width: 100%;
     padding: 8px 12px;
     border-radius: var(--radius-lg);
@@ -1620,6 +1620,8 @@ body {
 }
 
 .chat-input .tools-toggle {
+    align-self: flex-end;
+    margin-bottom: 2px;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -1634,6 +1636,8 @@ body {
 }
 
 .chat-input .send-message-button {
+    align-self: flex-end;
+    margin-bottom: 2px;
     background: linear-gradient(180deg, #ffffff, #f7f9fb);
     color: #2d3e50;
     border: 1px solid rgba(45, 140, 255, 0.12);
