@@ -179,69 +179,42 @@ body > div.container > div.chat-container {
 .tools-toggle { z-index: 3000; }
 .tools-toggle:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 26px rgba(16,24,40,0.12); }
 
-/* The actual control buttons are visually hidden by default but remain in the DOM
-   so drag/drop listeners or JS can still access them. They become visible when
-   the user hovers the tools area (or focuses the toggle). */
-.prompt-header .create-reference-button,
-.prompt-header .prompt-examples-button,
-.prompt-header .prompt-buttons {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-    pointer-events: none;
-    transition: opacity 180ms ease, transform 180ms ease;
-    position: relative; /* keep document flow for drop targets */
+/* When inside .example-prompts popup menu, buttons are instantly visible when toggled */
+.example-prompts .create-reference-button,
+.example-prompts .prompt-examples-button,
+.example-prompts .prompt-buttons .prompt-button,
+.example-prompts.show-popup .create-reference-button,
+.example-prompts.show-popup .prompt-examples-button,
+.example-prompts.show-popup .prompt-buttons .prompt-button {
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto !important;
 }
 
-/* When hovering the tools/toggle or the header, reveal controls */
-.prompt-header:hover .create-reference-button,
-.prompt-header:hover .prompt-examples-button,
-.prompt-header:hover .prompt-buttons,
-.prompt-header.expanded .create-reference-button,
-.prompt-header.expanded .prompt-examples-button,
-.prompt-header.expanded .prompt-buttons,
-.tools-toggle:focus + .create-reference-button,
-.tools-toggle:focus + .create-reference-button + .prompt-examples-button {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    pointer-events: auto;
-}
-
-/* Style of the individual prompt buttons when revealed */
-.prompt-buttons { display: flex; gap: 8px; align-items: center; background: transparent; border: none; box-shadow: none; }
-.prompt-button {
-    background: linear-gradient(180deg, #ffffff, #f3f6ff);
-    border: 1px solid #dbeafe; /* indigo-100 */
-    color: #0b1220; /* solid dark slate for readability */
-    padding: 8px 12px;
-    border-radius: 999px;
-    font-size: 0.9rem;
-    cursor: pointer;
-    box-shadow: 0 6px 18px rgba(13, 42, 148, 0.04);
-    transition: transform 140ms ease, background 120ms ease, box-shadow 120ms ease, color 120ms ease;
-}
-.prompt-button:hover { transform: translateY(-2px); background: linear-gradient(180deg,#ffffff,#eef2ff); box-shadow: 0 12px 28px rgba(13,42,148,0.07); }
-
-/* Reference & examples buttons matching modern style but slightly more prominent */
-
-.create-reference-button, .prompt-examples-button {
-    background: linear-gradient(180deg,#fff,#fafafa);
-    border: 1px solid #e6edf8;
-    padding: 8px 10px;
-    border-radius: 8px;
-    font-weight: 400; /* normal weight */
-    font-size: 0.88rem;
-    cursor: pointer;
-    color: #0b1220; /* ensure visible text */
-    text-shadow: none;
-}
-.create-reference-button:hover, .prompt-examples-button:hover { background: #fff; box-shadow: 0 8px 22px rgba(2,6,23,0.06); }
-
-/* Make the outer prompt header container transparent and borderless to match design */
-.example-prompts > .prompt-header,
-.example-prompts > .prompt-header > .prompt-buttons {
+/* Align prompt header and child prompt buttons to the left */
+.example-prompts > .prompt-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 8px !important;
+}
+
+.example-prompts .prompt-buttons {
+    display: none;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    background: transparent !important;
+    border: none !important;
+    border-left: 2px solid rgba(168, 85, 247, 0.3) !important;
+    box-shadow: none !important;
+    margin: 4px 0 0 8px !important;
+    padding-left: 10px !important;
+    gap: 6px !important;
 }
 
 /* Small responsive adjustments */
@@ -707,24 +680,12 @@ body > div.container > div.chat-container {
 }
 .reference-image-wrapper img { width: 100%; height: auto; display: block; }
 /* Popup overlay and popups */
-.popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 2500; display: none; }
-.popup-overlay.visible { display: block; }
-.prompt-popup, .reference-popup { display: none; position: fixed; z-index: 2600; left: 50%; top: 20%; transform: translateX(-50%); max-width: 700px; width: calc(100% - 48px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); border-radius: 10px; /* popup container intentionally transparent - visual surface lives in .popup-content */ }
-.prompt-popup .popup-content, .reference-popup .popup-content { padding: 18px; background: #fff; border-radius: 10px; }
-.prompt-popup.visible, .reference-popup.visible { display: block; }
-
-/* Ensure the popup container itself doesn't act as a full-screen white backdrop
-    which can interfere with other full-screen UI (e.g. Turing assistant edit mode).
-    Keep the actual white visual surface in `.popup-content`. When the popup is
-    not visible, make it non-interactive so it won't block overlays or clicks. */
-.prompt-popup { background: transparent !important; pointer-events: none; }
-.reference-popup { background: transparent; pointer-events: none; }
-.prompt-popup.visible, .reference-popup.visible { pointer-events: auto; }
+.popup-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45) !important; backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important; z-index: 99998; display: none; }
+.popup-overlay.visible { display: block !important; }
+.prompt-popup { display: none; position: fixed; z-index: 99999; inset: 0; pointer-events: none; }
+.reference-popup { display: none; position: fixed; z-index: 99999; top: 50% !important; left: 50% !important; right: auto !important; bottom: auto !important; transform: translate(-50%, -50%) !important; margin: 0 !important; pointer-events: none; }
+.prompt-popup.visible, .reference-popup.visible { display: block !important; pointer-events: auto !important; }
 .prompt-popup .popup-content, .reference-popup .popup-content { pointer-events: auto; }
-.reference-popup.visible { background-color: #fff !important; z-index: 99999; opacity: 1; }
-.prompt-popup.visible { z-index: 99999; }
-.prompt-popup .popup-content { background: #fff !important; }
-.prompt-popup .close-button, .reference-popup .close-button { position: absolute; top: 8px; right: 12px; font-size: 1.4rem; cursor: pointer; }
 @keyframes refPulse {
     0%, 100% { filter: drop-shadow(0 0 0 rgba(45,140,255,0)); }
     50% { filter: drop-shadow(0 0 8px rgba(45,140,255,0.55)); }

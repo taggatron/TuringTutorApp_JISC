@@ -1013,48 +1013,76 @@ body {
 .example-prompts {
     display: none;
     flex-direction: column;
+    align-items: flex-start;
     position: absolute;
     bottom: 100%;
-    margin-bottom: 10px;
-    left: 10px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-    border: 1px solid rgba(0,0,0,0.1);
-    padding: 10px;
+    margin-bottom: 12px;
+    left: 12px;
+    background: transparent !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
     z-index: 1000;
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+    pointer-events: none;
+    transition: opacity 0.1s ease, transform 0.1s ease;
 }
 .example-prompts.show-popup {
-    display: flex;
+    display: flex !important;
+    opacity: 1 !important;
+    transform: translateY(0) scale(1) !important;
+    pointer-events: auto !important;
 }
 
 .prompt-buttons {
     display: none;
     flex-direction: column;
+    align-items: flex-start;
     position: static;
-    background-color: transparent;
-    border: none;
-    margin: 0;
-    box-shadow: none;
-    gap: 4px;
+    background: transparent !important;
+    border: none !important;
+    border-left: 2px solid rgba(168, 85, 247, 0.3) !important;
+    margin: 4px 0 0 8px;
+    padding-left: 10px;
+    box-shadow: none !important;
+    gap: 6px;
 }
 .prompt-examples-button.active + .prompt-buttons {
-    display: flex; /* Reveal the buttons when the button is active */
+    display: flex !important; /* Reveal the buttons when the button is active */
 }
 
 .prompt-button {
-    padding: 8px 16px; /* Adjusted padding */
-    margin: 1px;
-    border: none;
-    border-radius: 10px;
-    background-color: #007bff;
-    color: white;
-    cursor: pointer;
-    font-size: 0.9em; /* Reduced font size */
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    width: fit-content !important;
+    padding: 8px 16px !important;
+    border-radius: var(--radius-pill, 9999px) !important;
+    font-family: var(--font-family, 'Inter', sans-serif) !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    color: #5b21b6 !important;
+    background: linear-gradient(135deg, rgba(243, 232, 255, 0.96), rgba(250, 245, 255, 0.98)) !important;
+    border: 1px solid rgba(168, 85, 247, 0.28) !important;
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.12) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    transition: all 0.12s ease-in-out !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
 }
 
 .prompt-button:hover {
-    background-color: #0056b3;
+    background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.38) !important;
+    transform: translateY(-2px) !important;
 }
 
 .prompt-popup {
@@ -1063,135 +1091,200 @@ body {
     top: 0;
     left: 0;
     width: 100%;
-    /* do not force full viewport height here - allow content-sized popup
-       (index.css provides the final placement/size for the popup). Keeping
-       height:auto prevents a large white box behind the centered popup. */
-    height: auto;
-    z-index: 2002; /* Above overlay */
+    height: 100%;
+    z-index: 99999;
 }
 
-/* Styling for buttons inside prompt popups */
-.prompt-popup button {
-    background-color: #f0f7ff;
-    color: #0056b3;
-    border: 1px solid #cce5ff;
-    border-radius: 8px;
-    padding: 10px 15px;
-    width: 100%;
-    text-align: left;
-    margin: 5px 0;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+.popup-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    z-index: 99998;
+    display: none;
+    transition: opacity 0.2s ease;
 }
 
-.prompt-popup button:hover {
-    background-color: #e1f0ff;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.prompt-popup button:active {
-    transform: translateY(1px);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.prompt-popup button::after {
-    content: '→';
-    position: absolute;
-    right: 15px;
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.prompt-popup button:hover::after {
-    opacity: 1;
-    transform: translateX(5px);
+.popup-overlay.visible {
+    display: block !important;
 }
 
 .popup-content {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: white;
-    padding: 20px;
-    border-radius: 10px;
-    width: 80%;
-    max-width: 500px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.25);
-    z-index: 2003; /* Above prompt-popup and overlay */
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 245, 255, 0.99)) !important;
+    border: 1px solid rgba(168, 85, 247, 0.25) !important;
+    padding: 24px 28px !important;
+    border-radius: 20px !important;
+    width: 90% !important;
+    max-width: 520px !important;
+    box-shadow: 0 24px 50px rgba(139, 92, 246, 0.18), 0 10px 25px rgba(15, 23, 42, 0.12) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    z-index: 99999 !important;
 }
 
 .close-button {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 28px;
-    font-weight: bold;
-    color: #333;
-    background: none;
-    border: none;
-    cursor: pointer;
-    z-index: 2100;
-    line-height: 1;
-    opacity: 0.8;
-    transition: color 0.2s, opacity 0.2s;
+    position: absolute !important;
+    top: 18px !important;
+    right: 18px !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    background: rgba(168, 85, 247, 0.08) !important;
+    color: #6b21a8 !important;
+    border: 1px solid rgba(168, 85, 247, 0.18) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    z-index: 2100 !important;
+    transition: all 0.15s ease !important;
 }
 
 .close-button:hover {
-    color: #d9534f;
-    opacity: 1;
+    background: rgba(168, 85, 247, 0.2) !important;
+    color: #5b21b6 !important;
+    transform: scale(1.08) !important;
+}
+
+/* Header & prompt buttons inside popups */
+#prompt-content h4,
+.reference-popup h3 {
+    font-family: var(--font-family, 'Inter', sans-serif) !important;
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    color: #4c1d95 !important;
+    margin: 0 0 18px 0 !important;
+    letter-spacing: -0.01em !important;
+}
+
+#prompt-content ul {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+}
+
+#prompt-content li {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+}
+
+.prompt-popup button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    padding: 13px 18px !important;
+    border-radius: 14px !important;
+    font-family: var(--font-family, 'Inter', sans-serif) !important;
+    font-size: 0.93rem !important;
+    font-weight: 500 !important;
+    color: #4c1d95 !important;
+    background: linear-gradient(135deg, rgba(243, 232, 255, 0.95), rgba(250, 245, 255, 0.98)) !important;
+    border: 1px solid rgba(168, 85, 247, 0.24) !important;
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.08) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    cursor: pointer !important;
+    text-align: left !important;
+    margin: 0 !important;
+    position: relative !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.prompt-popup button::after {
+    content: '→' !important;
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+    opacity: 0.5 !important;
+    color: #7e22ce !important;
+    position: static !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.prompt-popup button:hover {
+    background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: 0 8px 24px rgba(168, 85, 247, 0.38) !important;
+    transform: translateY(-2px) !important;
+}
+
+.prompt-popup button:hover::after {
+    opacity: 1 !important;
+    color: #ffffff !important;
+    transform: translateX(4px) !important;
+}
+
+.prompt-popup button:active {
+    transform: translateY(0) scale(0.99) !important;
+    box-shadow: 0 3px 10px rgba(168, 85, 247, 0.25) !important;
 }
 
 .prompt-header {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    margin: 0;
-    gap: 8px;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 8px !important;
+    position: relative;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.create-reference-button,
+.prompt-examples-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    width: fit-content !important;
+    padding: 9px 18px !important;
+    margin: 0 !important;
+    border-radius: var(--radius-pill, 9999px) !important;
+    font-family: var(--font-family, 'Inter', sans-serif) !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    color: #5b21b6 !important;
+    background: linear-gradient(135deg, rgba(243, 232, 255, 0.96), rgba(250, 245, 255, 0.98)) !important;
+    border: 1px solid rgba(168, 85, 247, 0.28) !important;
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.12) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    transition: all 0.12s ease-in-out !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
     position: relative;
 }
 
-.prompt-examples-button {
-    padding: 8px 16px; /* Adjusted padding */
-    margin: 1px;
-    left: 0%;
-    border: none;
-    border-radius: 10px;
-    background-color: #007bff;
-    color: white;
-    cursor: pointer;
-    font-size: 0.9em; /* Reduced font size */
-    position: relative; /* Add relative positioning */
+.create-reference-button:hover,
+.prompt-examples-button:hover {
+    background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.38) !important;
+    transform: translateY(-2px) !important;
+    height: auto;
 }
 
 .prompt-examples-button.active + .prompt-buttons {
-    display: flex; /* Reveal the buttons when the button is active */
+    display: flex !important; /* Reveal the buttons when the button is active */
     height: auto;
-}
-
-.prompt-examples-button:hover {
-    background-color: #0056b3; /* Darker blue on hover */
-    height: auto;
-}
-
-.create-reference-button {
-    padding: 8px 16px; /* Adjusted padding */
-    margin: 1px;
-    border: none;
-    border-radius: 10px;
-    background-color: #6c757d; /* Grey coloration */
-    color: white;
-    cursor: pointer;
-    font-size: 0.9em; /* Reduced font size */
-}
-
-.create-reference-button:hover {
-    background-color: #5a6268; /* Darker grey on hover */
 }
 
 /* Export prompt + AI as image button */
@@ -1222,24 +1315,30 @@ body {
 
 .reference-popup {
     display: none;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: #ffffff;
-    padding: 0; /* inner padding handled for scrollable content */
-    border-radius: 14px;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
-    z-index: 2002; /* Above overlay */
-    width: 92%;
-    max-width: 980px;
-    max-height: 82vh; /* keep popup within viewport */
-    overflow: hidden; /* clip outer corners; inner content will scroll */
-    border: 6px solid rgba(41, 101, 201, 0.08); /* subtle blue ring like the design */
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 245, 255, 0.99)) !important;
+    border: 1px solid rgba(168, 85, 247, 0.25) !important;
+    padding: 0;
+    border-radius: 20px !important;
+    box-shadow: 0 24px 50px rgba(139, 92, 246, 0.18), 0 10px 25px rgba(15, 23, 42, 0.12) !important;
+    z-index: 99999 !important;
+    width: 92% !important;
+    max-width: 860px !important;
+    max-height: 82vh !important;
+    overflow: hidden !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
 }
 
 .reference-popup.visible {
-    display: block;
+    display: block !important;
+    pointer-events: auto !important;
 }
 
 /* Content area inside the popup */
@@ -1247,73 +1346,82 @@ body {
     display: block;
     padding: 26px 28px 18px 28px;
     box-sizing: border-box;
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.6;
-    color: #0f172a; /* dark slate for high contrast */
+    color: #1e1b4b;
     max-height: calc(82vh - 120px);
-    overflow: auto; /* scroll long text */
-    white-space: pre-wrap; /* respect newlines */
+    overflow-y: auto;
+    white-space: pre-wrap;
     hyphens: auto;
 }
 
 .reference-popup .reference-actions {
     display: flex;
     gap: 10px;
-    padding: 12px 20px 22px 20px;
-    border-top: 1px solid rgba(15,23,42,0.04);
+    padding: 16px 24px 20px 24px;
+    border-top: 1px solid rgba(168, 85, 247, 0.15);
     justify-content: flex-end;
-    background: #ffffff;
+    background: rgba(250, 245, 255, 0.6);
     box-sizing: border-box;
-}
-
-.reference-popup .close-button {
-    position: absolute;
-    top: -14px; /* float slightly outside the card */
-    right: -14px;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: #ffffff;
-    border: 1px solid rgba(15,23,42,0.06);
-    box-shadow: 0 6px 18px rgba(15,23,42,0.14);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    color: #1f2937;
-    cursor: pointer;
-    z-index: 2100;
-}
-
-/* Action buttons within the reference popup */
-.reference-popup .reference-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
     flex-wrap: wrap;
 }
 
+.reference-popup .close-button {
+    position: absolute !important;
+    top: 16px !important;
+    right: 16px !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    background: rgba(168, 85, 247, 0.08) !important;
+    color: #6b21a8 !important;
+    border: 1px solid rgba(168, 85, 247, 0.18) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    z-index: 2100 !important;
+    transition: all 0.15s ease !important;
+}
+
+.reference-popup .close-button:hover {
+    background: rgba(168, 85, 247, 0.2) !important;
+    color: #5b21b6 !important;
+    transform: scale(1.08) !important;
+}
+
 .reference-popup button {
-    background-color: #f0f7ff;
-    color: #0056b3;
-    border: 1px solid #cce5ff;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 0.9em;
-    cursor: pointer;
-    transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 9px 18px !important;
+    border-radius: var(--radius-pill, 9999px) !important;
+    font-family: var(--font-family, 'Inter', sans-serif) !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    color: #5b21b6 !important;
+    background: linear-gradient(135deg, rgba(243, 232, 255, 0.96), rgba(250, 245, 255, 0.98)) !important;
+    border: 1px solid rgba(168, 85, 247, 0.28) !important;
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.12) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    transition: all 0.12s ease-in-out !important;
 }
 
 .reference-popup button:hover {
-    background-color: #e1f0ff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.10);
+    background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.38) !important;
+    transform: translateY(-2px) !important;
 }
 
 .reference-popup button:active {
-    transform: translateY(1px);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+    transform: translateY(0) scale(0.98) !important;
+    box-shadow: 0 2px 8px rgba(168, 85, 247, 0.25) !important;
 }
 
 .send-message-button {
