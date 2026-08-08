@@ -372,6 +372,18 @@ ws.onmessage = (event) => {
         }
         if (el) el.dataset.messageId = String(mid);
       }
+    } else if (message.type === 'session-renamed' || message.type === 'session-name-updated') {
+      const targetId = message.session_id;
+      const newTitle = message.session_name || message.title;
+      if (targetId && newTitle) {
+        const sessionBtn = document.getElementById(`session-${targetId}`);
+        if (sessionBtn) {
+          const span = sessionBtn.querySelector('.session-name, .turing-name');
+          if (span) span.textContent = newTitle;
+        } else {
+          loadSessions();
+        }
+      }
     }
   } catch (e) {
     console.error('Error parsing WebSocket message:', e);
@@ -535,10 +547,17 @@ function sendMessage() {
         },
         body: JSON.stringify({ session_id, prompt: message })
       }).then(res => res.json()).then(data => {
-        if(data.success) {
-          loadSessions(); // reload to show new name
+        if (data.success && (data.title || data.session_name)) {
+          const newTitle = data.title || data.session_name;
+          const sessionBtn = document.getElementById(`session-${session_id}`);
+          if (sessionBtn) {
+            const span = sessionBtn.querySelector('.session-name, .turing-name');
+            if (span) span.textContent = newTitle;
+          } else {
+            loadSessions();
+          }
         }
-      });
+      }).catch(e => console.error('Error generating session title:', e));
     }
  
     } catch (err) {

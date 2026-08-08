@@ -90,7 +90,9 @@ const openai = {
                 } else {
                     const json = await res.json();
                     let text = '';
-                    if (json.output && json.output[0] && json.output[0].content && json.output[0].content[0]) {
+                    if (json.choices && json.choices[0] && json.choices[0].message) {
+                        text = json.choices[0].message.content || '';
+                    } else if (json.output && json.output[0] && json.output[0].content && json.output[0].content[0]) {
                         text = json.output[0].content[0].text || '';
                     }
                     return { choices: [{ message: { content: text } }] };
@@ -222,6 +224,23 @@ app.post('/rename-session', async (req, res) => {
     } catch (err) {
         console.error('Error renaming session:', err);
         res.json({ success: false, message: 'Could not rename session' });
+    }
+});
+
+// Generate session title using Azure API
+app.post('/generate-session-title', async (req, res) => {
+    const { session_id, prompt } = req.body;
+    if (!session_id || !prompt) return res.json({ success: false, message: 'Missing fields' });
+    try {
+        const title = await generateSessionTitle(prompt);
+        if (title) {
+            await renameSession(session_id, title);
+            return res.json({ success: true, title, session_name: title });
+        }
+        res.json({ success: false, message: 'Could not generate session title' });
+    } catch (err) {
+        console.error('Error in /generate-session-title:', err);
+        res.json({ success: false, message: err.message });
     }
 });
 
@@ -749,7 +768,39 @@ function tryListen(p, attemptsLeft = 50) {
     });
 }
 
-tryListen(port, 50);
+async function generateSessionTitle(promptContent) {
+    try {
+        if (!promptContent || typeof promptContent !== 'string') return null;
+        const cleanPrompt = promptContent
+            .replace(/data:[^\s"'>]+;base64,[A-Za-z0-9+/=]+/g, '')
+            .replace(/<\/?[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
+
+        if (!cleanPrompt) return null;
+
+        const response = await openai.chat.completions.create({
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a helpful assistant. Generate a short, concise, and appropriate title (3 to 5 words maximum) for a chat session based on the user\'s message. Return ONLY the plain text title without quotes, trailing punctuation, or markdown formatting.'
+                },
+                { role: 'user', content: cleanPrompt }
+            ]
+        });
+
+        let title = response?.choices?.[0]?.message?.content?.trim() || '';
+        title = title.replace(/^["'«»“”`]+|["'«»“”`]+$/g, '').replace(/^Title:\s*/i, '').replace(/\.$/, '').trim();
+        if (title.length > 50) {
+            title = title.slice(0, 50).trim() + '...';
+        }
+        return title || null;
+    } catch (err) {
+        console.error('Error generating session title via Azure API:', err);
+        return null;
+    }
+}
 
 class ChatGPTProcessor {
     constructor(openai, ws, session_id, conversationHistory, username) {
@@ -846,6 +897,30 @@ Return only the HTML fragment for the requested response — nothing else (no co
                 const format = looksLikeHtml ? 'html' : 'markdown';
                 // Include a hint about the content format so the client can render markdown/HTML appropriately
                 this.ws.send(JSON.stringify({ type: 'assistant', content: delta, format }));
+            }
+
+            // Automatically generate session name on the first user message using Azure API
+            const userMessagesCount = this.conversationHistory.filter(m => m && m.role === 'user').length;
+            if (userMessagesCount === 1) {
+                (async () => {
+                    try {
+                        const title = await generateSessionTitle(cleanUserContent || userContent);
+                        if (title && this.session_id) {
+                            await renameSession(this.session_id, title);
+                            console.log(`[Azure API] Auto-renamed session ${this.session_id} to "${title}"`);
+                            if (this.ws && this.ws.readyState === 1) {
+                                this.ws.send(JSON.stringify({
+                                    type: 'session-renamed',
+                                    session_id: this.session_id,
+                                    session_name: title,
+                                    title: title
+                                }));
+                            }
+                        }
+                    } catch (renErr) {
+                        console.error('Error auto-titling session:', renErr);
+                    }
+                })();
             }
 
             // Step 2: Assess using the latest user content to ensure accuracy
