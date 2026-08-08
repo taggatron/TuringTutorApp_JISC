@@ -210,7 +210,7 @@ body {
 
 .chat-input textarea {
     flex: 1;
-    padding: 8px 12px;
+    padding: 4px 8px;
     font-size: 15px;
     font-family: var(--font-family);
     vertical-align: middle;
@@ -220,6 +220,8 @@ body {
     border: none;
     background: transparent;
     line-height: 1.4;
+    height: 24px;
+    min-height: 24px;
     max-height: 35vh;
     box-sizing: border-box;
     color: var(--color-text-main);
@@ -1583,22 +1585,19 @@ body {
 /* Reduce default height of the main message input to save vertical space
    and prevent it from taking too much of the chat surface by default. */
 #message-input {
-    height: 44px;           /* default compact height */
-    min-height: 40px;
-    max-height: 24vh;       /* allow growth but cap relative to viewport */
-    padding: 10px 56px 10px 14px; /* keep room for send button */
+    height: 24px;
+    min-height: 24px;
+    max-height: 35vh;
+    padding: 4px 8px;
     font-size: 15px;
-    line-height: 1.35;
+    line-height: 1.4;
     box-sizing: border-box;
-    overflow-y: auto;       /* enable scroll when content exceeds max-height */
-    transition: height 140ms ease-in-out, box-shadow 140ms ease-in-out;
-    resize: none;           /* consistent with other textarea rules */
+    overflow-y: hidden;
+    resize: none;
 }
 
-/* Slightly increase height on focus for better typing experience */
 #message-input:focus {
-    height: 52px;
-    box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+    box-shadow: none;
     outline: none;
 }
 

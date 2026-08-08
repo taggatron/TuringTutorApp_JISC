@@ -102,8 +102,7 @@
 /* ...existing styles... */
 .message-input, #message-input {
     position: relative;
-    /* Ensure room for prompt buttons and send button */
-    padding-bottom: 48px; /* slightly tighter space for buttons */
+    padding-bottom: 0;
 }
 
 /* Ensure entered text does not overlap with controls */
@@ -113,11 +112,10 @@
 .message-input .text-input {
     width: 100%;
     box-sizing: border-box;
-    padding-right: 88px; /* space for send button on the right */
-    padding-bottom: 48px; /* tighter space for prompt buttons at bottom */
+    padding-bottom: 0;
     border: none !important;            /* remove light grey border */
     outline: none;                      /* remove default focus outline */
-    background: #ffffff;                /* clean surface */              /* keep rounded input feel */
+    background: transparent;
     box-shadow: none !important;        /* prevent subtle shadows */
 }
 
