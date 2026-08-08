@@ -768,6 +768,8 @@ function tryListen(p, attemptsLeft = 50) {
     });
 }
 
+tryListen(port, 50);
+
 async function generateSessionTitle(promptContent) {
     try {
         if (!promptContent || typeof promptContent !== 'string') return null;
