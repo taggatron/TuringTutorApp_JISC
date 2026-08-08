@@ -96,12 +96,20 @@ body {
 }
 
 .sidebar-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    background-color: #f7f7f7;
+    border-bottom: 1px solid #e0e0e0;
+    z-index: 10;
+}
+
+.sidebar-actions {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
-    padding: 10px;
-    background-color: #f7f7f7;
-    border-bottom: 1px solid #e0e0e0;
+    padding: 10px 10px 4px 10px;
+    background-color: transparent;
     z-index: 10;
 }
 

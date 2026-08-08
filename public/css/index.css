@@ -720,7 +720,8 @@ body > div.container > div.chat-container > div.meta-container {
             width: calc(100% - 16px);
     }
 }
-.sidebar-header { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sidebar-header { display:flex; align-items:center; }
+.sidebar-actions { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 10px 4px 10px; }
 .turing-mode-button { 
     border: 1px solid #86efac; /* light green border */
     background:#a7f3d0; /* light green background */
@@ -901,6 +902,7 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
 
 /* When collapsed, hide all sidebar content except the toggle button */
 .sidebar.collapsed .sidebar-header,
+.sidebar.collapsed .sidebar-actions,
 .sidebar.collapsed .sidebar-content {
     opacity: 0;
     pointer-events: none;
