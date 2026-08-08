@@ -449,12 +449,12 @@ body {
     padding: 5px;
     margin-bottom: 5px;
     text-align: left;
-    background: #ffffff;
+    background: #e6e6fa;
     border: 1px solid var(--border-light);
     border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 1.1em;
-    color: var(--color-text-main);
+    color: #4b0082;
     transition: all 0.2s ease;
     box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
@@ -463,7 +463,7 @@ body {
 
 
 .new-chat-button:hover {
-    background-color: #ffffff;
+    background-color: #d8bfd8;
     box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     transform: translateY(-1px);
 }
@@ -481,12 +481,12 @@ body {
     padding: 5px;
     margin-bottom: 5px;
     text-align: left;
-    background: #ffffff;
+    background: #66c2ff;
     border: 1px solid var(--border-light);
     border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 1.1em;
-    color: var(--color-text-main);
+    color: #ffffff;
     transition: all 0.2s ease;
     box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
@@ -495,7 +495,7 @@ body {
 
 
 .new-group-button:hover {
-    background-color: #ffffff;
+    background-color: #3399ff;
     box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     transform: translateY(-1px);
 }
