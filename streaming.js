@@ -717,33 +717,35 @@ if (process.env.HTTPS_ENABLED === 'true') {
 
 // Try to listen on the requested port; if taken, try the next port(s) to be developer-friendly
 // Defer WebSocketServer creation until after a successful listen to avoid EADDRINUSE crashes.
-let wss; // initialized after server starts listening
-function tryListen(p, attemptsLeft = 10) {
-    server.once('error', (err) => {
+const wss = new WebSocketServer({ server });
+wss.on('error', (err) => {
+    // Suppress unhandled error crash during port EADDRINUSE retries
+    if (err && err.code !== 'EADDRINUSE') {
+        console.error('WebSocket error:', err);
+    }
+});
+
+function tryListen(p, attemptsLeft = 50) {
+    const onError = (err) => {
         if (err && err.code === 'EADDRINUSE') {
             console.warn(`Port ${p} is in use. Attempting port ${p + 1}...`);
             if (attemptsLeft <= 0) {
                 console.error('No available ports found after multiple attempts. Exiting.');
                 process.exit(1);
             }
-            // Small delay before retrying
             setTimeout(() => tryListen(p + 1, attemptsLeft - 1), 200);
         } else {
             console.error('Server failed to start:', err);
             process.exit(1);
         }
-    });
+    };
+
+    server.once('error', onError);
 
     server.listen(p, () => {
-        // Remove the temporary error handler set for this listen attempt
-        server.removeAllListeners('error');
+        server.removeListener('error', onError);
         const proto = (process.env.HTTPS_ENABLED === 'true') ? 'https' : 'http';
-        console.log(`Server running at ${proto}://localhost:${p}`);
-
-        // Initialize WebSocket server only after HTTP/S server is successfully listening
-        if (!wss) {
-            wss = new WebSocketServer({ server });
-        }
+        console.log(`[Fullstack Server] Front-end & Back-end running simultaneously at ${proto}://localhost:${p}`);
     });
 }
 
@@ -1095,14 +1097,7 @@ Overall: …`;
     }
 }
 
-// Ensure WebSocketServer exists even if server binding was retried
-if (!wss) {
-    try {
-        wss = new WebSocketServer({ server });
-    } catch (_) {}
-}
-
-wss && wss.on('connection', async (ws, req) => {
+wss.on('connection', async (ws, req) => {
     let session_id = null;
     let conversationHistory = [];
 
