@@ -881,16 +881,16 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
     padding: 4px;
     border-radius: 6px;
     transition: background 0.15s ease;
-    color: #7c3aed;
+    color: #582C83;
 }
 
 .sidebar-toggle-btn:hover {
-    background: rgba(124, 58, 237, 0.08);
+    background: rgba(88, 44, 131, 0.08);
 }
 
 .sidebar-collapse-arrow {
     font-size: 11px;
-    color: #7c3aed;
+    color: #582C83;
     opacity: 0.7;
     transition: transform 0.3s ease, opacity 0.2s;
 }
