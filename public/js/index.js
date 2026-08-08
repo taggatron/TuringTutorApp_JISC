@@ -19,7 +19,53 @@ const chatMessages = document.getElementById('chat-messages');
 // Hide the welcome screen once the first message is appended
 function hideWelcomeState() {
   const welcome = document.getElementById('chat-welcome');
-  if (welcome) welcome.style.display = 'none';
+  if (welcome) welcome.remove();
+}
+
+function showWelcomeState() {
+  const cm = chatMessages || document.getElementById('chat-messages');
+  if (!cm) return;
+  cm.innerHTML = `
+    <div id="chat-welcome" class="chat-welcome">
+        <div class="chat-welcome-inner">
+            <div class="chat-welcome-logo">
+                <img src="sdc-logo.svg" alt="SDC Logo" height="40">
+            </div>
+            <h2 class="chat-welcome-title">How can I help you today?</h2>
+            <p class="chat-welcome-subtitle">Start a conversation or try one of these prompts:</p>
+            <div class="chat-starter-prompts">
+                <button class="chat-starter-btn"
+                    data-prompt="Explain this topic in a way a student can understand and give me 3 key points to remember.">
+                    <span class="starter-icon">📚</span>
+                    <span class="starter-text">Explain a topic simply<br><small>Get a clear breakdown with key points</small></span>
+                </button>
+                <button class="chat-starter-btn"
+                    data-prompt="Help me plan a lesson on this subject. Include learning objectives, activities and assessment ideas.">
+                    <span class="starter-icon">📝</span>
+                    <span class="starter-text">Plan a lesson<br><small>Get learning objectives & activities</small></span>
+                </button>
+                <button class="chat-starter-btn"
+                    data-prompt="Give me feedback on this work. Highlight strengths and areas for improvement.">
+                    <span class="starter-icon">💡</span>
+                    <span class="starter-text">Get feedback on work<br><small>Strengths & areas to improve</small></span>
+                </button>
+            </div>
+        </div>
+    </div>`;
+
+  cm.querySelectorAll('.chat-starter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prompt = btn.dataset.prompt;
+      if (prompt) {
+        const msgInput = document.getElementById('message-input');
+        if (msgInput) {
+          msgInput.value = prompt;
+          msgInput.focus();
+          msgInput.dispatchEvent(new Event('input'));
+        }
+      }
+    });
+  });
 }
 
 // Initialize WebSocket connection to the same host. Use wss when on https.
@@ -537,7 +583,12 @@ function sendMessage() {
     try {
       ws.send(JSON.stringify({ content: message, session_id }));
 
-    if (isNewSession) {
+    const currentBtn = document.getElementById(`session-${session_id}`);
+    const currentSpan = currentBtn ? currentBtn.querySelector('.session-name, .turing-name') : null;
+    const currentName = currentSpan ? (currentSpan.textContent || '') : '';
+    const isDefaultTitle = !currentName || /^Session(\s+\d+)?$/i.test(currentName.trim()) || /^Session\s+\d{10,}/i.test(currentName.trim());
+
+    if (isNewSession || isDefaultTitle) {
       isNewSession = false;
       fetch('/generate-session-title', {
         method: 'POST',
@@ -650,6 +701,11 @@ function showFeedbackForSavedSession(sessionId, feedbackData) {
 
 async function loadChatHistory(messages) {
   chatMessages.innerHTML = '';
+  const hasRealMessages = Array.isArray(messages) && messages.some(msg => msg && msg.content && msg.content.trim() !== '');
+  if (!hasRealMessages && !window.__isTuringFlag) {
+    showWelcomeState();
+    return;
+  }
   const feedbackByMessageId = new Map();
   if (window.__lastFeedbackData && Array.isArray(window.__lastFeedbackData)) {
     window.__lastFeedbackData.forEach(fb => { if (fb.messageId) feedbackByMessageId.set(String(fb.messageId), fb); });
@@ -958,7 +1014,7 @@ async function startNewChat() {
       isNewSession = true;
       // Ensure chatMessages element exists (fall back to querying DOM)
       const cm = chatMessages || document.getElementById('chat-messages');
-      if (cm) cm.innerHTML = '';
+      if (cm) showWelcomeState();
       resetScale();
       await loadSessions();
       highlightCurrentSession(session_id);

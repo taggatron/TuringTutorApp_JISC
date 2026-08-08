@@ -899,29 +899,36 @@ Return only the HTML fragment for the requested response — nothing else (no co
                 this.ws.send(JSON.stringify({ type: 'assistant', content: delta, format }));
             }
 
-            // Automatically generate session name on the first user message using Azure API
-            const userMessagesCount = this.conversationHistory.filter(m => m && m.role === 'user').length;
-            if (userMessagesCount === 1) {
-                (async () => {
-                    try {
-                        const title = await generateSessionTitle(cleanUserContent || userContent);
-                        if (title && this.session_id) {
-                            await renameSession(this.session_id, title);
-                            console.log(`[Azure API] Auto-renamed session ${this.session_id} to "${title}"`);
+            // Automatically generate session name via Azure API if session has default name or first message
+            (async () => {
+                try {
+                    if (!this.session_id) return;
+                    const sessRow = await getSessionById(this.session_id);
+                    const currentName = sessRow ? (sessRow.session_name || '') : '';
+                    const userMsgs = this.conversationHistory.filter(m => m && m.role === 'user');
+                    const isDefaultName = !currentName || /^Session(\s+\d+)?$/i.test(currentName.trim()) || /^Session\s+\d{10,}/i.test(currentName.trim());
+
+                    if (isDefaultName || userMsgs.length <= 1) {
+                        const promptForTitle = (userMsgs[0] && userMsgs[0].content) ? userMsgs[0].content : (cleanUserContent || userContent);
+                        const title = await generateSessionTitle(promptForTitle);
+                        if (title && title.trim()) {
+                            const newTitle = title.trim();
+                            await renameSession(this.session_id, newTitle);
+                            console.log(`[Azure API] Auto-renamed session ${this.session_id} from "${currentName}" to "${newTitle}"`);
                             if (this.ws && this.ws.readyState === 1) {
                                 this.ws.send(JSON.stringify({
                                     type: 'session-renamed',
                                     session_id: this.session_id,
-                                    session_name: title,
-                                    title: title
+                                    session_name: newTitle,
+                                    title: newTitle
                                 }));
                             }
                         }
-                    } catch (renErr) {
-                        console.error('Error auto-titling session:', renErr);
                     }
-                })();
-            }
+                } catch (renErr) {
+                    console.error('Error auto-titling session via Azure API:', renErr);
+                }
+            })();
 
             // Step 2: Assess using the latest user content to ensure accuracy
             const scaleLevels = await this.assessScaleLevel(this.conversationHistory, userMessage && userMessage.content ? String(userMessage.content) : null);
