@@ -380,7 +380,11 @@ ws.onmessage = (event) => {
       }
     } else if (message.type === 'feedback') {
       if (message.content) {
-        try { document.querySelector('.assistant-edit-mode .decipher-wait-overlay')?.classList.remove('visible'); } catch(_) {}
+        try {
+          const activeEditor = document.querySelector('.assistant-edit-mode');
+          activeEditor?.querySelector('.decipher-wait-overlay')?.classList.remove('visible', 'cogs-ready');
+          activeEditor?.classList.remove('decipher-active');
+        } catch(_) {}
         // Clear loading state and debounce flag when feedback arrives
         try { setCriteriaLoading(false); } catch(_) {}
         window.__decipherInFlight = false;
@@ -2128,10 +2132,17 @@ function enterAssistantEditMode(targetAssistant) {
   const editable = document.createElement('div');
   editable.className = 'assistant-editable-content';
   editable.contentEditable = 'true';
+  const removeGeneratedAssessmentPanels = (root) => {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    root.querySelectorAll('.assistant-edit-feedback-popup').forEach((panel) => panel.remove());
+  };
   // Populate with the message content (preserve basic markup)
   const contentEl = targetAssistant.querySelector('.message-content');
+  // Remove UI panels accidentally persisted by older edit sessions before copying message content.
+  removeGeneratedAssessmentPanels(contentEl);
   // sanitize the content before allowing editing to avoid executing scripts
   editable.innerHTML = sanitizeHtml(contentEl ? contentEl.innerHTML : '');
+  removeGeneratedAssessmentPanels(editable);
 
   // Also include any existing References/Prompts footer in the editor so it
   // remains visible and is preserved on save. We clone it into the editable
@@ -2238,6 +2249,7 @@ function enterAssistantEditMode(targetAssistant) {
   // Strip any embedded Turing footer from the body we save back
   const tmp = document.createElement('div');
   tmp.innerHTML = cleaned;
+  removeGeneratedAssessmentPanels(tmp);
   removeEmbeddedTuringFooters(tmp);
   if (contentEl) contentEl.innerHTML = tmp.innerHTML;
       targetAssistant.dataset.edited = '1';
@@ -2315,6 +2327,7 @@ function enterAssistantEditMode(targetAssistant) {
   // Helper: show/hide decipher wait overlay and load inline SVG once
   async function showDecipherWait() {
     try {
+      wrapper.classList.add('decipher-active');
       if (!waitInner.dataset.loaded) {
         const resp = await fetch('/Turing Tutor Enigma.svg');
         const svgText = await resp.text();
@@ -2336,7 +2349,10 @@ function enterAssistantEditMode(targetAssistant) {
       });
     } catch (e) { console.warn('Could not load Enigma SVG:', e); waitOverlay.classList.add('visible'); }
   }
-  function hideDecipherWait() { waitOverlay.classList.remove('visible', 'cogs-ready'); }
+  function hideDecipherWait() {
+    waitOverlay.classList.remove('visible', 'cogs-ready');
+    wrapper.classList.remove('decipher-active');
+  }
 
   return wrapper;
 }
@@ -2346,26 +2362,28 @@ function showEditFeedbackPopup(text, editWrapper) {
   try {
     if (!editWrapper) editWrapper = document.querySelector('.assistant-edit-mode');
     if (!editWrapper) return;
-    const popup = editWrapper.querySelector('.assistant-edit-feedback-popup');
-    const content = editWrapper.querySelector('.assistant-edit-feedback-content');
+    const popups = Array.from(editWrapper.querySelectorAll('.assistant-edit-feedback-popup'));
+    const popup = popups.find((candidate) => candidate.parentElement === editWrapper) || popups[0];
+    const content = popup?.querySelector('.assistant-edit-feedback-content');
     if (!popup || !content) return;
+    // Keep one reusable result panel; remove any panels persisted by older editor sessions.
+    popups.forEach((candidate) => { if (candidate !== popup) candidate.remove(); });
     content.textContent = '';
     // Render simple markdown to HTML for readability
     const html = renderMarkdownToHtml(text);
     content.innerHTML = sanitizeHtml(html || escapeHtml(text));
     const editable = editWrapper.querySelector('.assistant-editable-content');
     if (editable) {
-      popup.classList.add('embedded');
-      if (popup.parentElement !== editable) {
-        editable.insertBefore(popup, editable.firstChild || null);
-      }
-      if (typeof editable.scrollTo === 'function') {
-        editable.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        editable.scrollTop = 0;
-      }
-    } else {
+      editable.querySelectorAll('.assistant-edit-feedback-popup').forEach((candidate) => candidate.remove());
       popup.classList.remove('embedded');
+      if (popup.parentElement !== editWrapper || popup.nextElementSibling !== editable) {
+        editWrapper.insertBefore(popup, editable);
+      }
+      if (typeof editWrapper.scrollTo === 'function') {
+        editWrapper.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        editWrapper.scrollTop = 0;
+      }
     }
     popup.classList.add('visible');
     // cache last feedback for quick recall
@@ -2383,9 +2401,8 @@ function hideEditFeedbackPopup(editWrapper) {
     if (!popup) return;
     popup.classList.remove('visible', 'embedded');
     const editable = editWrapper.querySelector('.assistant-editable-content');
-    if (editable && popup.parentElement === editable) {
-      editable.removeChild(popup);
-      editWrapper.appendChild(popup);
+    if (editable && popup.parentElement !== editWrapper) {
+      editWrapper.insertBefore(popup, editable);
     }
   } catch (e) {
     console.error('hideEditFeedbackPopup failed', e);

@@ -21,7 +21,7 @@
         rgba(15, 23, 42, 0.58);
     backdrop-filter: blur(14px) saturate(120%);
     -webkit-backdrop-filter: blur(14px) saturate(120%);
-    z-index: 0;
+    z-index: -1;
 }
 
 .decipher-wait-overlay.visible { display: grid; }
@@ -40,7 +40,7 @@
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.72);
     border-radius: 26px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.93), rgba(246, 243, 255, 0.78));
+    background: linear-gradient(135deg, #ffffff, #f8f5ff);
     box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.86);
     backdrop-filter: blur(24px) saturate(135%);
     -webkit-backdrop-filter: blur(24px) saturate(135%);
@@ -175,8 +175,8 @@
 }
 
 @keyframes decipherPanelIn {
-    from { opacity: 0; transform: translateY(18px) scale(0.97); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    from { transform: translateY(18px) scale(0.97); }
+    to { transform: translateY(0) scale(1); }
 }
 
 @keyframes decipherArtworkFloat {
@@ -367,6 +367,14 @@ body > div.container > div.chat-container {
     from { transform: scale(0.95); opacity: 0.7; }
     to { transform: scale(1); opacity: 1; }
 }
+
+/* Keep the assessment card fully opaque even if decipher starts during the editor entrance. */
+.assistant-edit-mode.decipher-active {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
 .assistant-edit-close {
     position: absolute;
     top: 12px;
@@ -395,6 +403,10 @@ body > div.container > div.chat-container {
     background: #ffffff;
     border-radius: 12px;
     min-height: 80vh;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex: 0 0 auto;
     padding: 60px 80px; /* Generous document padding */
     margin: 0 auto; /* Center on page */
     width: 100%;
@@ -616,67 +628,42 @@ body > div.container > div.chat-container {
 
 /* Feedback popup inside Turing edit mode */
 .assistant-edit-feedback-popup {
-    position: absolute;
-    top: 120px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
     max-width: 900px;
     width: calc(100% - 48px);
-    background: rgba(17,24,39,0.5);
-    border-radius: 12px;
-    padding: 8px;
+    margin: 0 auto 24px;
+    padding: 2px;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    background: linear-gradient(120deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+    background-size: 300% 100%;
+    border-radius: 16px;
+    box-shadow: 0 16px 38px rgba(76, 29, 149, 0.18);
     display: none;
     z-index: 3070;
 }
-.assistant-edit-feedback-popup.visible { display: block; }
-
-.assistant-edit-feedback-popup.embedded {
-    position: relative;
-    width: 100%;
-    margin-bottom: 24px;
+.assistant-edit-feedback-popup.visible {
     display: block;
-    z-index: 20;
+    animation: feedbackPanelIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .assistant-edit-feedback-content {
-    background: #ffffff;
-    border-radius: 10px;
-    padding: 14px 16px;
-    color: #111827;
-    box-shadow: 0 10px 28px rgba(0,0,0,0.22);
-    max-height: 40vh;
+    background: linear-gradient(135deg, #f7f7ff 0%, #f3e8ff 100%);
+    border-radius: 14px;
+    padding: 24px 52px 24px 28px;
+    color: #1e293b;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+    max-height: min(34vh, 340px);
     overflow: auto;
 }
 
-
-.assistant-edit-feedback-popup.embedded .assistant-edit-feedback-content {
-    background: linear-gradient(135deg, rgba(238, 242, 255, 0.95) 0%, rgba(243, 232, 255, 0.95) 100%);
-    border: 2px solid transparent;
-    border-radius: 12px;
-    padding: 20px 24px;
-    color: #1e293b;
-    position: relative;
-    background-clip: padding-box;
+@keyframes feedbackPanelIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
-
-.assistant-edit-feedback-popup.embedded .assistant-edit-feedback-content::before {
-    content: '';
-    position: absolute;
-    top: -2px; left: -2px; right: -2px; bottom: -2px;
-    background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
-    background-size: 400%;
-    z-index: -1;
-    border-radius: 14px;
-    animation: glowing-border 3s linear infinite;
-    opacity: 0.8;
-}
-
-@keyframes glowing-border {
-    0% { background-position: 0 0; }
-    50% { background-position: 100% 0; }
-    100% { background-position: 0 0; }
-}
-
 
 .assistant-edit-feedback-close {
     position: absolute;
@@ -689,10 +676,6 @@ body > div.container > div.chat-container {
     font-size: 16px; line-height: 26px;
     color: #6b7280;
     cursor: pointer;
-}
-.assistant-edit-feedback-popup.embedded .assistant-edit-feedback-close {
-    top: 10px;
-    right: 12px;
 }
 .assistant-edit-feedback-close:hover { background:#f3f4f6; }
 .hide-sidebar {
@@ -848,6 +831,8 @@ body > div.container > div.chat-container > div.meta-container {
 .turing-mode-button:active { background:#6ee7b7; }
 .turing-mode-button img.turing-mode-icon { display:block; width:22px; height:22px; object-fit:contain; filter: drop-shadow(0 0 0 rgba(0,0,0,0)); }
 .turing-mode-button .plus { color:#fff; font-weight:700; font-size:20px; line-height:1; display:inline-block; }
+.new-chat-button,
+.new-group-button { gap: 6px; }
 .turing-session { background:#eaffea; border-left:4px solid #22c55e; display:flex; align-items:center; gap:6px; /* ensure text sits right of icon */ position: relative; justify-content:flex-start; }
 /* Ensure the editable name sits immediately to the right of the icon and is left-aligned */
 .turing-session .turing-name { outline:none; display:inline-block; flex:1 1 auto; text-align:left; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:28px; }
@@ -1014,13 +999,41 @@ img.turing-mode-icon { width:18px; height:18px; object-fit:contain; display:inli
     transform: rotate(180deg);
 }
 
-/* When collapsed, hide all sidebar content except the toggle button */
+/* When collapsed, hide the navigation content but keep compact action buttons. */
 .sidebar.collapsed .sidebar-header,
-.sidebar.collapsed .sidebar-actions,
 .sidebar.collapsed .sidebar-content {
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 58px 6px 6px;
+    opacity: 1;
+    visibility: visible;
+}
+
+.sidebar.collapsed .sidebar-actions button {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 4px;
+    flex: 0 0 40px;
+}
+
+.sidebar.collapsed .sidebar-actions .plus {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-actions .sidebar-action-icon {
+    display: inline-block;
+    line-height: 1;
 }
 
 /* When collapsed, center the toggle button */

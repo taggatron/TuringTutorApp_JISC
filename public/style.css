@@ -896,12 +896,6 @@ body {
     box-shadow: 0 0 5px 2px #d9534f;
 }
 
-/* Darken all other DOM elements when pop-up is visible */
-.scale-item:hover ~ .popup,
-.popup.visible ~ * {
-    filter: brightness(0.5); /* Darken all other elements */
-}
-
 /* Update feedback container styling */
 .feedback-container {
     position: relative; /* normal flow inside grid */
