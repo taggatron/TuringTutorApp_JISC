@@ -344,7 +344,25 @@ async function renameGroup(group_id, group_name) {
 }
 
 async function renameSession(session_id, session_name) {
-  await query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
+  try {
+    const store = als.getStore();
+    const uid = store && store.userId ? String(store.userId) : null;
+    if (uid) {
+      await query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
+      return;
+    }
+    // If called without ALS user context, lookup owner user_id and set app.current_user_id
+    const ownerRes = await pool.query('SELECT user_id FROM session WHERE id = $1', [session_id]);
+    const ownerUid = ownerRes.rows[0]?.user_id;
+    if (ownerUid) {
+      await pool.query("SELECT set_config('app.current_user_id', $1, false)", [String(ownerUid)]);
+      await pool.query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
+    } else {
+      await pool.query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
+    }
+  } catch (e) {
+    console.error('Error in renameSession:', e);
+  }
 }
 
 // Middleware to attach current user id into AsyncLocalStorage for each request

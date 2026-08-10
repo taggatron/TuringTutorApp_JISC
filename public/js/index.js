@@ -779,7 +779,7 @@ async function loadSessions() {
           btn.innerHTML = `
             <div class="turing-left">
               <img class="turing-mode-icon" src="ChatGPT Image Oct 13, 2025, 01_56_50 PM.png" alt="">
-              <span class="turing-name" contenteditable="true" spellcheck="false" style="outline: none;">${escapeHtml(name)}</span>
+              <span class="turing-name" contenteditable="false" spellcheck="false" style="outline: none;">${escapeHtml(name)}</span>
             </div>
             <span class="edit-icon" title="Edit">✎</span>
             <span class="delete-icon" title="Delete">🗑</span>`;
@@ -794,17 +794,19 @@ async function loadSessions() {
           };
           btn.querySelector('.turing-name').addEventListener('blur', (e) => {
               const newName = (e.target.textContent || '').trim() || name;
+              e.target.contentEditable = 'false';
               renameSessionOnServer(session.id, newName);
           });
           btn.querySelector('.turing-name').addEventListener('keydown', (e) => {
               if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
           });
           btn.querySelector('.turing-name').addEventListener('click', (e) => {
-              e.stopPropagation();
+              if (e.currentTarget.isContentEditable) e.stopPropagation();
           });
           btn.querySelector('.edit-icon').addEventListener('click', (e) => {
               e.stopPropagation();
               const span = btn.querySelector('.turing-name');
+              span.contentEditable = 'true';
               span.focus();
               const range = document.createRange();
               range.selectNodeContents(span);
@@ -829,7 +831,7 @@ async function loadSessions() {
         const labelText = session.session_name || formatSessionLabel(sessionNumber, session.created_at || session.updated_at);
         button.innerHTML = `
           <div class="session-name-container" style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            <span class="session-name" contenteditable="true" spellcheck="false" style="outline: none;">${escapeHtml(labelText)}</span>
+            <span class="session-name" contenteditable="false" spellcheck="false" style="outline: none;">${escapeHtml(labelText)}</span>
           </div>
           <span class="edit-icon" title="Edit">✎</span>
           <span class="delete-icon" title="Delete">🗑</span>
@@ -838,17 +840,19 @@ async function loadSessions() {
         
         button.querySelector('.session-name').addEventListener('blur', (e) => {
             const newName = (e.target.textContent || '').trim() || labelText;
+            e.target.contentEditable = 'false';
             renameSessionOnServer(session.id, newName);
         });
         button.querySelector('.session-name').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
         });
         button.querySelector('.session-name').addEventListener('click', (e) => {
-            e.stopPropagation();
+            if (e.currentTarget.isContentEditable) e.stopPropagation();
         });
         button.querySelector('.edit-icon').addEventListener('click', (e) => {
             e.stopPropagation();
             const span = button.querySelector('.session-name');
+            span.contentEditable = 'true';
             span.focus();
             document.execCommand('selectAll', false, null);
         });
@@ -1294,7 +1298,7 @@ async function loadGroups() {
     if (data.success) {
       document.getElementById('session-groups').innerHTML = '';
       data.groups.forEach(group => { createGroupInUI(group.id, group.group_name); });
-      loadSessions();
+      await loadSessions();
     } else { console.error('Failed to load groups:', data.message); }
   } catch (error) { console.error('Error fetching groups:', error); }
 }

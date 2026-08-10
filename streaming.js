@@ -157,6 +157,19 @@ app.use(generalLimiter);
 
 // checkAuth moved to server/middleware/auth.js
 
+// Session ownership is defined by the foreign key, not the duplicated
+// username column. Legacy/migrated rows can legitimately have a missing or
+// stale username while still belonging to the authenticated user.
+function isSessionOwnedByRequest(sessionRow, req) {
+    const authenticatedUserId = req.session?.user?.id;
+    return Boolean(
+        sessionRow &&
+        authenticatedUserId !== null &&
+        authenticatedUserId !== undefined &&
+        String(sessionRow.user_id) === String(authenticatedUserId)
+    );
+}
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(path.resolve(), 'public', 'home.html'));
 });
@@ -244,25 +257,51 @@ app.post('/generate-session-title', async (req, res) => {
     }
 });
 
-app.get('/sessions', async (req, res) => {
+app.get('/sessions', checkAuth, async (req, res) => {
     const username = req.cookies.username;
     try {
         const user = await getUser(username);
         if (!user) return res.json({ success: false, message: 'User not found' });
         const sessions = await getSessions(user.id);
         res.json({ success: true, sessions });
+
+        // Keep legacy default-name backfilling off the critical path. Sidebar
+        // rendering must not wait for Azure, and title-generation failures must
+        // never prevent saved sessions (including Turing sessions) from loading.
+        void runWithUserId(user.id, async () => {
+            for (const sess of sessions) {
+                const currentName = typeof sess.session_name === 'string' ? sess.session_name.trim() : '';
+                const isDefaultName = !currentName || /^Session\b/i.test(currentName);
+                if (!isDefaultName) continue;
+
+                try {
+                    const msgs = await getMessages(sess.id);
+                    const userMsg = msgs.find(m => m && m.role === 'user' && typeof m.content === 'string' && m.content.trim());
+                    if (!userMsg) continue;
+
+                    const title = await generateSessionTitle(userMsg.content);
+                    if (title && title.trim()) {
+                        await renameSession(sess.id, title.trim());
+                    }
+                } catch (e) {
+                    console.error(`Error auto-titling session ${sess.id}:`, e);
+                }
+            }
+        }).catch((e) => {
+            console.error('Error backfilling session titles:', e);
+        });
     } catch (err) {
         console.error('Error fetching sessions:', err);
         res.json({ success: false, message: 'Could not retrieve sessions' });
     }
 });
 
-app.get('/messages', async (req, res) => {
+app.get('/messages', checkAuth, async (req, res) => {
     const session_id = req.query.session_id;
     const username = req.cookies.username;
     try {
         const sess = await getSessionById(session_id);
-        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this session' });
         const [messages, feedbackData, scaleRows] = await Promise.all([
             getMessages(session_id),
             getFeedback(session_id),
@@ -406,7 +445,7 @@ app.post('/save-session', async (req, res) => {
 
     try {
         const sess = await getSessionById(session_id);
-        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this session' });
 
         for (const message of messages) {
             try {
@@ -451,7 +490,7 @@ app.delete('/delete-session', async (req, res) => {
     const username = req.cookies.username;
     try {
         const sess = await getSessionById(session_id);
-        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this session' });
         await deleteSession(session_id);
         res.json({ success: true, message: 'Session deleted successfully' });
     } catch (err) {
@@ -465,7 +504,7 @@ app.post('/save-feedback', async (req, res) => {
     const username = req.cookies.username;
     try {
         const sess = await getSessionById(session_id);
-        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this session' });
         console.log('[POST /save-feedback] Incoming (simplified):', { session_id, feedbackContent, message_id, username });
         await saveFeedback(session_id, message_id || null, username, feedbackContent, null);
         res.json({ success: true });
@@ -506,7 +545,7 @@ app.post('/update-message', async (req, res) => {
             } else {
                 targetMessageId = parsed;
                 const sess = await getSessionIdForMessage(targetMessageId);
-                if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+                if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this message' });
                 sessRow = sess;
                 turingSaveDebug('numeric message_id accepted', { targetMessageId, is_turing: !!(sess?.is_turing) });
             }
@@ -515,7 +554,7 @@ app.post('/update-message', async (req, res) => {
         // Determine target by session when message_id is missing or not numeric.
         if (!targetMessageId && session_id) {
             const sess = await getSessionById(session_id);
-            if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+            if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this session' });
             sessRow = sess;
             const messages = await getMessages(session_id);
             if (!messages || messages.length === 0) return res.json({ success: false, message: 'No messages found for session' });
@@ -570,7 +609,7 @@ app.post('/update-message-collapsed', async (req, res) => {
     const username = req.cookies.username;
     try {
         const sess = await getSessionIdForMessage(message_id);
-        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this message' });
+        if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this message' });
         await updateMessageCollapsedState(message_id, collapsed);
         res.json({ success: true });
     } catch (err) {
@@ -615,7 +654,7 @@ app.delete('/delete-group', async (req, res) => {
 });
 
 // Endpoint to get all groups for a user
-app.get('/groups', async (req, res) => {
+app.get('/groups', checkAuth, async (req, res) => {
     const username = req.cookies.username;
     try {
         const user = await getUser(username);
@@ -634,7 +673,7 @@ app.post('/update-session-group', async (req, res) => {
     const username = req.cookies.username;
     try {
         const sess = await getSessionById(session_id);
-        if (!sess || sess.username !== username) return res.json({ success: false, message: 'Not authorized for this session' });
+        if (!isSessionOwnedByRequest(sess, req)) return res.json({ success: false, message: 'Not authorized for this session' });
         const user = await getUser(username);
         if (!user) return res.json({ success: false, message: 'User not found' });
         const groups = await getUserGroups(user.id);

@@ -159,24 +159,6 @@ body > div.container > div.chat-container {
 }
 .prompt-header { position: relative; display: flex; align-items: center; gap: 8px; }
 
-/* Compact Tools toggle button (visible by default) */
-.tools-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    background: linear-gradient(180deg, #ffffff, #f7f9fb);
-    border: 1px solid rgba(45, 140, 255, 0.12);
-    box-shadow: 0 6px 18px rgba(16,24,40,0.06);
-    cursor: pointer;
-    font-size: 18px;
-    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
-}
-.tools-toggle { z-index: 3000; }
-.tools-toggle:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 26px rgba(16,24,40,0.12); }
-
 /* When inside .example-prompts popup menu, buttons are instantly visible when toggled */
 .example-prompts .create-reference-button,
 .example-prompts .prompt-examples-button,
@@ -217,7 +199,6 @@ body > div.container > div.chat-container {
 
 /* Small responsive adjustments */
 @media (max-width: 640px) {
-    .tools-toggle { width: 36px; height: 36px; font-size: 16px; }
     .create-reference-button, .prompt-examples-button { display: none; } /* keep compact on narrow screens */
 }
 /* Assistant message edit mode styles */
