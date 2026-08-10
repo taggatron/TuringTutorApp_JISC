@@ -1468,8 +1468,8 @@ body {
     box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15); /* Reduced shadow on click */
 }
 
-/* Use a compact icon */
-.send-message-button::before { content: '➤'; margin: 0; font-size: 16px; }
+/* The send icon is an inline SVG so its radio waves can animate independently. */
+.send-message-button::before { content: none; }
 
 /* Remove tooltip for cleaner UI */
 .send-message-button:hover::after { content: none; }
@@ -1715,29 +1715,112 @@ body {
 .chat-input .send-message-button {
     align-self: flex-end;
     margin-bottom: 2px;
-    background: linear-gradient(180deg, #ffffff, #f7f9fb);
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(232, 240, 250, 0.22));
     color: #2d3e50;
-    border: 1px solid rgba(45, 140, 255, 0.12);
-    border-radius: 10px;
-    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    border-radius: 50%;
+    padding: 4px;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
-    box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06);
+    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, border-color 180ms ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 6px 18px rgba(16, 24, 40, 0.08);
+    backdrop-filter: blur(10px) saturate(145%);
+    -webkit-backdrop-filter: blur(10px) saturate(145%);
     z-index: 10;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-size: 18px;
 }
+
+.send-radio-icon {
+    display: block;
+    width: 31px;
+    height: 31px;
+    overflow: visible;
+    pointer-events: none;
+    shape-rendering: geometricPrecision;
+}
+
+.send-radio-wave,
+.send-radio-beacon {
+    transform-box: view-box;
+    transform-origin: 100px 80px;
+    transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms ease;
+}
+
+.send-radio-wave-1 { opacity: 0.95; }
+.send-radio-wave-2 { opacity: 0.78; }
+.send-radio-wave-3 { opacity: 0.6; }
+
+@keyframes sendRadioTransmit {
+    0% {
+        opacity: 0.18;
+        transform: scale(0.94);
+    }
+    32% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.08;
+        transform: scale(1.12);
+    }
+}
+
+@keyframes sendRadioBeaconPulse {
+    0%, 100% { transform: scale(1); }
+    45% { transform: scale(1.12); }
+}
+
+.chat-input .send-message-button:hover .send-radio-wave {
+    animation: sendRadioTransmit 1350ms ease-out infinite;
+}
+
+.chat-input .send-message-button:hover .send-radio-wave-1 { animation-delay: 0ms; }
+.chat-input .send-message-button:hover .send-radio-wave-2 { animation-delay: 150ms; }
+.chat-input .send-message-button:hover .send-radio-wave-3 { animation-delay: 300ms; }
+
+.chat-input .send-message-button:hover .send-radio-beacon {
+    animation: sendRadioBeaconPulse 900ms ease-in-out infinite;
+}
 .chat-input .send-message-button:hover {
     transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 10px 26px rgba(16, 24, 40, 0.12);
-    background: linear-gradient(180deg, #ffffff, #f0f4f8);
+    border-color: rgba(255, 255, 255, 0.9);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 10px 26px rgba(16, 24, 40, 0.13);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(224, 236, 249, 0.3));
 }
 .chat-input .send-message-button:active {
     transform: translateY(0px);
     box-shadow: 0 4px 10px rgba(16, 24, 40, 0.08);
+}
+
+@media (max-width: 640px) {
+    .chat-input .send-message-button {
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+    }
+
+    .send-radio-icon {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .send-radio-wave,
+    .send-radio-beacon {
+        transition: none;
+        animation: none !important;
+    }
+
+    .chat-input .send-message-button:hover .send-radio-wave,
+    .chat-input .send-message-button:hover .send-radio-beacon {
+        transform: none;
+    }
 }
 
 .example-prompts .send-message-button {

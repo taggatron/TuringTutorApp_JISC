@@ -228,7 +228,92 @@
                         </svg>
                     </button>
                     <textarea id="message-input" rows="1" placeholder="Type your message..."></textarea>
-                    <button class="send-message-button"></button>
+                    <button class="send-message-button" type="button" title="Send message" aria-label="Send message">
+                        <!-- Supplied radio-transmission SVG, enhanced with the gear icon's metallic depth. -->
+                        <svg class="send-radio-icon" viewBox="40 35 120 125" aria-hidden="true" focusable="false">
+                            <defs>
+                                <linearGradient id="send-radio-wave-metal" x1="0" y1="35" x2="0" y2="90"
+                                    gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#E2E8F0" />
+                                    <stop offset="45%" stop-color="#94A3B8" />
+                                    <stop offset="100%" stop-color="#475569" />
+                                </linearGradient>
+                                <linearGradient id="send-radio-tower-metal" x1="75" y1="90" x2="125" y2="150"
+                                    gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#DCE5EE" />
+                                    <stop offset="42%" stop-color="#8796A8" />
+                                    <stop offset="100%" stop-color="#344256" />
+                                </linearGradient>
+                                <linearGradient id="send-radio-crossbar-metal" x1="84" y1="104" x2="116" y2="130"
+                                    gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#CBD5E1" />
+                                    <stop offset="55%" stop-color="#718096" />
+                                    <stop offset="100%" stop-color="#2D3A4D" />
+                                </linearGradient>
+                                <radialGradient id="send-radio-beacon" cx="35%" cy="28%" r="72%">
+                                    <stop offset="0%" stop-color="#EDF3F8" />
+                                    <stop offset="38%" stop-color="#AAB8C7" />
+                                    <stop offset="76%" stop-color="#5B6B7E" />
+                                    <stop offset="100%" stop-color="#263548" />
+                                </radialGradient>
+                            </defs>
+
+                            <g class="send-radio-waves" fill="none" stroke-linecap="round">
+                                <g class="send-radio-wave send-radio-wave-3">
+                                    <path d="M 54.97 54 A 52 52 0 0 1 145.03 54" transform="translate(2 2)"
+                                        stroke="#182536" stroke-width="8" opacity="0.38" />
+                                    <path d="M 54.97 54 A 52 52 0 0 1 145.03 54"
+                                        stroke="url(#send-radio-wave-metal)" stroke-width="5.5" />
+                                    <path d="M 54.97 54 A 52 52 0 0 1 145.03 54"
+                                        stroke="#D5DEE8" stroke-width="1.2" opacity="0.55" />
+                                </g>
+                                <g class="send-radio-wave send-radio-wave-2">
+                                    <path d="M 68.82 62 A 36 36 0 0 1 131.18 62" transform="translate(2 2)"
+                                        stroke="#182536" stroke-width="8" opacity="0.42" />
+                                    <path d="M 68.82 62 A 36 36 0 0 1 131.18 62"
+                                        stroke="url(#send-radio-wave-metal)" stroke-width="5.5" />
+                                    <path d="M 68.82 62 A 36 36 0 0 1 131.18 62"
+                                        stroke="#D5DEE8" stroke-width="1.2" opacity="0.6" />
+                                </g>
+                                <g class="send-radio-wave send-radio-wave-1">
+                                    <path d="M 82.68 70 A 20 20 0 0 1 117.32 70" transform="translate(2 2)"
+                                        stroke="#182536" stroke-width="8" opacity="0.46" />
+                                    <path d="M 82.68 70 A 20 20 0 0 1 117.32 70"
+                                        stroke="url(#send-radio-wave-metal)" stroke-width="5.5" />
+                                    <path d="M 82.68 70 A 20 20 0 0 1 117.32 70"
+                                        stroke="#E2E8F0" stroke-width="1.2" opacity="0.65" />
+                                </g>
+                            </g>
+
+                            <g class="send-radio-tower" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M 100 86 L 80 145 M 100 86 L 120 145" transform="translate(3 3)"
+                                    stroke="#182536" stroke-width="10" opacity="0.5" fill="none" />
+                                <path d="M 100 86 L 80 145 M 100 86 L 120 145"
+                                    stroke="url(#send-radio-tower-metal)" stroke-width="7" fill="none" />
+                                <path d="M 99 87 L 79 144 M 99 87 L 119 144"
+                                    stroke="#DCE5EE" stroke-width="1.3" opacity="0.62" fill="none" />
+
+                                <path d="M 93.2 106 L 106.8 106 M 86.4 126 L 113.6 126 M 93.2 106 L 113.6 126 M 106.8 106 L 86.4 126"
+                                    transform="translate(2 2)" stroke="#182536" stroke-width="6" opacity="0.45"
+                                    fill="none" />
+                                <path d="M 93.2 106 L 106.8 106 M 86.4 126 L 113.6 126 M 93.2 106 L 113.6 126 M 106.8 106 L 86.4 126"
+                                    stroke="url(#send-radio-crossbar-metal)" stroke-width="3.8" fill="none" />
+
+                                <path d="M 76 141 L 124 141" transform="translate(2 2)" stroke="#182536"
+                                    stroke-width="8" opacity="0.45" />
+                                <path d="M 76 141 L 124 141" stroke="url(#send-radio-tower-metal)" stroke-width="6" />
+                                <circle cx="87" cy="126" r="2.2" fill="#C7D2DE" stroke="#344256" stroke-width="1" />
+                                <circle cx="113" cy="126" r="2.2" fill="#C7D2DE" stroke="#344256" stroke-width="1" />
+
+                                <g class="send-radio-beacon">
+                                    <circle cx="103" cy="83" r="8" fill="#182536" opacity="0.48" />
+                                    <circle cx="100" cy="80" r="8" fill="url(#send-radio-beacon)" stroke="#344256"
+                                        stroke-width="2.5" />
+                                    <circle cx="97.7" cy="77.6" r="2.1" fill="#E2E8F0" opacity="0.82" />
+                                </g>
+                            </g>
+                        </svg>
+                    </button>
                 </div>
                 <!-- Example Prompts Section -->
                 <div class="example-prompts">
