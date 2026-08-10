@@ -483,29 +483,7 @@ function resizeInput(event) {
   toolsToggle.addEventListener('dragenter', (e) => { e.preventDefault(); addExpanded(); });
   toolsToggle.addEventListener('dragover', (e) => { e.preventDefault(); addExpanded(); });
   toolsToggle.addEventListener('dragleave', (e) => { removeExpanded(); });
-  toolsToggle.addEventListener('drop', async (e) => {
-    // If a prompt is dropped directly onto the compact Tools button, forward
-    // the drop to the same logic used by the ChatGPT Reference button so
-    // Turing mode receives the prompt + screenshot.
-    e.preventDefault(); e.stopPropagation(); removeExpanded();
-    try {
-      const txt = e.dataTransfer ? e.dataTransfer.getData('text/plain') : null;
-      if (!txt) return;
-      window.__lastDroppedPromptText = txt;
-      // maintain last dragged element if available
-      if (window.__lastDraggedPromptElement && window.__isTuringFlag) {
-        try {
-          const editable = await ensureAssistantEditor();
-          if (editable) {
-            await turingInsertReferenceAndPromptImage(editable, txt, window.__lastDraggedPromptElement);
-            return;
-          }
-        } catch (err) { console.error('Turing insert from tools-toggle failed:', err); }
-      }
-      // fallback to showing the reference popup (non-Turing mode)
-      showChatGPTReferencePopup();
-    } catch (err) { console.error('tools-toggle drop handler error:', err); }
-  });
+  toolsToggle.addEventListener('drop', removeExpanded);
 
   // Also listen on the whole promptHeader so a dragged item that moves across
   // the revealed area collapses correctly.
@@ -1421,6 +1399,10 @@ const chatgptRefBtn = document.querySelector('.create-reference-button');
 if (chatgptRefBtn) {
   chatgptRefBtn.onclick = showChatGPTReferencePopup;
   chatgptRefBtn.onmouseover = null;
+}
+
+const promptReferenceDropTarget = document.getElementById('tools-toggle') || chatgptRefBtn;
+if (promptReferenceDropTarget) {
   (function enablePromptDragToReference() {
     const chatMessagesEl = document.getElementById('chat-messages'); if (!chatMessagesEl) return;
     function armDraggable(el) {
@@ -1537,18 +1519,18 @@ if (chatgptRefBtn) {
         } catch (outerErr) {
           console.error('drag ghost creation failed', outerErr);
         }
-        chatgptRefBtn.classList.add('drop-target');
+        promptReferenceDropTarget.classList.add('drop-target');
       });
-  el.addEventListener('dragend', () => { chatgptRefBtn.classList.remove('drop-target'); try { el.classList.remove('dragging'); } catch(_) {} if (el.__dragGhost) { try { el.__dragGhost.remove(); } catch(_) {} el.__dragGhost = null; } });
+  el.addEventListener('dragend', () => { promptReferenceDropTarget.classList.remove('drop-target'); try { el.classList.remove('dragging'); } catch(_) {} if (el.__dragGhost) { try { el.__dragGhost.remove(); } catch(_) {} el.__dragGhost = null; } });
     }
     chatMessagesEl.querySelectorAll('.message.user').forEach(armDraggable);
     const mo = new MutationObserver((muts) => { muts.forEach(m => m.addedNodes.forEach(node => { if (node instanceof HTMLElement) { if (node.matches && node.matches('.message.user')) armDraggable(node); node.querySelectorAll && node.querySelectorAll('.message.user').forEach(armDraggable); } })); });
     mo.observe(chatMessagesEl, { childList: true, subtree: true });
-    chatgptRefBtn.addEventListener('dragenter', (e) => { e.preventDefault(); chatgptRefBtn.classList.add('drop-target'); });
-    chatgptRefBtn.addEventListener('dragover', (e) => { e.preventDefault(); chatgptRefBtn.classList.add('drop-target'); });
-    chatgptRefBtn.addEventListener('dragleave', () => chatgptRefBtn.classList.remove('drop-target'));
-    chatgptRefBtn.addEventListener('drop', async (e) => {
-      e.preventDefault(); e.stopPropagation(); chatgptRefBtn.classList.remove('drop-target');
+    promptReferenceDropTarget.addEventListener('dragenter', (e) => { e.preventDefault(); promptReferenceDropTarget.classList.add('drop-target'); });
+    promptReferenceDropTarget.addEventListener('dragover', (e) => { e.preventDefault(); promptReferenceDropTarget.classList.add('drop-target'); });
+    promptReferenceDropTarget.addEventListener('dragleave', () => promptReferenceDropTarget.classList.remove('drop-target'));
+    promptReferenceDropTarget.addEventListener('drop', async (e) => {
+      e.preventDefault(); e.stopPropagation(); promptReferenceDropTarget.classList.remove('drop-target');
       const txt = e.dataTransfer.getData('text/plain'); if (!txt) return; window.__lastDroppedPromptText = txt;
       if (window.__isTuringFlag) {
         try { const editable = await ensureAssistantEditor(); if (!editable) throw new Error('No assistant editor found'); await turingInsertReferenceAndPromptImage(editable, txt, window.__lastDraggedPromptElement); return; } catch (err) { console.error('Turing insert failed:', err); return; }
@@ -1594,16 +1576,16 @@ if (chatgptRefBtn) {
       touchState.ghost = ghost;
     }
     function endTouchDrag(touch) {
-      if (!touchState.active) return; const rect = chatgptRefBtn.getBoundingClientRect(); const x = touch.clientX, y = touch.clientY; if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) { const txt = (touchState.el.innerText || touchState.el.textContent || '').trim(); window.__lastDroppedPromptText = txt; window.__lastDraggedPromptElement = touchState.el; showChatGPTReferencePopup(); }
+      if (!touchState.active) return; const rect = promptReferenceDropTarget.getBoundingClientRect(); const x = touch.clientX, y = touch.clientY; if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) { const txt = (touchState.el.innerText || touchState.el.textContent || '').trim(); window.__lastDroppedPromptText = txt; window.__lastDraggedPromptElement = touchState.el; showChatGPTReferencePopup(); }
       // Restore visibility of the original element
       try { if (touchState.el) touchState.el.classList.remove('dragging'); } catch (_) {}
       if (touchState.ghost) { try { if (typeof touchState.ghost._posRuleIndex === 'number') _removePosRule(touchState.ghost._posRuleIndex); } catch(_) {} try { touchState.ghost.remove(); } catch(_) {} }
-      touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target');
+      touchState = { active: false, el: null, ghost: null }; promptReferenceDropTarget.classList.remove('drop-target');
     }
     chatMessagesEl.addEventListener('touchstart', (e) => { const msg = e.target.closest && e.target.closest('.message.user'); if (!msg) return; if (longPressTimer) clearTimeout(longPressTimer); const t = e.touches[0]; longPressTimer = setTimeout(() => startTouchDrag(msg, t), 350); }, { passive: true });
-  chatMessagesEl.addEventListener('touchmove', (e) => { if (!touchState.active || !touchState.ghost) return; const t = e.touches[0]; try { if (typeof touchState.ghost._posRuleIndex === 'number' && touchState.ghost._posRuleIndex >= 0) _updatePosRule(touchState.ghost._posRuleIndex, t.clientX, t.clientY); } catch (_) {} const rect = chatgptRefBtn.getBoundingClientRect(); const over = (t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom); chatgptRefBtn.classList.toggle('drop-target', over); }, { passive: true });
+  chatMessagesEl.addEventListener('touchmove', (e) => { if (!touchState.active || !touchState.ghost) return; const t = e.touches[0]; try { if (typeof touchState.ghost._posRuleIndex === 'number' && touchState.ghost._posRuleIndex >= 0) _updatePosRule(touchState.ghost._posRuleIndex, t.clientX, t.clientY); } catch (_) {} const rect = promptReferenceDropTarget.getBoundingClientRect(); const over = (t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom); promptReferenceDropTarget.classList.toggle('drop-target', over); }, { passive: true });
     chatMessagesEl.addEventListener('touchend', (e) => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } const t = e.changedTouches && e.changedTouches[0]; if (t) endTouchDrag(t); });
-    chatMessagesEl.addEventListener('touchcancel', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } try { if (touchState.el) touchState.el.classList.remove('dragging'); } catch(_) {} if (touchState.ghost) touchState.ghost.remove(); touchState = { active: false, el: null, ghost: null }; chatgptRefBtn.classList.remove('drop-target'); });
+    chatMessagesEl.addEventListener('touchcancel', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } try { if (touchState.el) touchState.el.classList.remove('dragging'); } catch(_) {} if (touchState.ghost) touchState.ghost.remove(); touchState = { active: false, el: null, ghost: null }; promptReferenceDropTarget.classList.remove('drop-target'); });
   })();
 }
 

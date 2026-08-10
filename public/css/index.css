@@ -701,12 +701,12 @@ body > div.container > div.chat-container {
 }
 .hide-user-message { display: none !important; }
 
-/* Visual cue when ChatGPT Reference is a drop target */
-.create-reference-button.drop-target {
+/* Visual cue when a user prompt can be dropped onto the cogwheel. */
+.tools-toggle.drop-target {
     box-shadow: 0 0 0 3px rgba(45,140,255,0.35), 0 0 0 10px rgba(45,140,255,0.18);
-    border-color: #2d8cff !important;
+    background: rgba(45,140,255,0.12) !important;
     outline: none;
-    transition: box-shadow 120ms ease, border-color 120ms ease;
+    transition: box-shadow 120ms ease, background-color 120ms ease;
     animation: refPulse 1.2s ease-in-out infinite, refBgPulse 1.2s ease-in-out infinite;
 }
 /* Overlay visibility classes (CSP-safe) */
