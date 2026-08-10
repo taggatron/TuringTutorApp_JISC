@@ -1,102 +1,237 @@
-/* Decipher waiting overlay */
+/* Modern Turing decipher waiting overlay */
 .decipher-wait-overlay {
     position: fixed;
     inset: 0;
+    isolation: isolate;
     display: none;
-    align-items: center;
-    justify-content: center;
-    /* Brighter backdrop: light dim + subtle blur for focus */
-    background: rgba(255, 255, 255, 0.744);
-    backdrop-filter: blur(5px);
+    place-items: center;
+    padding: 24px;
+    box-sizing: border-box;
+    background: transparent;
     z-index: 9999;
 }
-.decipher-wait-overlay.visible { display: flex; }
-.decipher-wait-content { width: 380px; max-width: 90vw; }
+
+.decipher-wait-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 28% 22%, rgba(139, 92, 246, 0.28), transparent 35%),
+        radial-gradient(circle at 78% 78%, rgba(59, 130, 246, 0.18), transparent 38%),
+        rgba(15, 23, 42, 0.58);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    z-index: 0;
+}
+
+.decipher-wait-overlay.visible { display: grid; }
+
+.decipher-wait-panel {
+    position: relative;
+    isolation: isolate;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) minmax(260px, 1fr);
+    align-items: center;
+    gap: clamp(24px, 4vw, 42px);
+    width: min(760px, calc(100vw - 32px));
+    padding: clamp(22px, 4vw, 36px);
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    border-radius: 26px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.93), rgba(246, 243, 255, 0.78));
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(24px) saturate(135%);
+    -webkit-backdrop-filter: blur(24px) saturate(135%);
+    animation: decipherPanelIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.decipher-wait-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #582c83, #8b5cf6, #3b82f6);
+    z-index: 2;
+}
+
+.decipher-wait-panel::after {
+    content: '';
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    right: -120px;
+    top: -150px;
+    border-radius: 50%;
+    background: rgba(139, 92, 246, 0.13);
+    filter: blur(4px);
+    z-index: -1;
+}
+
+.decipher-wait-visual {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    aspect-ratio: 1;
+    padding: 16px;
+    box-sizing: border-box;
+    border: 1px solid rgba(139, 92, 246, 0.18);
+    border-radius: 22px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(237, 233, 254, 0.42));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 16px 36px rgba(88, 44, 131, 0.12);
+}
+
+.decipher-wait-content {
+    width: 100%;
+    max-width: 280px;
+}
+
 .decipher-wait-overlay svg {
+    display: block;
     width: 100%;
     height: auto;
-    /* Ensure full brightness and vivid colors despite backdrop dim */
-    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.25)) brightness(1.25) saturate(1.2) !important;
-}
-.decipher-wait-caption { margin-top: 10px; text-align: center; font-weight: 600; color: #7c3aed; animation: colorShift 1400ms ease-in-out infinite alternate; }
-@keyframes textGlow {
-    0% { filter: drop-shadow(0 0 0px rgba(124,58,237,0.0)); }
-    50% { filter: drop-shadow(0 0 8px rgba(124,58,237,0.55)); }
-    100% { filter: drop-shadow(0 0 0px rgba(124,58,237,0.0)); }
-}
-@keyframes textGlowStrong {
-    0% { filter: drop-shadow(0 0 2px rgba(124,58,237,0.35)); }
-    25% { filter: drop-shadow(0 0 10px rgba(124,58,237,0.70)); }
-    50% { filter: drop-shadow(0 0 14px rgba(124,58,237,0.85)); }
-    75% { filter: drop-shadow(0 0 10px rgba(168,85,247,0.75)); }
-    100% { filter: drop-shadow(0 0 2px rgba(124,58,237,0.35)); }
-}
-/* Glow only the main title text elements in the SVG */
-/* Glow only letters labelled via Inkscape (T,U,R,I,N,G and space separator) */
-/* Glow the letter tspans which are generated with ids like tspanXXXX */
-.decipher-wait-overlay svg tspan[id^="tspan"],
-.decipher-wait-overlay svg [inkscape\:label],
-.decipher-wait-overlay svg [inkscape\:label="T"],
-.decipher-wait-overlay svg [inkscape\:label="U"],
-.decipher-wait-overlay svg [inkscape\:label="R"],
-.decipher-wait-overlay svg [inkscape\:label="I"],
-.decipher-wait-overlay svg [inkscape\:label="N"],
-.decipher-wait-overlay svg [inkscape\:label="G"],
-.decipher-wait-overlay svg [inkscape\:label="T"],
-.decipher-wait-overlay svg [inkscape\:label="O"],
-.decipher-wait-overlay svg [inkscape\:label="R"],
-.decipher-wait-overlay svg [inkscape\:label="U"] {
-    animation: textGlowStrong 1300ms ease-in-out infinite;
+    filter: drop-shadow(0 16px 24px rgba(30, 41, 59, 0.24)) saturate(1.06);
+    animation: decipherArtworkFloat 3600ms ease-in-out infinite;
 }
 
-/* Assessing… caption: brand shimmer + soft bounce */
-@keyframes assessingShimmer {
-    0% { background-position: -200% 0; }
-    50% { background-position: 0% 0; }
-    100% { background-position: 200% 0; }
+.decipher-wait-copy {
+    min-width: 0;
 }
-@keyframes assessingBounce {
-    0% { transform: translateY(0) scale(1); }
-    50% { transform: translateY(-2px) scale(1.035); }
-    100% { transform: translateY(0) scale(1); }
+
+.decipher-wait-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding: 7px 11px;
+    border: 1px solid rgba(88, 44, 131, 0.16);
+    border-radius: 999px;
+    background: rgba(88, 44, 131, 0.08);
+    color: #582c83;
+    font-size: 0.76rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
+
+.decipher-wait-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #8b5cf6;
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.45);
+    animation: decipherStatusPulse 1600ms ease-out infinite;
+}
+
 .decipher-wait-caption {
-    margin-top: 10px;
-    text-align: center;
-    font-weight: 700;
-    font-size: 2rem;
-    line-height: 1.15;
-    letter-spacing: 0.3px;
-    color: transparent;
-    background-image: linear-gradient(90deg, #6d28d9, #7c3aed, #a855f7, #7c3aed, #6d28d9);
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    animation: assessingShimmer 1800ms linear infinite, assessingBounce 1600ms ease-in-out infinite;
+    margin: 0;
+    max-width: 440px;
+    color: #24153d;
+    font-size: clamp(1.55rem, 3.4vw, 2.35rem);
+    font-weight: 780;
+    line-height: 1.08;
+    letter-spacing: -0.035em;
 }
 
-@keyframes cogSpin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+.decipher-wait-detail {
+    max-width: 440px;
+    margin: 14px 0 22px;
+    color: #64748b;
+    font-size: 0.98rem;
+    line-height: 1.55;
 }
-@keyframes cogPulseColor {
-    0% { fill: #2d6cdf; stroke: #2d6cdf; }
-    50% { fill: #3b82f6; stroke: #3b82f6; }
-    100% { fill: #2d6cdf; stroke: #2d6cdf; }
+
+.decipher-wait-progress {
+    position: relative;
+    width: min(100%, 380px);
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(88, 44, 131, 0.1);
 }
-/* Keep most elements static; animate only cogs/gears by id or class */
-.decipher-wait-overlay svg [id*="cog"],
-.decipher-wait-overlay svg [id*="gear"],
-.decipher-wait-overlay svg .cog,
-.decipher-wait-overlay svg .gear {
-    transform-origin: 50% 50%;
-    animation: cogSpin 3s linear infinite;
+
+.decipher-wait-progress::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 42%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #582c83, #8b5cf6, #3b82f6);
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.4);
+    animation: decipherProgress 1500ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
-.decipher-wait-overlay svg [id*="cog"] path,
-.decipher-wait-overlay svg [id*="gear"] path,
-.decipher-wait-overlay svg .cog path,
-.decipher-wait-overlay svg .gear path {
-    animation: cogPulseColor 2.4s ease-in-out infinite;
+
+.decipher-cog {
+    transform-box: view-box;
+}
+
+.decipher-wait-overlay.cogs-ready .decipher-cog-clockwise {
+    animation: decipherCogClockwise 5200ms linear infinite;
+}
+
+.decipher-wait-overlay.cogs-ready .decipher-cog-counterclockwise {
+    animation: decipherCogCounterclockwise 5600ms linear infinite;
+}
+
+@keyframes decipherPanelIn {
+    from { opacity: 0; transform: translateY(18px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes decipherArtworkFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+@keyframes decipherStatusPulse {
+    0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.42); }
+    75%, 100% { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
+}
+
+@keyframes decipherProgress {
+    from { transform: translateX(-115%); }
+    to { transform: translateX(260%); }
+}
+
+@keyframes decipherCogClockwise {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes decipherCogCounterclockwise {
+    to { transform: rotate(-360deg); }
+}
+
+@media (max-width: 680px) {
+    .decipher-wait-overlay { padding: 16px; }
+
+    .decipher-wait-panel {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        padding: 22px;
+        border-radius: 22px;
+    }
+
+    .decipher-wait-visual {
+        width: min(220px, 72vw);
+        justify-self: center;
+        padding: 12px;
+    }
+
+    .decipher-wait-copy { text-align: center; }
+    .decipher-wait-caption,
+    .decipher-wait-detail { margin-left: auto; margin-right: auto; }
+    .decipher-wait-progress { margin: 0 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .decipher-wait-panel,
+    .decipher-wait-overlay svg,
+    .decipher-wait-status-dot,
+    .decipher-wait-progress::after,
+    .decipher-wait-overlay.cogs-ready .decipher-cog {
+        animation: none;
+    }
 }
 /* Extracted styles from index.html */
 /* ...existing styles... */

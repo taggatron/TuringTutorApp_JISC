@@ -2186,13 +2186,37 @@ function enterAssistantEditMode(targetAssistant) {
   // Decipher waiting overlay (loads and animates the Enigma SVG)
   const waitOverlay = document.createElement('div');
   waitOverlay.className = 'decipher-wait-overlay';
+  waitOverlay.setAttribute('role', 'status');
+  waitOverlay.setAttribute('aria-live', 'polite');
+  waitOverlay.setAttribute('aria-busy', 'true');
+  const waitPanel = document.createElement('div');
+  waitPanel.className = 'decipher-wait-panel';
+  const waitVisual = document.createElement('div');
+  waitVisual.className = 'decipher-wait-visual';
   const waitInner = document.createElement('div');
   waitInner.className = 'decipher-wait-content';
-  waitOverlay.appendChild(waitInner);
-  const waitCaption = document.createElement('div');
+  waitVisual.appendChild(waitInner);
+  const waitCopy = document.createElement('div');
+  waitCopy.className = 'decipher-wait-copy';
+  const waitEyebrow = document.createElement('div');
+  waitEyebrow.className = 'decipher-wait-eyebrow';
+  waitEyebrow.innerHTML = '<span class="decipher-wait-status-dot" aria-hidden="true"></span><span>Turing assessment</span>';
+  const waitCaption = document.createElement('h2');
   waitCaption.className = 'decipher-wait-caption';
-  waitCaption.textContent = 'Assessing learner work according to criteria…';
-  waitOverlay.appendChild(waitCaption);
+  waitCaption.textContent = 'Assessing learner work against the criteria';
+  const waitDetail = document.createElement('p');
+  waitDetail.className = 'decipher-wait-detail';
+  waitDetail.textContent = 'Comparing the response with your selected assessment criteria. This may take a moment.';
+  const waitProgress = document.createElement('div');
+  waitProgress.className = 'decipher-wait-progress';
+  waitProgress.setAttribute('aria-hidden', 'true');
+  waitCopy.appendChild(waitEyebrow);
+  waitCopy.appendChild(waitCaption);
+  waitCopy.appendChild(waitDetail);
+  waitCopy.appendChild(waitProgress);
+  waitPanel.appendChild(waitVisual);
+  waitPanel.appendChild(waitCopy);
+  waitOverlay.appendChild(waitPanel);
   wrapper.appendChild(waitOverlay);
   wrapper.appendChild(editable);
   document.body.appendChild(wrapper);
@@ -2265,6 +2289,29 @@ function enterAssistantEditMode(targetAssistant) {
     }
   }
 
+  // Wrap the two labelled cog paths so CSS rotation preserves each path's original SVG transform.
+  function prepareDecipherCogs() {
+    const svg = waitInner.querySelector('svg');
+    if (!svg) return [];
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    if (!svg.dataset.cogsPrepared) {
+      const inkscapeNs = 'http://www.inkscape.org/namespaces/inkscape';
+      const cogs = Array.from(svg.querySelectorAll('*')).filter((node) =>
+        node.getAttributeNS(inkscapeNs, 'label') === 'cogr' || node.getAttribute('inkscape:label') === 'cogr'
+      );
+      cogs.forEach((cog, index) => {
+        const cogWrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        cogWrapper.classList.add('decipher-cog');
+        cogWrapper.classList.add(index % 2 === 0 ? 'decipher-cog-clockwise' : 'decipher-cog-counterclockwise');
+        cog.parentNode.insertBefore(cogWrapper, cog);
+        cogWrapper.appendChild(cog);
+      });
+      svg.dataset.cogsPrepared = '1';
+    }
+    return Array.from(svg.querySelectorAll('.decipher-cog'));
+  }
+
   // Helper: show/hide decipher wait overlay and load inline SVG once
   async function showDecipherWait() {
     try {
@@ -2275,10 +2322,21 @@ function enterAssistantEditMode(targetAssistant) {
         waitInner.innerHTML = svgText;
         waitInner.dataset.loaded = '1';
       }
+      const cogs = prepareDecipherCogs();
+      waitOverlay.classList.remove('cogs-ready');
       waitOverlay.classList.add('visible');
+      requestAnimationFrame(() => {
+        cogs.forEach((cog) => {
+          try {
+            const bounds = cog.getBBox();
+            cog.style.transformOrigin = `${bounds.x + bounds.width / 2}px ${bounds.y + bounds.height / 2}px`;
+          } catch (_) { /* SVG may still be laying out; the fallback origin remains safe. */ }
+        });
+        waitOverlay.classList.add('cogs-ready');
+      });
     } catch (e) { console.warn('Could not load Enigma SVG:', e); waitOverlay.classList.add('visible'); }
   }
-  function hideDecipherWait() { waitOverlay.classList.remove('visible'); }
+  function hideDecipherWait() { waitOverlay.classList.remove('visible', 'cogs-ready'); }
 
   return wrapper;
 }
