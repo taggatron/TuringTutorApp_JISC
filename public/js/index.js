@@ -2141,7 +2141,7 @@ function enterAssistantEditMode(targetAssistant) {
 
   wrapper.appendChild(closeBtn);
   wrapper.appendChild(toolbar);
-  // Criteria rail on the right side of the popup
+  // Criteria rail on the right side of the toolbar
   (function addCriteriaRail() {
     const rail = document.createElement('aside');
     rail.className = 'assistant-edit-criteria-rail';
@@ -2159,7 +2159,8 @@ function enterAssistantEditMode(targetAssistant) {
       b.setAttribute('data-tip', it.tip);
       rail.appendChild(b);
     });
-    wrapper.appendChild(rail);
+    // Append to toolbar at the end
+    toolbar.appendChild(rail);
   })();
   // Feedback popup container inside edit mode
   const fbPopup = document.createElement('div');

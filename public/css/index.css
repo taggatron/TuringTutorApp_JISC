@@ -530,13 +530,10 @@ body > div.container > div.chat-container {
 /* Right-side criteria rail within Turing edit popup */
 
 .assistant-edit-criteria-rail {
-    position: fixed; /* Keep fixed to viewport */
-    right: max(20px, calc(50% - 450px - 140px)); /* Align relative to max-width document page (900/2 + chip width) */
-    top: 120px;
     display: flex;
-    flex-direction: column;
-    gap: 12px;
-    z-index: 3060;
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
 }
 
 .criteria-clipboard-trigger {
@@ -602,21 +599,24 @@ body > div.container > div.chat-container {
 .criteria-chip::after {
     content: attr(data-tip);
     position: absolute;
-    right: calc(100% + 10px);
-    top: 50%;
-    transform: translateY(-50%);
-    background: #111827; /* slate-900 */
-    color: #fff;
-    padding: 10px 12px;
-    border-radius: 10px;
-    box-shadow: 0 10px 24px rgba(0,0,0,0.22);
-    width: 280px;
-    max-width: 42vw;
-    opacity: 0;
+    top: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: #f9fafb;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: normal;
+    width: max-content;
+    max-width: 240px;
     pointer-events: none;
-    transition: opacity 140ms ease;
-    text-align: left;
-    line-height: 1.25;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    text-align: center;
 }
 .criteria-chip:hover::after { opacity: 1; }
 
