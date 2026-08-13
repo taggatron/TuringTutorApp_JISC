@@ -550,8 +550,7 @@ body > div.container > div.chat-container {
 .criteria-clipboard-trigger:hover { background:#e5e7eb; }
 
 .criteria-chip {
-    min-width: 70px;
-    padding: 12px 16px;
+    padding: 6px 10px;
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.4);
     background: rgba(255,255,255,0.7);
@@ -622,7 +621,7 @@ body > div.container > div.chat-container {
 
 @media (max-width: 960px) {
     .assistant-edit-criteria-rail { right: 8px; }
-    .criteria-chip { min-width: 56px; padding: 8px 10px; }
+    .criteria-chip { padding: 8px 10px; }
     .criteria-chip::after { width: 220px; }
 }
 
