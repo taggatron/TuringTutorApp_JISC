@@ -381,15 +381,16 @@ body {
     padding: 10px 12px;
     margin-bottom: 6px;
     text-align: left;
-    background-color: transparent;
-    border: 1px solid transparent;
+    background-color: #e6e6fa;
+    border: 1px solid var(--border-light);
     border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 0.9em;
     font-weight: 500;
     position: relative;
     transition: all 0.2s ease;
-    color: var(--color-text-main);
+    color: #4b0082;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
 
 
@@ -400,13 +401,17 @@ body {
 
 
 .session-button:hover {
-    background-color: rgba(0, 0, 0, 0.04);
+    background-color: #d8bfd8;
     border-color: var(--border-light);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    transform: translateY(-1px);
 }
 
 
 .session-button:active {
-    background-color: #ccc;
+    transform: translateY(0px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+    background-color: #d0b0d0;
 }
 
 .session-button:hover .delete-icon,
@@ -423,7 +428,26 @@ body {
 }
 
 /* Make sure icon sits left and text starts immediately after for Turing sessions */
-.turing-session { justify-content: flex-start; }
+.turing-session { 
+    justify-content: flex-start; 
+    background-color: #eaffea;
+    border: 1px solid transparent;
+    border-left: 4px solid #22c55e;
+    color: var(--color-text-main);
+    box-shadow: none;
+}
+.turing-session:hover {
+    background-color: #eaffea;
+    border-color: transparent;
+    border-left-color: #22c55e;
+    box-shadow: none;
+    transform: none;
+}
+.turing-session:active {
+    background-color: #eaffea;
+    box-shadow: none;
+    transform: none;
+}
 
 .delete-icon {
     margin-left: 10px;
@@ -1002,17 +1026,41 @@ body {
 
 .session-group h4 {
     margin: 0;
-    padding: 10px;
-    background-color: #e0e0e0;
-    border-radius: 5px;
+    padding: 10px 12px;
+    background-color: #66c2ff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+}
+
+.session-group h4::before {
+    content: "📁";
+    margin-right: 8px;
+    font-size: 1.1em;
+    display: inline-block;
+}
+
+.session-group h4:hover {
+    background-color: #3399ff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    transform: translateY(-1px);
 }
 
 .session-list {
     padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    background-color: #f9f9f9;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    background-color: #fcfcfc;
     min-height: 50px; /* Ensure there's space to drop */
+    margin-top: 6px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
 
 .example-prompts {
@@ -1622,12 +1670,15 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: transparent;
-    border: none;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(232, 240, 250, 0.22));
+    border: 1px solid rgba(255, 255, 255, 0.72);
     cursor: pointer;
-    padding: 0;
-    border-radius: 10px;
-    box-shadow: none;
+    padding: 4px;
+    border-radius: 50%;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 6px 18px rgba(16, 24, 40, 0.08);
+    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, border-color 180ms ease;
+    backdrop-filter: blur(10px) saturate(145%);
+    -webkit-backdrop-filter: blur(10px) saturate(145%);
     line-height: 0;
     appearance: none;
     -webkit-appearance: none;
@@ -1635,12 +1686,20 @@ body {
     z-index: 10;
 }
 
-.chat-input .tools-toggle:hover,
-.chat-input .tools-toggle:active,
+.chat-input .tools-toggle:hover {
+    transform: translateY(-2px) scale(1.02);
+    border-color: rgba(255, 255, 255, 0.9);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 10px 26px rgba(16, 24, 40, 0.13);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(224, 236, 249, 0.3));
+}
+
+.chat-input .tools-toggle:active {
+    transform: translateY(0px);
+    box-shadow: 0 4px 10px rgba(16, 24, 40, 0.08);
+}
+
 .chat-input .tools-toggle:focus {
-    background: transparent;
-    box-shadow: none;
-    transform: none;
+    /* Keep focus styling if needed, default outline is handled by focus-visible below */
 }
 
 .chat-input .tools-toggle:focus:not(:focus-visible) {
@@ -1659,8 +1718,8 @@ body {
 
 .tools-toggle-icon {
     display: block;
-    width: 34px;
-    height: 30px;
+    width: 28px;
+    height: 25px;
     overflow: visible;
     pointer-events: none;
     shape-rendering: geometricPrecision;
@@ -1689,8 +1748,8 @@ body {
     }
 
     .tools-toggle-icon {
-        width: 31px;
-        height: 27px;
+        width: 26px;
+        height: 23px;
     }
 }
 
