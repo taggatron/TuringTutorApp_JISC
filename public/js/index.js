@@ -524,6 +524,25 @@ function decodeHtmlEntities(str) {
 function updateScale(levels) {
   if (!Array.isArray(levels)) levels = [levels];
   levels.forEach(level => activeLevels.add(level));
+  
+  let maxLevel = 1;
+  if (activeLevels.size > 0) {
+    maxLevel = Math.max(...Array.from(activeLevels));
+  }
+  
+  const scaleNames = {
+    5: "Full AI",
+    4: "AI + Human Evaluation",
+    3: "AI Editing",
+    2: "Ideas & Structure",
+    1: "No AI"
+  };
+  
+  const summaryTitle = document.getElementById('summary-assessment-title');
+  if (summaryTitle) {
+    summaryTitle.textContent = scaleNames[maxLevel] || "No AI";
+  }
+
   document.querySelectorAll('.scale-item').forEach(item => {
     const level = parseInt(item.id.replace('scale-', ''), 10);
     if (activeLevels.has(level)) {
@@ -533,6 +552,12 @@ function updateScale(levels) {
       item.classList.add('inactive');
       item.classList.remove('active');
     }
+    
+    if (level === maxLevel) {
+      item.classList.add('current-assessment');
+    } else {
+      item.classList.remove('current-assessment');
+    }
   });
 }
 
@@ -541,7 +566,12 @@ function resetScale() {
   document.querySelectorAll('.scale-item').forEach(item => {
     item.classList.add('inactive');
     item.classList.remove('active');
+    item.classList.remove('current-assessment');
   });
+  const summaryTitle = document.getElementById('summary-assessment-title');
+  if (summaryTitle) {
+    summaryTitle.textContent = "No AI";
+  }
 }
 
 function handleKeyPress(event) {

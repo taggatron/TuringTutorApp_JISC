@@ -2321,7 +2321,7 @@ body>.container {
 }
 
 /* Pointer arrow above the active item */
-.scale-item.active::after {
+.scale-item.current-assessment::after {
     content: 'Current assessment';
     position: absolute;
     top: -39px;
@@ -2340,7 +2340,7 @@ body>.container {
 }
 
 /* Arrow for pill */
-.scale-item.active::before {
+.scale-item.current-assessment::before {
     content: '';
     position: absolute;
     top: -13px;
@@ -2354,7 +2354,7 @@ body>.container {
 }
 
 /* Colorize pointer text based on active state */
-.scale-item.active::after {
+.scale-item.current-assessment::after {
     color: var(--sdc-purple);
 }
 
@@ -2470,7 +2470,7 @@ body>.container {
         margin-right: 10px;
     }
 
-    .scale-item.active::after {
+    .scale-item.current-assessment::after {
         content: '(Current)';
         position: static;
         margin-left: 7px;
