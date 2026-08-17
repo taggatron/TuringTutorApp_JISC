@@ -1401,7 +1401,7 @@ body>div.container>div.chat-container>div.meta-container {
 }
 
 .turing-session {
-    background: #eaffea;
+    background: var(--turing-mint-50);
     border-left: 3px solid #22c55e;
     display: flex;
     align-items: center;
@@ -1543,10 +1543,10 @@ img.turing-mode-icon {
 .message.assistant.turing-message {
     position: relative;
     /* normal flow; not sticky */
-    background: #eaffea;
+    background: var(--turing-mint-50);
     /* light green to match assistant messages */
     /* same light green as .turing-mode-button */
-    border-left: 3px solid #86efac;
+    border-left: 3px solid var(--turing-mint-border);
     /* light green border from sidebar button */
 }
 
@@ -1571,7 +1571,7 @@ img.turing-mode-icon {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #eaffea;
+    background: var(--turing-mint-50);
     display: inline-block;
 }
 
