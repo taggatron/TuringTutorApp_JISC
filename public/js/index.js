@@ -581,7 +581,7 @@ function handleKeyPress(event) {
   }
 }
 
-function sendMessage() {
+async function sendMessage() {
   const input = document.getElementById('message-input');
   const message = input ? input.value : '';
   if (message.trim()) {
@@ -592,6 +592,25 @@ function sendMessage() {
       input.value = '';
       input.style.height = 'auto';
     }
+
+    if (!session_id) {
+      try {
+        const response = await fetch('/start-session', { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+          session_id = data.session_id;
+          isNewSession = true;
+          highlightCurrentSession(session_id);
+        } else {
+          alert('Failed to start a new session.');
+          return;
+        }
+      } catch (error) {
+        console.error('Error starting a new session:', error);
+        return;
+      }
+    }
+
     try {
       ws.send(JSON.stringify({ content: message, session_id }));
 
@@ -1039,21 +1058,17 @@ async function deleteSession(sessionId, parentElementId) {
 
 async function startNewChat() {
   hideAndStoreFeedback(session_id);
+  session_id = null;
+  isNewSession = true;
   try {
-    const response = await fetch('/start-session', { method: 'POST' });
-    const data = await response.json();
-    if (data.success) {
-      session_id = data.session_id;
-      isNewSession = true;
-      // Ensure chatMessages element exists (fall back to querying DOM)
-      const cm = chatMessages || document.getElementById('chat-messages');
-      if (cm) showWelcomeState();
-      resetScale();
-      await loadSessions();
-      highlightCurrentSession(session_id);
-    } else {
-      alert('Failed to start a new session.');
+    // Ensure chatMessages element exists (fall back to querying DOM)
+    const cm = chatMessages || document.getElementById('chat-messages');
+    if (cm) {
+      cm.innerHTML = '';
+      showWelcomeState();
     }
+    resetScale();
+    document.querySelectorAll('.session-button').forEach(btn => btn.classList.remove('active'));
   } catch (error) { console.error('Error starting a new session:', error); }
 }
 
