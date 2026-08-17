@@ -2781,3 +2781,28 @@ function updateTuringBarCounts(assistantEl) {
           }
       });
   }
+
+  // AI Guidelines Modal Logic
+  const aiGuidelinesLink = document.getElementById('ai-guidelines-link');
+  const aiGuidelinesModal = document.getElementById('ai-guidelines-modal');
+  const closeGuidelinesModal = document.getElementById('close-guidelines-modal');
+
+  if (aiGuidelinesLink && aiGuidelinesModal) {
+      aiGuidelinesLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          aiGuidelinesModal.classList.add('visible');
+      });
+
+      if (closeGuidelinesModal) {
+          closeGuidelinesModal.addEventListener('click', () => {
+              aiGuidelinesModal.classList.remove('visible');
+          });
+      }
+
+      // Close when clicking outside the panel
+      aiGuidelinesModal.addEventListener('click', (e) => {
+          if (e.target === aiGuidelinesModal) {
+              aiGuidelinesModal.classList.remove('visible');
+          }
+      });
+  }
