@@ -406,9 +406,11 @@ body>div.container>div.chat-container {
     width: 100vw !important;
     height: var(--assistant-edit-height, calc(100vh - 102px)) !important;
     z-index: 3000;
-    background: #f4f5f7;
-    /* Soft gray document backdrop */
-    box-shadow: 0 0 34px rgba(0, 0, 0, 0.2);
+    background-color: var(--turing-mint-50);
+    background-image:
+        radial-gradient(circle at 15% 8%, rgba(75, 16, 196, 0.07), transparent 31%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 42%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
@@ -454,9 +456,9 @@ body>div.container>div.chat-container {
     right: 10px;
     font-size: 1.36rem;
     /* scaled down to ~80% */
-    color: #888;
-    background: #fff;
-    border: none;
+    color: var(--sdc-purple);
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--lavender-200);
     border-radius: 50%;
     width: 27px;
     /* 80% of 34px */
@@ -467,12 +469,13 @@ body>div.container>div.chat-container {
     justify-content: center;
     cursor: pointer;
     z-index: 3200;
-    box-shadow: 0 2px 7px rgba(0, 0, 0, 0.08);
-    transition: background 0.12s ease, transform 0.12s ease;
+    box-shadow: 0 3px 10px rgba(75, 16, 196, 0.12);
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
 }
 
 .assistant-edit-close:hover {
-    background: #f2f2f2;
+    background: var(--lavender-100);
+    border-color: var(--sdc-purple-hover);
     transform: scale(1.05);
 }
 
@@ -494,12 +497,17 @@ body>div.container>div.chat-container {
     font-size: 0.89rem;
     line-height: 1.6;
     color: #1e293b;
-    box-shadow: 0 8px 34px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 38px rgba(57, 16, 146, 0.1);
     /* Soft elevated page shadow */
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    transition: box-shadow 0.2s;
+    border: 1px solid rgba(134, 239, 172, 0.72);
+    transition: border-color 0.2s, box-shadow 0.2s;
     outline: none !important;
     /* Remove the blue outline */
+}
+
+.assistant-editable-content:focus {
+    border-color: rgba(75, 16, 196, 0.35);
+    box-shadow: 0 14px 42px rgba(57, 16, 146, 0.13), 0 0 0 3px rgba(75, 16, 196, 0.06);
 }
 
 
@@ -516,14 +524,14 @@ body>div.container>div.chat-container {
     display: flex;
     gap: 7px;
     padding: 8px 14px;
-    background: rgba(255, 255, 255, 0.85);
+    background: rgba(251, 249, 255, 0.92);
     /* Glassmorphism */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(217, 201, 255, 0.82);
     border-radius: 8499px;
     /* Pill shape */
-    box-shadow: 0 3px 17px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 8px 24px rgba(57, 16, 146, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
     box-sizing: border-box;
     z-index: 3050;
     opacity: 0;
@@ -557,7 +565,7 @@ body>div.container>div.chat-container {
 
 .assistant-edit-toolbar button {
     background: #fff;
-    border: 1px solid #cfd6dd;
+    border: 1px solid var(--lavender-200);
     border-radius: 5px;
     padding: 5px 8px;
     font-size: 0.66rem;
@@ -566,23 +574,25 @@ body>div.container>div.chat-container {
     display: flex;
     align-items: center;
     gap: 3px;
-    color: #2d3e50;
+    color: var(--color-text-main);
     line-height: 1;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .assistant-edit-toolbar button:hover {
-    background: #f0f4f7;
+    background: var(--lavender-100);
+    border-color: var(--sdc-purple-hover);
+    color: var(--sdc-purple);
 }
 
 .assistant-edit-toolbar button:active {
-    background: #e2e8ec;
+    background: var(--lavender-200);
 }
 
 .assistant-edit-toolbar button.active {
-    background: #2d8cff;
+    background: var(--sdc-purple);
     color: #fff;
-    border-color: #2d8cff;
+    border-color: var(--sdc-purple);
 }
 
 .assistant-edit-toolbar button[disabled] {
@@ -590,18 +600,30 @@ body>div.container>div.chat-container {
     cursor: default;
 }
 
-/* Decipher button variant */
+/* Primary and Turing-mode toolbar actions */
+.assistant-edit-toolbar .save-btn {
+    background: var(--sdc-purple);
+    border-color: var(--sdc-purple);
+    color: #ffffff;
+    box-shadow: 0 2px 7px rgba(75, 16, 196, 0.2);
+}
+
+.assistant-edit-toolbar .save-btn:hover {
+    background: var(--sdc-purple-hover);
+    border-color: var(--sdc-purple-hover);
+    color: #ffffff;
+}
+
 .assistant-edit-toolbar .decipher-btn {
-    background: #fff7ed;
-    /* warm light */
-    border-color: #fdba74;
-    /* orange-300 */
-    color: #9a3412;
-    /* orange-800 */
+    background: var(--turing-mint-50);
+    border-color: var(--turing-mint-border);
+    color: var(--turing-green);
 }
 
 .assistant-edit-toolbar .decipher-btn:hover {
-    background: #ffedd5;
+    background: var(--turing-mint-100);
+    border-color: #22c55e;
+    color: #065f46;
 }
 
 .assistant-edit-toolbar .spacer {
@@ -618,16 +640,15 @@ body>div.container>div.chat-container {
     font-weight: 600;
     opacity: 1;
     /* ensure readability even when disabled */
-    cursor: default;
+    cursor: pointer;
     background: #fff;
-    border-color: #cfd6dd;
-    color: #2d3e50;
+    border-color: var(--lavender-200);
+    color: var(--sdc-purple-dark);
 }
 
-/* Keep unit title bright blue on hover, matching app's blue */
 .assistant-edit-toolbar .unit-title-btn:hover {
-    background: #2d8cff;
-    border-color: #2d8cff;
+    background: var(--sdc-purple);
+    border-color: var(--sdc-purple);
     color: #fff;
 }
 
@@ -724,9 +745,9 @@ body>div.container>div.chat-container {
 
 .criteria-clipboard-trigger {
     align-self: center;
-    background: #f3f4f6;
-    border: 1px solid #d1d5db;
-    color: #111827;
+    background: var(--lavender-100);
+    border: 1px solid var(--lavender-200);
+    color: var(--sdc-purple);
     border-radius: 849px;
     width: 24px;
     height: 24px;
@@ -737,19 +758,19 @@ body>div.container>div.chat-container {
 }
 
 .criteria-clipboard-trigger:hover {
-    background: #e5e7eb;
+    background: var(--lavender-200);
 }
 
 .criteria-chip {
     padding: 5px 8px;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--lavender-200);
+    background: rgba(255, 255, 255, 0.78);
     backdrop-filter: blur(7px);
-    color: #1e293b;
+    color: var(--sdc-purple-dark);
     font-weight: 700;
     letter-spacing: 0.5px;
-    box-shadow: 0 3px 13px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 3px 13px rgba(75, 16, 196, 0.06);
     cursor: default;
     position: relative;
     transition: all 0.2s ease;
@@ -865,11 +886,11 @@ body>div.container>div.chat-container {
 
 .assistant-edit-toolbar .style-menu-button {
     background: #fff;
-    border: 1px solid #cfd6dd;
+    border: 1px solid var(--lavender-200);
     border-radius: 5px;
     padding: 5px 8px;
     font-size: 0.66rem;
-    color: #2d3e50;
+    color: var(--color-text-main);
     cursor: pointer;
 }
 
@@ -878,9 +899,9 @@ body>div.container>div.chat-container {
     top: 110%;
     left: 0;
     background: #fff;
-    border: 1px solid #d9dfe5;
+    border: 1px solid var(--lavender-200);
     border-radius: 7px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 10px 24px rgba(57, 16, 146, 0.14);
     padding: 7px;
     display: none;
     min-width: 153px;
@@ -892,12 +913,12 @@ body>div.container>div.chat-container {
 }
 
 .assistant-edit-toolbar .style-menu button {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: var(--lavender-50);
+    border: 1px solid var(--lavender-200);
     border-radius: 5px;
     padding: 5px 7px;
     font-size: 0.66rem;
-    color: #111827;
+    color: var(--color-text-main);
     margin: 3px 0;
     cursor: pointer;
     width: 100%;
@@ -921,7 +942,7 @@ body>div.container>div.chat-container {
     width: 19px;
     height: 19px;
     border-radius: 849px;
-    border: 1px solid #cfd6dd;
+    border: 1px solid var(--lavender-200);
     padding: 0;
     margin: 0;
     display: inline-block;
@@ -980,7 +1001,7 @@ body>div.container>div.chat-container {
     padding: 2px;
     box-sizing: border-box;
     flex: 0 0 auto;
-    background: linear-gradient(120deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+    background: linear-gradient(120deg, var(--sdc-purple), #8b5cf6, #22c55e, var(--sdc-purple));
     background-size: 300% 100%;
     border-radius: 14px;
     box-shadow: 0 14px 32px rgba(76, 29, 149, 0.18);

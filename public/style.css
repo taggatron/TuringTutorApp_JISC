@@ -29,6 +29,12 @@
     --lavender-50: #fbf9ff;
     --lavender-100: #f6f1ff;
     --lavender-200: #ebe3ff;
+
+    /* Turing mode surfaces */
+    --turing-mint-50: #eaffea;
+    --turing-mint-100: #dff8e7;
+    --turing-mint-border: #86efac;
+    --turing-green: #047857;
     
     --border-soft: #e5e2ee;
     --background: #ffffff;
@@ -452,21 +458,21 @@ body {
 /* Make sure icon sits left and text starts immediately after for Turing sessions */
 .turing-session { 
     justify-content: flex-start; 
-    background-color: #eaffea;
+    background-color: var(--turing-mint-50);
     border: 1px solid transparent;
     border-left: 3px solid #22c55e;
     color: var(--color-text-main);
     box-shadow: none;
 }
 .turing-session:hover {
-    background-color: #eaffea;
+    background-color: var(--turing-mint-50);
     border-color: transparent;
     border-left-color: #22c55e;
     box-shadow: none;
     transform: none;
 }
 .turing-session:active {
-    background-color: #eaffea;
+    background-color: var(--turing-mint-50);
     box-shadow: none;
     transform: none;
 }

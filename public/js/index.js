@@ -1977,6 +1977,7 @@ function enterAssistantEditMode(targetAssistant) {
   // Simple toolbar: Save / Close
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
+  saveBtn.className = 'save-btn';
   saveBtn.textContent = '💾 Save';
   saveBtn.addEventListener('click', () => saveEdit());
   // Decipher button: assess content up to References using server feedback
