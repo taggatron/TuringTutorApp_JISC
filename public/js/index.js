@@ -631,7 +631,15 @@ function sendMessage() {
     const previousMapping = feedbackMapping[feedbackMapping.length - 1];
     const hasFeedback = previousMapping && previousMapping.feedbackContainer && previousMapping.feedbackContainer.style.display !== 'none' && previousMapping.feedbackContainer.querySelector('.feedback-message') && previousMapping.feedbackContainer.querySelector('.feedback-message').textContent.trim() !== '';
     if (hasFeedback) setDynamicTopMargin(userMessage, previousMapping.feedbackContainer);
-    userMessage.textContent = message;
+    const textSpan = document.createElement('span');
+    textSpan.className = 'message-text';
+    textSpan.textContent = message;
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'message-meta';
+    const now = new Date();
+    metaSpan.innerHTML = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 11 13 8 10"></polyline><polyline points="22 6 15 13 12 10"></polyline></svg>`;
+    userMessage.appendChild(textSpan);
+    userMessage.appendChild(metaSpan);
     const oldPlaceholder = chatMessages.querySelector('.user.placeholder-message');
     if (oldPlaceholder) oldPlaceholder.remove();
     chatMessages.appendChild(userMessage);
@@ -913,7 +921,16 @@ async function loadSessionHistory(sessionId) {
         if (msg.role === 'user') {
           const userMessageDiv = document.createElement('div');
           userMessageDiv.className = 'message user';
-          userMessageDiv.textContent = msg.content; userMessageDiv.dataset.messageId = msg.message_id;
+          const textSpan = document.createElement('span');
+          textSpan.className = 'message-text';
+          textSpan.textContent = msg.content;
+          const metaSpan = document.createElement('span');
+          metaSpan.className = 'message-meta';
+          const now = new Date();
+          metaSpan.innerHTML = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 11 13 8 10"></polyline><polyline points="22 6 15 13 12 10"></polyline></svg>`;
+          userMessageDiv.dataset.messageId = msg.message_id;
+          userMessageDiv.appendChild(textSpan);
+          userMessageDiv.appendChild(metaSpan);
           const fb = feedbackByMessageId.get(String(msg.message_id));
           let marginApplied = false;
           if (fb && typeof fb.feedbackMargin === 'number' && !isNaN(fb.feedbackMargin)) {
