@@ -149,13 +149,15 @@
                     <div class="ai-assessment-wrapper">
                     <div class="ai-assessment-header">
                         <div class="ai-assessment-header-left">
-                            <h3 class="assessment-title">AI ASSESSMENT SCALE <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-bottom: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></h3>
+                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 3px;">
+                                <h3 class="assessment-title" style="margin: 0;">AI ASSESSMENT SCALE <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-bottom: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></h3>
+                                <button id="assessment-detail-toggle" class="assessment-toggle-btn" aria-label="Toggle details">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                                </button>
+                            </div>
                             <p>Based on your prompts in this conversation</p>
                         </div>
                         <div class="ai-assessment-header-right">
-                            <button id="assessment-detail-toggle" class="assessment-toggle-btn" aria-label="Toggle details">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                            </button>
                             <span class="ai-assessment-updated">Updated from your latest prompt <span class="green-dot"></span></span>
                         </div>
                     </div>

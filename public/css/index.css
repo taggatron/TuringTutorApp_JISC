@@ -1911,7 +1911,6 @@ body>.container {
 
 .sidebar-header {
     background-color: var(--lavender-50);
-    border-bottom: 1px solid var(--border-soft);
 }
 
 .groups-header-row {
