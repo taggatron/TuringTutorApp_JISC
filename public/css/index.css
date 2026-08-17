@@ -2120,7 +2120,7 @@ body>.container {
 
 /* CHAT BUBBLES */
 .chat-messages {
-    max-width: 765px;
+    max-width: none;
     margin: 0 auto;
     width: 100%;
 }
@@ -2730,8 +2730,10 @@ body>.container {
     background: #ffffff;
     border: 1px solid var(--border-soft);
     box-shadow: 0 3px 13px rgba(0, 0, 0, 0.02);
+    width: 100%;
 }
 
 .message.user {
     background: var(--sdc-purple);
+    margin-right: 12px;
 }
