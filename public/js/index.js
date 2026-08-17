@@ -636,7 +636,7 @@ async function sendMessage() {
             const span = sessionBtn.querySelector('.session-name, .turing-name');
             if (span) span.textContent = newTitle;
           } else {
-            loadSessions();
+            loadSessions().then(() => highlightCurrentSession(session_id));
           }
         }
       }).catch(e => console.error('Error generating session title:', e));
