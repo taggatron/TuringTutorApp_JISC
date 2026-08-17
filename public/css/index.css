@@ -2180,8 +2180,9 @@ body>.container {
 
 .ai-assessment-header-left {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
 }
 
 .assessment-title {
@@ -2557,7 +2558,8 @@ body>.container {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 27px 14px 27px;
+    padding: 20px 0 14px 0;
+    margin: 0 27px;
     background: transparent;
     border-bottom: 1px solid var(--border-soft);
     height: 76px;
