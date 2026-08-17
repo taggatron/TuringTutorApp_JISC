@@ -40,9 +40,9 @@ function showWelcomeState() {
                     <span class="starter-text">Explain a topic simply<br><small>Get a clear breakdown with key points</small></span>
                 </button>
                 <button class="chat-starter-btn"
-                    data-prompt="Help me plan a lesson on this subject. Include learning objectives, activities and assessment ideas.">
+                    data-prompt="Help me plan an essay on this subject. Include structure, arguments and evidence.">
                     <span class="starter-icon">📝</span>
-                    <span class="starter-text">Plan a lesson<br><small>Get learning objectives & activities</small></span>
+                    <span class="starter-text">Plan an essay<br><small>Structure your arguments & key points</small></span>
                 </button>
                 <button class="chat-starter-btn"
                     data-prompt="Give me feedback on this work. Highlight strengths and areas for improvement.">
