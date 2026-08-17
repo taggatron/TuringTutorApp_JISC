@@ -2206,16 +2206,30 @@ body>.container {
     gap: 14px;
 }
 
-.assessment-dropdown {
-    padding: 5px 10px;
+.assessment-toggle-btn {
+    padding: 5px;
     border: 1px solid var(--border-soft);
     border-radius: 5px;
     background: #ffffff;
-    font-size: 0.72rem;
     color: var(--sdc-purple);
-    font-weight: 500;
-    outline: none;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.assessment-toggle-btn:hover {
+    background: var(--lavender-100);
+    border-color: var(--sdc-purple-hover);
+}
+
+.assessment-toggle-btn svg {
+    transition: transform 0.2s ease;
+}
+
+.assessment-toggle-btn.collapsed svg {
+    transform: rotate(180deg);
 }
 
 .ai-assessment-updated {

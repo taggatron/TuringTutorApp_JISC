@@ -2760,24 +2760,24 @@ function updateTuringBarCounts(assistantEl) {
   }
 
   // AI Assessment detail toggle
-  const assessmentSelect = document.getElementById('assessment-detail-select');
+  const assessmentToggle = document.getElementById('assessment-detail-toggle');
   const detailedView = document.getElementById('assessment-detailed-view');
   const summaryBar = document.querySelector('.ai-assessment-summary-bar');
-  if (assessmentSelect && detailedView) {
-      // Set initial state based on default select value
-      if (assessmentSelect.value === 'detailed') {
-          if (summaryBar) summaryBar.style.display = 'none';
-      } else {
-          detailedView.style.display = 'none';
-      }
+  
+  if (assessmentToggle && detailedView) {
+      let isDetailed = true;
+      if (summaryBar) summaryBar.style.display = 'none';
 
-      assessmentSelect.addEventListener('change', (e) => {
-          if (e.target.value === 'summary') {
+      assessmentToggle.addEventListener('click', (e) => {
+          isDetailed = !isDetailed;
+          if (!isDetailed) {
               detailedView.style.display = 'none';
               if (summaryBar) summaryBar.style.display = 'flex';
+              assessmentToggle.classList.add('collapsed');
           } else {
               detailedView.style.display = 'block';
               if (summaryBar) summaryBar.style.display = 'none';
+              assessmentToggle.classList.remove('collapsed');
           }
       });
   }
