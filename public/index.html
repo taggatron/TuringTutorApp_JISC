@@ -87,7 +87,7 @@
                     <div class="ai-resp-text">
                         <strong>Use AI responsibly.</strong>
                         <p>Turing Tutor promotes learning, originality and academic integrity.</p>
-                        <a href="#">Learn more &rarr;</a>
+                        <a href="#" id="ai-guidelines-link">Learn more &rarr;</a>
                     </div>
                 </div>
             </div>
@@ -517,6 +517,32 @@
     </footer>
 
     <!-- Load main client script -->
+    <div id="ai-guidelines-modal" class="decipher-wait-overlay" role="dialog" aria-modal="true">
+        <div class="decipher-wait-panel" style="width: min(800px, calc(100vw - 40px));">
+            <button id="close-guidelines-modal" class="close-overlay-btn" aria-label="Close" style="position: absolute; top: 15px; right: 15px; border: none; background: transparent; font-size: 24px; cursor: pointer; color: var(--color-text-main); z-index: 10;">&times;</button>
+            <div class="decipher-wait-visual" style="border: none; background: transparent; box-shadow: none;">
+                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="var(--sdc-purple)" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            <div class="decipher-wait-copy" style="max-width: none;">
+                <div class="decipher-wait-eyebrow">
+                    <span class="decipher-wait-status-dot" aria-hidden="true" style="animation: none; background: #10b981;"></span>
+                    <span>Academic Integrity</span>
+                </div>
+                <h2 class="decipher-wait-caption">Using AI Responsibly</h2>
+                <div class="decipher-wait-detail" style="max-width: none; color: var(--color-text-main); margin-bottom: 0;">
+                    <p>Turing Tutor is designed to support your learning, not do the work for you. Always ensure your submissions represent your own understanding.</p>
+                    <h3 style="margin-top: 15px; font-size: 0.95rem; color: #582c83;">JCQ Guidelines Reminder</h3>
+                    <ul style="padding-left: 20px; margin-top: 10px;">
+                        <li><strong>Do not copy and paste</strong> AI-generated text directly into your assessments.</li>
+                        <li><strong>Use AI for brainstorming,</strong> structuring ideas, or improving grammar—not for creating final content.</li>
+                        <li><strong>Always acknowledge</strong> when and how you have used AI in your work, in accordance with your center's policy.</li>
+                        <li><strong>Verify information</strong> provided by AI; you are ultimately responsible for the accuracy of your submission.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script defer src="/js/index.js"></script>
 </body>
 
