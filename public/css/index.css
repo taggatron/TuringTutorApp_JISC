@@ -2239,12 +2239,38 @@ body>.container {
     gap: 5px;
 }
 
-.green-dot {
-    width: 5px;
-    height: 5px;
+@keyframes assessmentPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+@keyframes assessmentPulseScale {
+    0% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+.ai-assessment-pulse-dot {
+    width: 6px;
+    height: 6px;
     background: #10b981;
     border-radius: 50%;
     display: inline-block;
+    margin: 2px 2px 2px 4px;
+    animation: assessmentPulse 2s infinite;
 }
 
 .ai-assessment-detailed-view {
@@ -2349,9 +2375,9 @@ body>.container {
 }
 
 .scale-item.active .scale-point {
-    border-color: var(--sdc-purple);
-    background: var(--sdc-purple);
-    box-shadow: 0 0 0 5px var(--lavender-100);
+    border-color: #10b981;
+    background: #10b981;
+    animation: assessmentPulseScale 2s infinite;
 }
 
 /* Pointer arrow above the active item */
