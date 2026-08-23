@@ -22,6 +22,23 @@ function hideWelcomeState() {
   if (welcome) welcome.remove();
 }
 
+function syncTuringMessageEmptyState(messageElement) {
+  if (!messageElement?.classList.contains('turing-message')) return;
+
+  const content = messageElement.querySelector('.message-content');
+  const footer = messageElement.querySelector('[data-section="turing-footer"], .turing-footer');
+  const meaningfulSelector = 'img, video, audio, table, pre, blockquote, ul li, ol li, hr';
+  const hasMeaningfulContent = (element) => Boolean(element && (
+    (element.textContent || '').replace(/\u200B/g, '').trim() ||
+    element.querySelector(meaningfulSelector)
+  ));
+
+  messageElement.classList.toggle(
+    'turing-message-empty',
+    !hasMeaningfulContent(content) && !hasMeaningfulContent(footer)
+  );
+}
+
 function showWelcomeState() {
   const cm = chatMessages || document.getElementById('chat-messages');
   if (!cm) return;
@@ -800,7 +817,7 @@ async function loadChatHistory(messages) {
 async function loadSessions() {
   document.querySelectorAll('.session-list').forEach(list => list.innerHTML = '');
   document.getElementById('new-chats').innerHTML = '';
-  const turingContainer = document.getElementById('turing-mode-container');
+  const turingContainer = document.getElementById('turing-mode-container') || document.getElementById('new-chats');
   if (turingContainer) turingContainer.innerHTML = '';
   try {
     const response = await fetch('/sessions');
@@ -1005,6 +1022,7 @@ async function loadSessionHistory(sessionId) {
               if (footerNode) assistantMessageDiv.appendChild(footerNode);
             }
           } catch (e) { /* ignore */ }
+          syncTuringMessageEmptyState(assistantMessageDiv);
           if (closeBtn && overlay && contentDiv) {
             closeBtn.addEventListener('click', function(e) {
               e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.classList.remove('content-dim');
@@ -2331,6 +2349,7 @@ function enterAssistantEditMode(targetAssistant) {
           payload.footer_removed = false;
         }
       } catch (e) { console.warn('Could not extract/upload editor metadata:', e); }
+      syncTuringMessageEmptyState(targetAssistant);
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
       try {
