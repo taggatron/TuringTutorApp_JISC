@@ -3158,3 +3158,400 @@ function updateTuringBarCounts(assistantEl) {
           }
       });
   }
+
+
+// ── Sidebar Examples Accordion ────────────────────────────────────────────────
+(function initExamplesAccordion() {
+  const accordionBtn = document.getElementById('examples-accordion-btn');
+  const accordionPanel = document.getElementById('examples-dropdown');
+  if (!accordionBtn || !accordionPanel) return;
+
+  // Toggle outer accordion
+  accordionBtn.addEventListener('click', () => {
+    const isOpen = accordionBtn.getAttribute('aria-expanded') === 'true';
+    accordionBtn.setAttribute('aria-expanded', String(!isOpen));
+    accordionPanel.classList.toggle('open', !isOpen);
+  });
+
+  // Toggle inner category dropdowns
+  accordionPanel.querySelectorAll('.nav-accordion-category-btn').forEach(catBtn => {
+    catBtn.addEventListener('click', () => {
+      const isOpen = catBtn.getAttribute('aria-expanded') === 'true';
+      catBtn.setAttribute('aria-expanded', String(!isOpen));
+      const list = catBtn.nextElementSibling;
+      if (list) list.classList.toggle('open', !isOpen);
+    });
+  });
+
+  // Prompt buttons: insert text into message input
+  accordionPanel.querySelectorAll('.nav-prompt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prompt = btn.getAttribute('data-prompt') || btn.textContent.trim();
+      if (typeof setMessageInput === 'function') {
+        setMessageInput(prompt);
+      } else {
+        const input = document.getElementById('message-input');
+        if (input) { input.value = prompt; input.focus(); }
+      }
+    });
+  });
+})();
+// ── End Sidebar Examples Accordion ───────────────────────────────────────────
+
+
+// ══ AI Analytics System ═══════════════════════════════════════════════════════
+(function() {
+  'use strict';
+
+  const STORE_KEY = 'tt_ai_analytics_v1';
+  const LEVEL_META = {
+    5: { label: 'Full AI',              color: '#e884fc', soft: '#f6d7fd' },
+    4: { label: 'AI + Human',           color: '#a93eed', soft: '#ead8fa' },
+    3: { label: 'AI Editing',           color: '#4ba8d8', soft: '#dceff8' },
+    2: { label: 'Ideas & Structure',    color: '#4b10c4', soft: '#e9deff' },
+    1: { label: 'No AI',               color: '#aeb1c4', soft: '#eef0f5' },
+  };
+
+  /* ── Storage helpers ──────────────────────────────────────────────────── */
+  function loadRecords() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); }
+    catch(_) { return []; }
+  }
+  function saveRecords(records) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(records)); } catch(_) {}
+  }
+  function recordAssessment(level) {
+    if (!level || level < 1 || level > 5) return;
+    const records = loadRecords();
+    records.push({ level: level, ts: Date.now() });
+    // Keep max 5000 records
+    if (records.length > 5000) records.splice(0, records.length - 5000);
+    saveRecords(records);
+  }
+
+  /* ── Hook into updateScale ────────────────────────────────────────────── */
+  // Wrap the global updateScale so every call also records analytics
+  const _origUpdateScale = window.updateScale || (typeof updateScale !== 'undefined' ? updateScale : null);
+  function patchUpdateScale() {
+    // Patch via a MutationObserver on the scale's DOM instead, to be safe
+    const scaleRoot = document.getElementById('ai-assessment-scale');
+    if (!scaleRoot) return;
+    const mo = new MutationObserver(() => {
+      const current = scaleRoot.querySelector('.scale-item.current-assessment');
+      if (current) {
+        const lvl = parseInt(current.id.replace('scale-', ''), 10);
+        if (!isNaN(lvl)) recordAssessment(lvl);
+      }
+    });
+    mo.observe(scaleRoot, { attributes: true, subtree: true, attributeFilter: ['class'] });
+  }
+  patchUpdateScale();
+
+  /* ── Period filter ────────────────────────────────────────────────────── */
+  let activePeriod = 7;
+  function filterByPeriod(records, period) {
+    if (period === 'all') return records;
+    const cutoff = Date.now() - period * 24 * 60 * 60 * 1000;
+    return records.filter(r => r.ts >= cutoff);
+  }
+
+  /* ── Stat cards ───────────────────────────────────────────────────────── */
+  function renderStatCards(records) {
+    const el = document.getElementById('analytics-stat-cards');
+    if (!el) return;
+    const total = records.length;
+    const avgLevel = total ? (records.reduce((s,r) => s + r.level, 0) / total).toFixed(1) : '—';
+    // Most common
+    const freq = {};
+    records.forEach(r => { freq[r.level] = (freq[r.level]||0) + 1; });
+    const topLevel = total ? Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0] : null;
+    const topName  = topLevel ? LEVEL_META[topLevel].label : '—';
+    // Days active
+    const days = new Set(records.map(r => new Date(r.ts).toDateString())).size;
+
+    el.innerHTML = `
+      <div class="analytics-stat-card">
+        <span class="stat-label">Total prompts</span>
+        <span class="stat-value">${total}</span>
+        <span class="stat-sub">assessed this period</span>
+      </div>
+      <div class="analytics-stat-card">
+        <span class="stat-label">Avg AI level</span>
+        <span class="stat-value">${avgLevel}</span>
+        <span class="stat-sub">out of 5</span>
+      </div>
+      <div class="analytics-stat-card">
+        <span class="stat-label">Most common</span>
+        <span class="stat-value" style="font-size:1rem;padding-top:4px">${topName}</span>
+        <span class="stat-sub">usage pattern</span>
+      </div>
+      <div class="analytics-stat-card">
+        <span class="stat-label">Days active</span>
+        <span class="stat-value">${days}</span>
+        <span class="stat-sub">with AI use</span>
+      </div>`;
+  }
+
+  /* ── Bar chart ────────────────────────────────────────────────────────── */
+  function renderBarChart(records, period) {
+    const canvas = document.getElementById('analytics-chart');
+    const empty  = document.getElementById('analytics-chart-empty');
+    if (!canvas || !empty) return;
+
+    if (records.length === 0) {
+      canvas.style.display = 'none';
+      empty.style.display = 'flex';
+      return;
+    }
+    canvas.style.display = 'block';
+    empty.style.display = 'none';
+
+    // Build daily buckets
+    const days = period === 'all'
+      ? Math.max(7, Math.ceil((Date.now() - Math.min(...records.map(r=>r.ts))) / 86400000) + 1)
+      : (period === 30 ? 30 : 7);
+
+    const buckets = [];
+    for (let d = days - 1; d >= 0; d--) {
+      const dayStart = new Date(); dayStart.setHours(0,0,0,0); dayStart.setDate(dayStart.getDate() - d);
+      const dayEnd   = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      const dayRecords = records.filter(r => r.ts >= dayStart.getTime() && r.ts < dayEnd.getTime());
+      // Count per level
+      const counts = {1:0,2:0,3:0,4:0,5:0};
+      dayRecords.forEach(r => counts[r.level]++);
+      buckets.push({ label: dayStart.toLocaleDateString('en-GB', {day:'numeric',month:'short'}), counts });
+    }
+
+    const DPR = window.devicePixelRatio || 1;
+    const W   = canvas.clientWidth  || 700;
+    const H   = 160;
+    canvas.width  = W * DPR;
+    canvas.height = H * DPR;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(DPR, DPR);
+
+    const PAD = { top: 16, right: 12, bottom: 28, left: 30 };
+    const chartW = W - PAD.left - PAD.right;
+    const chartH = H - PAD.top  - PAD.bottom;
+
+    const maxCount = Math.max(1, ...buckets.map(b => Object.values(b.counts).reduce((s,v)=>s+v,0)));
+
+    // Background
+    ctx.clearRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(90,60,180,0.07)';
+    ctx.lineWidth = 1;
+    const gridLines = 4;
+    for (let g = 0; g <= gridLines; g++) {
+      const y = PAD.top + chartH - (g / gridLines) * chartH;
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + chartW, y); ctx.stroke();
+      // Y label
+      ctx.fillStyle = 'rgba(90,80,130,0.5)';
+      ctx.font = `${10 * 1}px Inter, system-ui`;
+      ctx.textAlign = 'right';
+      ctx.fillText(Math.round((g / gridLines) * maxCount), PAD.left - 4, y + 3);
+    }
+
+    const barGap    = Math.max(2, Math.floor(chartW / buckets.length * 0.18));
+    const barWidth  = Math.max(4, Math.floor(chartW / buckets.length) - barGap);
+
+    buckets.forEach((bucket, i) => {
+      const x      = PAD.left + i * (barWidth + barGap) + barGap / 2;
+      let   yOffset = PAD.top + chartH;
+
+      // Stacked bars – level 1 (bottom) to 5 (top)
+      [1,2,3,4,5].forEach(level => {
+        const count = bucket.counts[level];
+        if (count === 0) return;
+        const barH = (count / maxCount) * chartH;
+        yOffset -= barH;
+        ctx.fillStyle = LEVEL_META[level].color;
+        const r = Math.min(4, barWidth / 2);
+        // Rounded top only
+        ctx.beginPath();
+        ctx.moveTo(x, yOffset + barH);
+        ctx.lineTo(x, yOffset + r);
+        ctx.quadraticCurveTo(x, yOffset, x + r, yOffset);
+        ctx.lineTo(x + barWidth - r, yOffset);
+        ctx.quadraticCurveTo(x + barWidth, yOffset, x + barWidth, yOffset + r);
+        ctx.lineTo(x + barWidth, yOffset + barH);
+        ctx.closePath();
+        ctx.fill();
+      });
+
+      // X labels – only show every N-th
+      const step = Math.max(1, Math.ceil(buckets.length / 8));
+      if (i % step === 0 || i === buckets.length - 1) {
+        ctx.fillStyle = 'rgba(90,80,130,0.55)';
+        ctx.font = `${9}px Inter, system-ui`;
+        ctx.textAlign = 'center';
+        ctx.fillText(bucket.label, x + barWidth / 2, PAD.top + chartH + 16);
+      }
+    });
+  }
+
+  /* ── Donut chart ──────────────────────────────────────────────────────── */
+  function renderDonut(records) {
+    const canvas = document.getElementById('analytics-donut');
+    const legend = document.getElementById('analytics-legend');
+    if (!canvas || !legend) return;
+
+    const freq = {1:0,2:0,3:0,4:0,5:0};
+    records.forEach(r => { freq[r.level]++ });
+    const total = records.length;
+
+    const DPR = window.devicePixelRatio || 1;
+    const SIZE = 140;
+    canvas.width  = SIZE * DPR;
+    canvas.height = SIZE * DPR;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(DPR, DPR);
+
+    const cx = SIZE / 2, cy = SIZE / 2, R = 52, r = 32;
+    let startAngle = -Math.PI / 2;
+
+    ctx.clearRect(0, 0, SIZE, SIZE);
+
+    if (total === 0) {
+      // Empty ring
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r, Math.PI * 2, 0, true);
+      ctx.fillStyle = '#eef0f5';
+      ctx.fill();
+    } else {
+      [5,4,3,2,1].forEach(level => {
+        const count = freq[level];
+        if (!count) return;
+        const angle = (count / total) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R, startAngle, startAngle + angle);
+        ctx.arc(cx, cy, r, startAngle + angle, startAngle, true);
+        ctx.closePath();
+        ctx.fillStyle = LEVEL_META[level].color;
+        ctx.fill();
+        startAngle += angle;
+      });
+    }
+
+    // Centre label
+    ctx.fillStyle = '#4b10c4';
+    ctx.font = `bold ${18}px Inter, system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(total, cx, cy - 7);
+    ctx.font = `${9}px Inter, system-ui`;
+    ctx.fillStyle = 'rgba(90,80,130,0.6)';
+    ctx.fillText('prompts', cx, cy + 8);
+
+    // Legend
+    legend.innerHTML = [5,4,3,2,1].map(level => {
+      const count = freq[level];
+      const pct   = total ? Math.round(count / total * 100) : 0;
+      return `<div class="analytics-legend-item">
+        <span class="analytics-legend-dot" style="background:${LEVEL_META[level].color}"></span>
+        <span class="analytics-legend-name">${LEVEL_META[level].label}</span>
+        <span class="analytics-legend-count">${count}</span>
+        <span class="analytics-legend-pct">${pct}%</span>
+      </div>`;
+    }).join('');
+  }
+
+  /* ── Full render ──────────────────────────────────────────────────────── */
+  function renderAnalytics() {
+    const all     = loadRecords();
+    const records = filterByPeriod(all, activePeriod);
+    renderStatCards(records);
+    renderBarChart(records, activePeriod);
+    renderDonut(records);
+  }
+
+  /* ── Open / Close ─────────────────────────────────────────────────────── */
+  function openAnalytics() {
+    const modal = document.getElementById('analytics-modal');
+    if (!modal) return;
+    modal.classList.add('visible');
+    // Chart needs real pixel dimensions – render after paint
+    requestAnimationFrame(() => { requestAnimationFrame(renderAnalytics); });
+  }
+  function closeAnalytics() {
+    const modal = document.getElementById('analytics-modal');
+    if (modal) modal.classList.remove('visible');
+  }
+
+  /* ── Wire up events ───────────────────────────────────────────────────── */
+  document.addEventListener('DOMContentLoaded', () => {}, { once: true });
+  // Using a small timeout to ensure the DOM is ready (script runs deferred)
+  setTimeout(() => {
+    // Open button in sidebar
+    const navBtn = document.getElementById('analytics-nav-btn');
+    if (navBtn) navBtn.addEventListener('click', openAnalytics);
+
+    // Close button
+    const closeBtn = document.getElementById('analytics-modal-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeAnalytics);
+
+    // Click-outside to close
+    const modal = document.getElementById('analytics-modal');
+    if (modal) {
+      modal.addEventListener('click', e => {
+        if (e.target === modal) closeAnalytics();
+      });
+    }
+
+    // Period tabs
+    document.querySelectorAll('.analytics-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.analytics-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const p = tab.dataset.period;
+        activePeriod = p === 'all' ? 'all' : parseInt(p, 10);
+        renderAnalytics();
+      });
+    });
+
+    // Clear data
+    const clearBtn = document.getElementById('analytics-clear-btn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all your AI analytics data? This cannot be undone.')) {
+          localStorage.removeItem(STORE_KEY);
+          renderAnalytics();
+        }
+      });
+    }
+
+    // Escape key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeAnalytics();
+    });
+
+    // Re-render chart on window resize when open
+    window.addEventListener('resize', () => {
+      const modal = document.getElementById('analytics-modal');
+      if (modal && modal.classList.contains('visible')) renderAnalytics();
+    });
+
+    // Also seed a demo record if storage is empty so there's something to see
+    // Remove this if you don't want demo data
+    /* DEMO SEED – comment out for production
+    if (loadRecords().length === 0) {
+      const levels = [1,2,2,2,3,3,4,5];
+      for (let d = 13; d >= 0; d--) {
+        const count = Math.floor(Math.random()*4)+1;
+        for (let i=0;i<count;i++) {
+          const ts = Date.now() - d*86400000 - Math.random()*3600000*8;
+          const level = levels[Math.floor(Math.random()*levels.length)];
+          const r = loadRecords(); r.push({level,ts}); saveRecords(r);
+        }
+      }
+    }
+    */
+  }, 50);
+
+  // Expose recordAssessment globally so other code can call it if needed
+  window.ttRecordAssessment = recordAssessment;
+
+})();
+// ══ End AI Analytics System ═══════════════════════════════════════════════════
