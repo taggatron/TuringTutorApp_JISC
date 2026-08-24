@@ -1724,6 +1724,16 @@ body {
     shape-rendering: geometricPrecision;
 }
 
+.chat-input .send-radio-icon {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
+}
+
+.send-message-button > svg {
+    display: none;
+}
+
 .send-radio-wave,
 .send-radio-beacon {
     transform-box: view-box;

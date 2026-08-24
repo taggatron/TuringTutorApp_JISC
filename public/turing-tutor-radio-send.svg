@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%" class="turing-radio-send" role="img" aria-labelledby="title desc">
+  <title id="title">Turing Tutor transmit button</title>
+  <desc id="desc">A radio transmission tower icon styled in the South Devon College Turing Tutor purple palette.</desc>
+
+  <defs>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#2B174F" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <style>
+    .turing-radio-send {
+      cursor: pointer;
+      user-select: none;
+      overflow: visible;
+    }
+
+    .button-shell,
+    .button-halo,
+    .wave,
+    .tower-line,
+    .tower-accent,
+    .apex {
+      transition:
+        fill .22s ease,
+        stroke .22s ease,
+        opacity .22s ease,
+        transform .22s cubic-bezier(.2,.8,.2,1);
+    }
+
+    .button-shell {
+      fill: #FFFFFF;
+      stroke: #E7E0F6;
+      stroke-width: 3;
+    }
+
+    .button-halo {
+      fill: #FBF9FF;
+      opacity: .58;
+    }
+
+    .wave {
+      fill: none;
+      stroke: #4B10C4;
+      stroke-width: 4.5;
+      stroke-linecap: round;
+      transform-origin: 100px 82px;
+    }
+
+    .wave-1 { opacity: .92; }
+    .wave-2 { opacity: .68; }
+    .wave-3 { opacity: .42; }
+
+    .tower-line {
+      fill: none;
+      stroke: #4B10C4;
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .tower-accent {
+      fill: none;
+      stroke: #7650D5;
+      stroke-width: 3.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .apex {
+      fill: #FFFFFF;
+      stroke: #4B10C4;
+      stroke-width: 3.5;
+    }
+
+    .turing-radio-send:hover .wave-1 { transform: scale(1.03); opacity: 1; }
+    .turing-radio-send:hover .wave-2 { transform: scale(1.07); opacity: .88; }
+    .turing-radio-send:hover .wave-3 { transform: scale(1.11); opacity: .68; }
+
+    .turing-radio-send:active .button-shell {
+      transform: scale(.97);
+    }
+  </style>
+
+  <!-- Soft circular control matching the Turing Tutor input/button styling -->
+  <g filter="url(#softShadow)">
+    <circle class="button-shell" cx="100" cy="100" r="82"/>
+  </g>
+  <circle class="button-halo" cx="100" cy="100" r="69"/>
+
+  <!-- Radio waves -->
+  <g class="radio-waves">
+    <path class="wave wave-3" d="M 54.97 58 A 52 52 0 0 1 145.03 58"/>
+    <path class="wave wave-2" d="M 68.82 66 A 36 36 0 0 1 131.18 66"/>
+    <path class="wave wave-1" d="M 82.68 74 A 20 20 0 0 1 117.32 74"/>
+  </g>
+
+  <!-- Radio tower -->
+  <g class="radio-tower">
+    <circle class="apex" cx="100" cy="84" r="5.5"/>
+    <path class="tower-line" d="M 100 90 L 80 145 M 100 90 L 120 145"/>
+    <path class="tower-accent" d="M 93.2 109 L 106.8 109 M 86.5 128 L 113.5 128 M 93.2 109 L 113.5 128 M 106.8 109 L 86.5 128"/>
+    <path class="tower-line" d="M 76 145 H 124" stroke-width="4"/>
+  </g>
+</svg>

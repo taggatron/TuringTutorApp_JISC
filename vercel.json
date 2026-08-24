@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "public": false,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/generate-session-title", "destination": "/api/generate-title" },
+    { "source": "/upload-image", "destination": "/api/upload-image" },
+    { "source": "/(.*)", "destination": "/public/$1" }
+  ]
+}

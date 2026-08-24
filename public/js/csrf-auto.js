@@ -1,13 +1,19 @@
 // Auto-inject CSRF token into state-changing same-origin fetch requests
 (function () {
   let csrfToken = '';
+  let tokenFetched = false;
+
   const getToken = async () => {
+    if (tokenFetched) return;
+    tokenFetched = true;
     try {
       const resp = await fetch('/csrf-token', { credentials: 'same-origin' });
-      const data = await resp.json();
-      csrfToken = data.csrfToken || '';
-    } catch (e) {
-      console.warn('CSRF token fetch failed:', e);
+      if (resp.ok) {
+        const data = await resp.json();
+        csrfToken = data.csrfToken || '';
+      }
+    } catch (_) {
+      // CSRF token not required in serverless / guest mode
     }
   };
 
@@ -24,14 +30,13 @@
       const method = (init.method || 'GET').toUpperCase();
 
       if (isSameOrigin && METHODS.has(method)) {
-        if (!csrfToken) {
+        if (!tokenFetched) {
           await getToken();
         }
         init.headers = new Headers(init.headers || {});
         if (csrfToken) {
           init.headers.set('X-CSRF-Token', csrfToken);
         }
-        // Always send credentials for same-origin so cookies are included
         if (!('credentials' in init)) init.credentials = 'same-origin';
       }
     } catch (e) {

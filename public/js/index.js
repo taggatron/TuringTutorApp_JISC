@@ -85,17 +85,186 @@ function showWelcomeState() {
   });
 }
 
-// Initialize WebSocket connection to the same host. Use wss when on https.
+// Local storage manager for offline / guest persistence
+const LocalStore = {
+  getSessions() {
+    try {
+      const data = localStorage.getItem('turing_sessions');
+      return data ? JSON.parse(data) : [];
+    } catch (_) { return []; }
+  },
+  saveSessions(sessions) {
+    try {
+      localStorage.setItem('turing_sessions', JSON.stringify(sessions));
+    } catch (_) {}
+  },
+  createSession(name, isTuring = false) {
+    const sessions = this.getSessions();
+    const id = Date.now();
+    const newSess = {
+      id,
+      session_name: name || (isTuring ? 'Turing Mode' : `Session ${Date.now()}`),
+      is_turing: isTuring ? 1 : 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      group_id: null
+    };
+    sessions.unshift(newSess);
+    this.saveSessions(sessions);
+    this.saveScaleLevel(id, 1);
+    return newSess;
+  },
+  deleteSession(sessionId) {
+    const sessions = this.getSessions().filter(s => String(s.id) !== String(sessionId));
+    this.saveSessions(sessions);
+    try {
+      localStorage.removeItem(`turing_msgs_${sessionId}`);
+      localStorage.removeItem(`turing_fb_${sessionId}`);
+      localStorage.removeItem(`turing_scales_${sessionId}`);
+    } catch (_) {}
+  },
+  renameSession(sessionId, newName) {
+    const sessions = this.getSessions();
+    const sess = sessions.find(s => String(s.id) === String(sessionId));
+    if (sess) {
+      sess.session_name = newName;
+      sess.updated_at = new Date().toISOString();
+      this.saveSessions(sessions);
+    }
+  },
+  updateSessionGroup(sessionId, groupId) {
+    const sessions = this.getSessions();
+    const sess = sessions.find(s => String(s.id) === String(sessionId));
+    if (sess) {
+      sess.group_id = groupId;
+      sess.updated_at = new Date().toISOString();
+      this.saveSessions(sessions);
+    }
+  },
+  getMessages(sessionId) {
+    try {
+      const data = localStorage.getItem(`turing_msgs_${sessionId}`);
+      return data ? JSON.parse(data) : [];
+    } catch (_) { return []; }
+  },
+  saveMessages(sessionId, messages) {
+    try {
+      localStorage.setItem(`turing_msgs_${sessionId}`, JSON.stringify(messages));
+    } catch (_) {}
+  },
+  addMessage(sessionId, message) {
+    const msgs = this.getMessages(sessionId);
+    const msgId = message.message_id || message.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newMsg = {
+      id: msgId,
+      message_id: msgId,
+      session_id: sessionId,
+      role: message.role || 'user',
+      content: message.content || '',
+      collapsed: message.collapsed || 0,
+      scale_level: message.scale_level || 1,
+      references: message.references || [],
+      prompts: message.prompts || [],
+      timestamp: Date.now()
+    };
+    msgs.push(newMsg);
+    this.saveMessages(sessionId, msgs);
+    return newMsg;
+  },
+  updateMessageContent(messageId, content, references, prompts) {
+    const sessions = this.getSessions();
+    for (const sess of sessions) {
+      const msgs = this.getMessages(sess.id);
+      let found = false;
+      for (const m of msgs) {
+        if (String(m.id) === String(messageId) || String(m.message_id) === String(messageId)) {
+          m.content = content;
+          if (references !== undefined) m.references = references;
+          if (prompts !== undefined) m.prompts = prompts;
+          found = true;
+          break;
+        }
+      }
+      if (found) {
+        this.saveMessages(sess.id, msgs);
+        break;
+      }
+    }
+  },
+  getFeedback(sessionId) {
+    try {
+      const data = localStorage.getItem(`turing_fb_${sessionId}`);
+      return data ? JSON.parse(data) : [];
+    } catch (_) { return []; }
+  },
+  saveFeedback(sessionId, feedback) {
+    try {
+      const current = this.getFeedback(sessionId);
+      current.push(feedback);
+      localStorage.setItem(`turing_fb_${sessionId}`, JSON.stringify(current));
+    } catch (_) {}
+  },
+  getScaleLevels(sessionId) {
+    try {
+      const data = localStorage.getItem(`turing_scales_${sessionId}`);
+      return data ? JSON.parse(data) : [1];
+    } catch (_) { return [1]; }
+  },
+  saveScaleLevel(sessionId, level) {
+    try {
+      const current = this.getScaleLevels(sessionId);
+      if (!current.includes(level)) current.push(level);
+      localStorage.setItem(`turing_scales_${sessionId}`, JSON.stringify(current));
+    } catch (_) {}
+  },
+  getGroups() {
+    try {
+      const data = localStorage.getItem('turing_groups');
+      return data ? JSON.parse(data) : [];
+    } catch (_) { return []; }
+  },
+  saveGroups(groups) {
+    try {
+      localStorage.setItem('turing_groups', JSON.stringify(groups));
+    } catch (_) {}
+  },
+  createGroup(name) {
+    const groups = this.getGroups();
+    const newGroup = { id: `grp_${Date.now()}`, group_name: name || 'Unnamed Group' };
+    groups.push(newGroup);
+    this.saveGroups(groups);
+    return newGroup;
+  },
+  deleteGroup(groupId) {
+    const groups = this.getGroups().filter(g => String(g.id) !== String(groupId));
+    this.saveGroups(groups);
+    const sessions = this.getSessions();
+    sessions.forEach(s => { if (String(s.group_id) === String(groupId)) s.group_id = null; });
+    this.saveSessions(sessions);
+  },
+  renameGroup(groupId, newName) {
+    const groups = this.getGroups();
+    const grp = groups.find(g => String(g.id) === String(groupId));
+    if (grp) {
+      grp.group_name = newName;
+      this.saveGroups(groups);
+    }
+  }
+};
+
+// Initialize WebSocket connection if available (for local Node server)
 let ws = null;
 try {
-  const wsProtocol = (location.protocol === 'https:') ? 'wss:' : 'ws:';
-  // connect to the same host; the server upgrades the connection
-  const wsUrl = `${wsProtocol}//${location.host}`;
-  ws = new WebSocket(wsUrl);
-  ws.addEventListener('open', () => console.debug('WebSocket connected to', wsUrl));
-    // WebSocket opened — ready to receive messages.
+  // Only connect WebSocket if running on localhost or with explicit WebSocket backend
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    const wsProtocol = (location.protocol === 'https:') ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${location.host}`;
+    ws = new WebSocket(wsUrl);
+    ws.addEventListener('open', () => console.debug('WebSocket connected to', wsUrl));
+    ws.addEventListener('error', () => console.debug('WebSocket not available, will use HTTP streaming'));
+  }
 } catch (e) {
-  console.error('Failed to create WebSocket:', e);
+  console.debug('WebSocket not supported or failed to initialize:', e);
 }
 
 function showPopup(element, message) {
@@ -236,9 +405,8 @@ function sanitizeStyle(styleString) {
   return typeof styleString === 'string' ? styleString : '';
 }
 
-ws.onmessage = (event) => {
+function handleWebSocketMessage(message) {
   try {
-    const message = JSON.parse(event.data);
     if (message.type === 'history') {
       if (Array.isArray(message.data)) {
         window.__lastFeedbackData = [];
@@ -271,94 +439,94 @@ ws.onmessage = (event) => {
         botMessageDiv._renderTimer = null;
         botMessageDiv._format = null; // 'markdown' or 'html'
       }
-  const contentDiv = botMessageDiv.querySelector('.message-content');
-  if (!botMessageDiv._accumulatedRaw) botMessageDiv._accumulatedRaw = '';
-  if (!botMessageDiv._visibleRaw) botMessageDiv._visibleRaw = '';
-  // Determine format: prefer existing marker, otherwise use chunk hint
-  if (!botMessageDiv._format) botMessageDiv._format = message.format || 'markdown';
-  if (message.format === 'html') botMessageDiv._format = 'html';
+      const contentDiv = botMessageDiv.querySelector('.message-content');
+      if (!botMessageDiv._accumulatedRaw) botMessageDiv._accumulatedRaw = '';
+      if (!botMessageDiv._visibleRaw) botMessageDiv._visibleRaw = '';
+      // Determine format: prefer existing marker, otherwise use chunk hint
+      if (!botMessageDiv._format) botMessageDiv._format = message.format || 'markdown';
+      if (message.format === 'html') botMessageDiv._format = 'html';
 
-  if (botMessageDiv._format === 'markdown') {
-    // Append raw delta to buffer
-    botMessageDiv._accumulatedRaw += (message.content || '');
-    botMessageDiv._lastAppend = Date.now();
+      if (botMessageDiv._format === 'markdown') {
+        // Append raw delta to buffer
+        botMessageDiv._accumulatedRaw += (message.content || '');
+        botMessageDiv._lastAppend = Date.now();
 
-    // Start a render timer if not already running
-    if (!botMessageDiv._renderTimer) {
-      const CHUNK_SIZE = 24; // chars moved per tick
-      const TICK_MS = 60; // render every 60ms for smoother streaming
-      botMessageDiv._renderTimer = setInterval(() => {
-        try {
-          if (botMessageDiv._accumulatedRaw.length > 0) {
-            // Move a chunk from accumulated to visible
-            const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
-            botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
-            botMessageDiv._visibleRaw += take;
-            // Detect if the content actually contains HTML (including HTML-escaped tags)
-            const maybeHtml = decodeHtmlEntities(botMessageDiv._visibleRaw);
-            if (/<\w+[^>]*>/.test(maybeHtml)) {
-              botMessageDiv._format = 'html';
-              contentDiv.innerHTML = sanitizeHtml(maybeHtml);
-            } else {
-              // Render the visible subset (sanitize to avoid XSS)
-              contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
-            }
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-          } else {
-            // No buffered content; if no new data for a short while, stop the timer
-              if (Date.now() - botMessageDiv._lastAppend > 300) {
-              clearInterval(botMessageDiv._renderTimer);
-              botMessageDiv._renderTimer = null;
-              // Ensure final render includes any leftover visibleRaw (sanitized)
-              const maybeHtmlFinal = decodeHtmlEntities(botMessageDiv._visibleRaw);
-              if (/<\w+[^>]*>/.test(maybeHtmlFinal)) {
-                botMessageDiv._format = 'html';
-                contentDiv.innerHTML = sanitizeHtml(maybeHtmlFinal);
+        // Start a render timer if not already running
+        if (!botMessageDiv._renderTimer) {
+          const CHUNK_SIZE = 24; // chars moved per tick
+          const TICK_MS = 60; // render every 60ms for smoother streaming
+          botMessageDiv._renderTimer = setInterval(() => {
+            try {
+              if (botMessageDiv._accumulatedRaw.length > 0) {
+                // Move a chunk from accumulated to visible
+                const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
+                botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
+                botMessageDiv._visibleRaw += take;
+                // Detect if the content actually contains HTML (including HTML-escaped tags)
+                const maybeHtml = decodeHtmlEntities(botMessageDiv._visibleRaw);
+                if (/<\w+[^>]*>/.test(maybeHtml)) {
+                  botMessageDiv._format = 'html';
+                  contentDiv.innerHTML = sanitizeHtml(maybeHtml);
+                } else {
+                  // Render the visible subset (sanitize to avoid XSS)
+                  contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
+                }
+                chatMessages.scrollTop = chatMessages.scrollHeight;
               } else {
-                contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
+                // No buffered content; if no new data for a short while, stop the timer
+                if (Date.now() - botMessageDiv._lastAppend > 300) {
+                  clearInterval(botMessageDiv._renderTimer);
+                  botMessageDiv._renderTimer = null;
+                  // Ensure final render includes any leftover visibleRaw (sanitized)
+                  const maybeHtmlFinal = decodeHtmlEntities(botMessageDiv._visibleRaw);
+                  if (/<\w+[^>]*>/.test(maybeHtmlFinal)) {
+                    botMessageDiv._format = 'html';
+                    contentDiv.innerHTML = sanitizeHtml(maybeHtmlFinal);
+                  } else {
+                    contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(botMessageDiv._visibleRaw));
+                  }
+                }
               }
+            } catch (e) {
+              // on any render error, fallback to appending raw text
+              const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
+              contentDiv.innerHTML += sanitizeHtml(safe);
             }
-          }
-        } catch (e) {
-          // on any render error, fallback to appending raw text
-          const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
-          contentDiv.innerHTML += sanitizeHtml(safe);
+          }, TICK_MS);
         }
-      }, TICK_MS);
-    }
-  } else if (botMessageDiv._format === 'html') {
-    // HTML streaming: append chunk to accumulator and render sanitized HTML progressively
-    botMessageDiv._accumulatedRaw += (message.content || '');
-    botMessageDiv._lastAppend = Date.now();
-    if (!botMessageDiv._renderTimer) {
-      const CHUNK_SIZE = 128;
-      const TICK_MS = 60;
-      botMessageDiv._renderTimer = setInterval(() => {
-        try {
-          if (botMessageDiv._accumulatedRaw.length > 0) {
-            const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
-            botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
-            botMessageDiv._visibleRaw += take;
-            contentDiv.innerHTML = sanitizeHtml(decodeHtmlEntities(botMessageDiv._visibleRaw));
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-          } else {
-            if (Date.now() - botMessageDiv._lastAppend > 300) {
-              clearInterval(botMessageDiv._renderTimer);
-              botMessageDiv._renderTimer = null;
-              contentDiv.innerHTML = sanitizeHtml(decodeHtmlEntities(botMessageDiv._visibleRaw));
+      } else if (botMessageDiv._format === 'html') {
+        // HTML streaming: append chunk to accumulator and render sanitized HTML progressively
+        botMessageDiv._accumulatedRaw += (message.content || '');
+        botMessageDiv._lastAppend = Date.now();
+        if (!botMessageDiv._renderTimer) {
+          const CHUNK_SIZE = 128;
+          const TICK_MS = 60;
+          botMessageDiv._renderTimer = setInterval(() => {
+            try {
+              if (botMessageDiv._accumulatedRaw.length > 0) {
+                const take = botMessageDiv._accumulatedRaw.slice(0, CHUNK_SIZE);
+                botMessageDiv._accumulatedRaw = botMessageDiv._accumulatedRaw.slice(take.length);
+                botMessageDiv._visibleRaw += take;
+                contentDiv.innerHTML = sanitizeHtml(decodeHtmlEntities(botMessageDiv._visibleRaw));
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              } else {
+                if (Date.now() - botMessageDiv._lastAppend > 300) {
+                  clearInterval(botMessageDiv._renderTimer);
+                  botMessageDiv._renderTimer = null;
+                  contentDiv.innerHTML = sanitizeHtml(decodeHtmlEntities(botMessageDiv._visibleRaw));
+                }
+              }
+            } catch (e) {
+              const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
+              contentDiv.innerHTML += sanitizeHtml(safe);
             }
-          }
-        } catch (e) {
-          const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
-          contentDiv.innerHTML += sanitizeHtml(safe);
+          }, TICK_MS);
         }
-      }, TICK_MS);
-    }
-  } else {
-    // non-markdown, non-html fallback: append raw text safely
-    const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
-    contentDiv.innerHTML += sanitizeHtml(safe);
-  }
+      } else {
+        // non-markdown, non-html fallback: append raw text safely
+        const safe = escapeHtml(message.content || '').replace(/\n/g, '<br>');
+        contentDiv.innerHTML += sanitizeHtml(safe);
+      }
       chatMessages.scrollTop = chatMessages.scrollHeight;
     } else if (message.type === 'scale') {
       updateScale(message.data);
@@ -453,9 +621,90 @@ ws.onmessage = (event) => {
       }
     }
   } catch (e) {
-    console.error('Error parsing WebSocket message:', e);
+    console.error('Error in handleWebSocketMessage:', e);
   }
-};
+}
+
+if (ws) {
+  ws.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data);
+      handleWebSocketMessage(message);
+    } catch (e) {
+      console.error('Error parsing WebSocket message:', e);
+    }
+  };
+}
+
+async function sendViaHttpStream(messageContent, targetSessionId) {
+  try {
+    const localMsgs = LocalStore.getMessages(targetSessionId);
+    const conversationHistory = localMsgs.map(m => ({ role: m.role, content: m.content }));
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: messageContent,
+        session_id: targetSessionId,
+        conversationHistory,
+        is_turing: !!window.__isTuringFlag
+      })
+    });
+
+    if (!res.ok) {
+      console.error('Chat API stream failed:', res.status);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'done') {
+              if (data.fullContent) {
+                LocalStore.addMessage(targetSessionId, {
+                  role: 'assistant',
+                  content: data.fullContent,
+                  scale_level: 1,
+                  collapsed: 0
+                });
+              }
+            } else if (data.type === 'scale') {
+              if (Array.isArray(data.data) && data.data.length > 0) {
+                LocalStore.saveScaleLevel(targetSessionId, data.data[0]);
+              }
+              handleWebSocketMessage(data);
+            } else if (data.type === 'feedback') {
+              LocalStore.saveFeedback(targetSessionId, {
+                messageId: data.message_id || 'stream',
+                feedbackContent: data.content
+              });
+              handleWebSocketMessage(data);
+            } else if (data.type === 'session-renamed') {
+              LocalStore.renameSession(targetSessionId, data.session_name || data.title);
+              handleWebSocketMessage(data);
+            } else {
+              handleWebSocketMessage(data);
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error in sendViaHttpStream:', err);
+  }
+}
 
 // Helper: Check if a message is the last assistant message in the session (DB-backed)
 async function isLastAssistantMessageDB(messageId, sessionId) {
@@ -611,56 +860,70 @@ async function sendMessage() {
     }
 
     if (!session_id) {
+      let createdId = null;
       try {
         const response = await fetch('/start-session', { method: 'POST' });
-        const data = await response.json();
-        if (data.success) {
-          session_id = data.session_id;
-          isNewSession = true;
-          highlightCurrentSession(session_id);
-        } else {
-          alert('Failed to start a new session.');
-          return;
-        }
-      } catch (error) {
-        console.error('Error starting a new session:', error);
-        return;
-      }
-    }
-
-    try {
-      ws.send(JSON.stringify({ content: message, session_id }));
-
-    const currentBtn = document.getElementById(`session-${session_id}`);
-    const currentSpan = currentBtn ? currentBtn.querySelector('.session-name, .turing-name') : null;
-    const currentName = currentSpan ? (currentSpan.textContent || '') : '';
-    const isDefaultTitle = !currentName || /^Session(\s+\d+)?$/i.test(currentName.trim()) || /^Session\s+\d{10,}/i.test(currentName.trim());
-
-    if (isNewSession || isDefaultTitle) {
-      isNewSession = false;
-      fetch('/generate-session-title', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'CSRF-Token': window.csrfToken || ''
-        },
-        body: JSON.stringify({ session_id, prompt: message })
-      }).then(res => res.json()).then(data => {
-        if (data.success && (data.title || data.session_name)) {
-          const newTitle = data.title || data.session_name;
-          const sessionBtn = document.getElementById(`session-${session_id}`);
-          if (sessionBtn) {
-            const span = sessionBtn.querySelector('.session-name, .turing-name');
-            if (span) span.textContent = newTitle;
-          } else {
-            loadSessions().then(() => highlightCurrentSession(session_id));
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            createdId = data.session_id;
           }
         }
-      }).catch(e => console.error('Error generating session title:', e));
+      } catch (error) {
+        console.debug('Server start-session failed, using LocalStore:', error);
+      }
+
+      if (!createdId) {
+        const newSess = LocalStore.createSession();
+        createdId = newSess.id;
+      }
+
+      session_id = createdId;
+      isNewSession = true;
+      highlightCurrentSession(session_id);
     }
- 
+
+    // Persist user message locally
+    LocalStore.addMessage(session_id, { role: 'user', content: message });
+
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ content: message, session_id }));
+      } else {
+        sendViaHttpStream(message, session_id);
+      }
+
+      const currentBtn = document.getElementById(`session-${session_id}`);
+      const currentSpan = currentBtn ? currentBtn.querySelector('.session-name, .turing-name') : null;
+      const currentName = currentSpan ? (currentSpan.textContent || '') : '';
+      const isDefaultTitle = !currentName || /^Session(\s+\d+)?$/i.test(currentName.trim()) || /^Session\s+\d{10,}/i.test(currentName.trim());
+
+      if (isNewSession || isDefaultTitle) {
+        isNewSession = false;
+        const titlingUrl = (location.hostname === 'localhost' && ws) ? '/generate-session-title' : '/api/generate-title';
+        fetch(titlingUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'CSRF-Token': window.csrfToken || ''
+          },
+          body: JSON.stringify({ session_id, prompt: message })
+        }).then(res => res.json()).then(data => {
+          if (data.success && (data.title || data.session_name)) {
+            const newTitle = data.title || data.session_name;
+            LocalStore.renameSession(session_id, newTitle);
+            const sessionBtn = document.getElementById(`session-${session_id}`);
+            if (sessionBtn) {
+              const span = sessionBtn.querySelector('.session-name, .turing-name');
+              if (span) span.textContent = newTitle;
+            } else {
+              loadSessions().then(() => highlightCurrentSession(session_id));
+            }
+          }
+        }).catch(e => console.debug('Error generating session title:', e));
+      }
     } catch (err) {
-      console.error('WebSocket send failed:', err);
+      console.error('Send message failed:', err);
     }
     const userMessage = document.createElement('div');
     userMessage.className = 'message user';
@@ -820,10 +1083,22 @@ async function loadSessions() {
   const turingContainer = document.getElementById('turing-mode-container') || document.getElementById('new-chats');
   if (turingContainer) turingContainer.innerHTML = '';
   try {
-    const response = await fetch('/sessions');
-    const data = await response.json();
-    if (data.success) {
-      const sessions = Array.isArray(data.sessions) ? data.sessions.slice() : [];
+    let sessions = [];
+    try {
+      const response = await fetch('/sessions');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.sessions)) {
+          sessions = data.sessions.slice();
+        }
+      }
+    } catch (_) {}
+
+    if (sessions.length === 0) {
+      sessions = LocalStore.getSessions();
+    }
+
+    if (sessions.length > 0) {
       const sessionNumberMap = buildSessionNumberMap(sessions);
       sessions.sort((a, b) => getSessionSortValue(b) - getSessionSortValue(a));
       sessions.forEach((session) => {
@@ -879,12 +1154,10 @@ async function loadSessions() {
         const button = document.createElement('button');
         button.className = 'session-button';
         const sessionNumber = sessionNumberMap.get(session.id);
-        // Label sessions using persisted timestamp from the database (24-hour clock)
-        const label = formatSessionLabel(sessionNumber, session.created_at || session.updated_at);
+        const labelText = session.session_name || formatSessionLabel(sessionNumber, session.created_at || session.updated_at);
         button.id = `session-${session.id}`;
         button.draggable = true;
         button.ondragstart = drag;
-        const labelText = session.session_name || formatSessionLabel(sessionNumber, session.created_at || session.updated_at);
         button.innerHTML = `
           <div class="session-name-container" style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             <span class="session-name" contenteditable="false" spellcheck="false" style="outline: none;">${escapeHtml(labelText)}</span>
@@ -921,11 +1194,9 @@ async function loadSessions() {
           document.getElementById('new-chats').appendChild(button);
         }
       });
-    } else {
-      console.error('Failed to load sessions:', data.message);
     }
   } catch (error) {
-    console.error('Error fetching sessions:', error);
+    console.debug('Error fetching sessions:', error);
   }
 }
 
@@ -933,145 +1204,161 @@ async function loadSessionHistory(sessionId) {
   hideAndStoreFeedback(session_id);
   session_id = sessionId;
   resetScale();
-    highlightCurrentSession(sessionId); 
+  highlightCurrentSession(sessionId); 
+
+  let data = null;
+  try {
     const response = await fetch(`/messages?session_id=${sessionId}`);
-    const data = await response.json();
-    if (data.success) {
-      chatMessages.innerHTML = '';
-      const isTuring = Number(data.is_turing) === 1;
-      window.__isTuringFlag = !!isTuring;
-      const messagesWithFeedback = new Set();
-      const feedbackByMessageId = new Map();
-      if (!isTuring && data.feedbackData && data.feedbackData.length > 0) {
-        data.feedbackData.forEach(feedback => { messagesWithFeedback.add(String(feedback.messageId)); feedbackByMessageId.set(String(feedback.messageId), feedback); });
-      }
-      let prevMsg = null;
-      let prevAssistantHadFeedback = false;
-      let prevAssistantFeedbackMargin = 0;
-      const msgs = Array.isArray(data.messages) ? data.messages.slice() : [];
-      if (isTuring) {
-        const hasAssistant = msgs.some(m => m.role === 'assistant');
-        if (!hasAssistant) msgs.push({ role: 'assistant', content: '', message_id: 'turing-seed', collapsed: 0, scale_level: 1 });
-      }
-      msgs.forEach((msg, idx) => {
-        if (msg.role === 'user') {
-          const userMessageDiv = document.createElement('div');
-          userMessageDiv.className = 'message user';
-          const textSpan = document.createElement('span');
-          textSpan.className = 'message-text';
-          textSpan.textContent = msg.content;
-          const metaSpan = document.createElement('span');
-          metaSpan.className = 'message-meta';
-          const now = new Date();
-          metaSpan.innerHTML = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 11 13 8 10"></polyline><polyline points="22 6 15 13 12 10"></polyline></svg>`;
-          userMessageDiv.dataset.messageId = msg.message_id;
-          userMessageDiv.appendChild(textSpan);
-          userMessageDiv.appendChild(metaSpan);
-          const fb = feedbackByMessageId.get(String(msg.message_id));
-          let marginApplied = false;
-          if (fb && typeof fb.feedbackMargin === 'number' && !isNaN(fb.feedbackMargin)) {
-            userMessageDiv.style.marginTop = fb.feedbackMargin + 'px'; marginApplied = true;
-          }
-          if (!marginApplied && prevAssistantHadFeedback && typeof prevAssistantFeedbackMargin === 'number' && !isNaN(prevAssistantFeedbackMargin)) {
-            userMessageDiv.style.marginTop = prevAssistantFeedbackMargin + 'px';
-          }
-          chatMessages.appendChild(userMessageDiv);
-          setTimeout(() => { feedbackMapping.push({ messageElement: userMessageDiv, feedbackContainer: createFeedbackContainer('Feedback for session') }); }, 0);
-        } else if (msg.role === 'assistant') {
-          const assistantMessageDiv = document.createElement('div');
-          assistantMessageDiv.className = 'message assistant with-feedback';
-          // Mark the first assistant in a Turing session for special styling (non-sticky)
-          if (isTuring && !document.querySelector('#chat-messages .message.assistant')) {
-            assistantMessageDiv.classList.add('turing-message');
-          }
-          const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
-          if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
-          assistantMessageDiv.dataset.messageId = msg.message_id;
-          const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
-          if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
-          // Detect true HTML either directly or when stored HTML-escaped in DB
-          const decodedCandidate = decodeHtmlEntities(msg.content || '');
-          const __isHtml = /<\w+[^>]*>/.test(decodedCandidate);
-          const contentDiv = document.createElement('div');
-          contentDiv.className = 'message-content';
-          try {
-            if (__isHtml) contentDiv.innerHTML = sanitizeHtml(decodedCandidate || '');
-            else contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
-            // Remove any accidentally embedded Turing footer from stored content
-            removeEmbeddedTuringFooters(contentDiv);
-          } catch (e) {
-            const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
-            contentDiv.innerHTML = sanitizeHtml(safe);
-          }
-          const overlay = document.createElement('div');
-          overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
-          const overlayText = document.createElement('span');
-          overlayText.innerHTML = '🔑 Copying or directly using this response breaches academic integrity guidelines';
-          const closeBtn = document.createElement('button');
-          closeBtn.className = 'close-overlay-btn';
-          closeBtn.type = 'button';
-          closeBtn.textContent = '×';
-          overlay.appendChild(overlayText);
-          overlay.appendChild(closeBtn);
-          assistantMessageDiv.appendChild(contentDiv);
-          assistantMessageDiv.appendChild(overlay);
-          // Rehydrate persisted references/prompts if present
-          try {
-            if (!msg.footer_removed) {
-              const footerNode = buildFooterFromMessage(msg);
-              if (footerNode) assistantMessageDiv.appendChild(footerNode);
-            }
-          } catch (e) { /* ignore */ }
-          syncTuringMessageEmptyState(assistantMessageDiv);
-          if (closeBtn && overlay && contentDiv) {
-            closeBtn.addEventListener('click', function(e) {
-              e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.classList.remove('content-dim');
-            });
-            overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.classList.remove('content-dim'); });
-          }
-          chatMessages.appendChild(assistantMessageDiv);
-        }
-        if (!isTuring && msg.role === 'assistant' && feedbackByMessageId.has(String(msg.message_id))) {
-          prevAssistantHadFeedback = true; prevAssistantFeedbackMargin = feedbackByMessageId.get(String(msg.message_id)).feedbackMargin;
-        } else { prevAssistantHadFeedback = false; prevAssistantFeedbackMargin = 0; }
-        prevMsg = msg;
-      });
-      if (isTuring) {
-        const firstAssistant = document.querySelector('#chat-messages .message.assistant');
-        if (firstAssistant) setTimeout(() => { if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click(); }, 10);
-        // Sticky positioning disabled: no special handling
-      }
-      const userMessages = chatMessages.querySelectorAll('.message.user');
-      const lastUserMessage = userMessages[userMessages.length - 1];
-      let lastUserFeedback = null; let lastUserScaleLevel = null;
-      const lastMsg = data.messages[data.messages.length - 1];
-      if (lastMsg && lastMsg.role === 'user') {
-        if (data.feedbackData && data.feedbackData.length > 0) lastUserFeedback = data.feedbackData.find(fb => String(fb.messageId) === String(lastMsg.message_id));
-        lastUserScaleLevel = lastMsg.scale_level || 1;
-      }
-      if (lastUserMessage && lastUserFeedback && lastUserScaleLevel >= 3) lastUserMessage.style.marginBottom = '80px'; else if (lastUserMessage) lastUserMessage.style.marginBottom = '';
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      window.__lastFeedbackData = isTuring ? [] : (data.feedbackData || []);
-      if (!isTuring && window.__lastFeedbackData.length) showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
-      updateScale(data.scale_levels);
-    } else {
-      alert('Failed to load session history.');
+    if (response.ok) {
+      const parsed = await response.json();
+      if (parsed.success) data = parsed;
     }
+  } catch (_) {}
+
+  if (!data) {
+    const sessions = LocalStore.getSessions();
+    const localSess = sessions.find(s => String(s.id) === String(sessionId));
+    data = {
+      success: true,
+      is_turing: localSess ? localSess.is_turing : 0,
+      messages: LocalStore.getMessages(sessionId),
+      feedbackData: LocalStore.getFeedback(sessionId),
+      scale_levels: LocalStore.getScaleLevels(sessionId)
+    };
+  }
+
+  if (data && data.success) {
+    chatMessages.innerHTML = '';
+    const isTuring = Number(data.is_turing) === 1;
+    window.__isTuringFlag = !!isTuring;
+    const messagesWithFeedback = new Set();
+    const feedbackByMessageId = new Map();
+    if (!isTuring && data.feedbackData && data.feedbackData.length > 0) {
+      data.feedbackData.forEach(feedback => { messagesWithFeedback.add(String(feedback.messageId)); feedbackByMessageId.set(String(feedback.messageId), feedback); });
+    }
+    let prevMsg = null;
+    let prevAssistantHadFeedback = false;
+    let prevAssistantFeedbackMargin = 0;
+    const msgs = Array.isArray(data.messages) ? data.messages.slice() : [];
+    if (isTuring) {
+      const hasAssistant = msgs.some(m => m.role === 'assistant');
+      if (!hasAssistant) msgs.push({ role: 'assistant', content: '', message_id: 'turing-seed', collapsed: 0, scale_level: 1 });
+    }
+    msgs.forEach((msg, idx) => {
+      if (msg.role === 'user') {
+        const userMessageDiv = document.createElement('div');
+        userMessageDiv.className = 'message user';
+        const textSpan = document.createElement('span');
+        textSpan.className = 'message-text';
+        textSpan.textContent = msg.content;
+        const metaSpan = document.createElement('span');
+        metaSpan.className = 'message-meta';
+        const now = new Date();
+        metaSpan.innerHTML = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 6 11 13 8 10"></polyline><polyline points="22 6 15 13 12 10"></polyline></svg>`;
+        userMessageDiv.dataset.messageId = msg.message_id;
+        userMessageDiv.appendChild(textSpan);
+        userMessageDiv.appendChild(metaSpan);
+        const fb = feedbackByMessageId.get(String(msg.message_id));
+        let marginApplied = false;
+        if (fb && typeof fb.feedbackMargin === 'number' && !isNaN(fb.feedbackMargin)) {
+          userMessageDiv.style.marginTop = fb.feedbackMargin + 'px'; marginApplied = true;
+        }
+        if (!marginApplied && prevAssistantHadFeedback && typeof prevAssistantFeedbackMargin === 'number' && !isNaN(prevAssistantFeedbackMargin)) {
+          userMessageDiv.style.marginTop = prevAssistantFeedbackMargin + 'px';
+        }
+        chatMessages.appendChild(userMessageDiv);
+        setTimeout(() => { feedbackMapping.push({ messageElement: userMessageDiv, feedbackContainer: createFeedbackContainer('Feedback for session') }); }, 0);
+      } else if (msg.role === 'assistant') {
+        const assistantMessageDiv = document.createElement('div');
+        assistantMessageDiv.className = 'message assistant with-feedback';
+        // Mark the first assistant in a Turing session for special styling (non-sticky)
+        if (isTuring && !document.querySelector('#chat-messages .message.assistant')) {
+          assistantMessageDiv.classList.add('turing-message');
+        }
+        const shouldLock = isTuring ? false : ((Number(msg.collapsed) === 1) || (Number(msg.scale_level) >= 3) || messagesWithFeedback.has(String(msg.message_id)));
+        if (shouldLock) assistantMessageDiv.classList.add('edit-locked');
+        assistantMessageDiv.dataset.messageId = msg.message_id;
+        const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
+        if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
+        // Detect true HTML either directly or when stored HTML-escaped in DB
+        const decodedCandidate = decodeHtmlEntities(msg.content || '');
+        const __isHtml = /<\w+[^>]*>/.test(decodedCandidate);
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        try {
+          if (__isHtml) contentDiv.innerHTML = sanitizeHtml(decodedCandidate || '');
+          else contentDiv.innerHTML = sanitizeHtml(renderMarkdownToHtml(msg.content || ''));
+          // Remove any accidentally embedded Turing footer from stored content
+          removeEmbeddedTuringFooters(contentDiv);
+        } catch (e) {
+          const safe = escapeHtml(msg.content || '').replace(/\n/g,'<br>');
+          contentDiv.innerHTML = sanitizeHtml(safe);
+        }
+        const overlay = document.createElement('div');
+        overlay.className = 'message-assistant-overlay ' + (showOverlay ? 'overlay-shown' : 'overlay-hidden');
+        const overlayText = document.createElement('span');
+        overlayText.innerHTML = '🔑 Copying or directly using this response breaches academic integrity guidelines';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'close-overlay-btn';
+        closeBtn.type = 'button';
+        closeBtn.textContent = '×';
+        overlay.appendChild(overlayText);
+        overlay.appendChild(closeBtn);
+        assistantMessageDiv.appendChild(contentDiv);
+        assistantMessageDiv.appendChild(overlay);
+        // Rehydrate persisted references/prompts if present
+        try {
+          if (!msg.footer_removed) {
+            const footerNode = buildFooterFromMessage(msg);
+            if (footerNode) assistantMessageDiv.appendChild(footerNode);
+          }
+        } catch (e) { /* ignore */ }
+        syncTuringMessageEmptyState(assistantMessageDiv);
+        if (closeBtn && overlay && contentDiv) {
+          closeBtn.addEventListener('click', function(e) {
+            e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.classList.remove('content-dim');
+          });
+          overlay.addEventListener('click', function(e){ e.stopPropagation(); overlay.classList.remove('overlay-shown'); overlay.classList.add('overlay-hidden'); assistantMessageDiv.classList.remove('overlay-active'); contentDiv.classList.remove('content-dim'); });
+        }
+        chatMessages.appendChild(assistantMessageDiv);
+      }
+      if (!isTuring && msg.role === 'assistant' && feedbackByMessageId.has(String(msg.message_id))) {
+        prevAssistantHadFeedback = true; prevAssistantFeedbackMargin = feedbackByMessageId.get(String(msg.message_id)).feedbackMargin;
+      } else { prevAssistantHadFeedback = false; prevAssistantFeedbackMargin = 0; }
+      prevMsg = msg;
+    });
+    if (isTuring) {
+      const firstAssistant = document.querySelector('#chat-messages .message.assistant');
+      if (firstAssistant) setTimeout(() => { if (!firstAssistant.classList.contains('edit-locked')) firstAssistant.click(); }, 10);
+    }
+    const userMessages = chatMessages.querySelectorAll('.message.user');
+    const lastUserMessage = userMessages[userMessages.length - 1];
+    let lastUserFeedback = null; let lastUserScaleLevel = null;
+    const lastMsg = msgs[msgs.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      if (data.feedbackData && data.feedbackData.length > 0) lastUserFeedback = data.feedbackData.find(fb => String(fb.messageId) === String(lastMsg.message_id));
+      lastUserScaleLevel = lastMsg.scale_level || 1;
+    }
+    if (lastUserMessage && lastUserFeedback && lastUserScaleLevel >= 3) lastUserMessage.style.marginBottom = '80px'; else if (lastUserMessage) lastUserMessage.style.marginBottom = '';
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    window.__lastFeedbackData = isTuring ? [] : (data.feedbackData || []);
+    if (!isTuring && window.__lastFeedbackData.length) showFeedbackForSavedSession(sessionId, window.__lastFeedbackData);
+    updateScale(data.scale_levels || [1]);
+  }
 }
 
 async function deleteSession(sessionId, parentElementId) {
-  const response = await fetch(`/delete-session?session_id=${sessionId}`, { method: 'DELETE' });
-  const data = await response.json();
-  if (data.success) {
-    const sessionButton = document.getElementById(`session-${sessionId}`);
-    if (sessionButton) sessionButton.remove();
-    const parentElement = document.getElementById(parentElementId);
-    if (parentElement) parentElement.id = parentElementId;
-    chatMessages.innerHTML = '';
+  LocalStore.deleteSession(sessionId);
+  try {
+    await fetch(`/delete-session?session_id=${sessionId}`, { method: 'DELETE' });
+  } catch (_) {}
+  const sessionButton = document.getElementById(`session-${sessionId}`);
+  if (sessionButton) sessionButton.remove();
+  const parentElement = document.getElementById(parentElementId);
+  if (parentElement) parentElement.id = parentElementId;
+  chatMessages.innerHTML = '';
   document.querySelectorAll('.feedback-container').forEach(container => { container.classList.add('hidden'); });
-  } else {
-    alert('Failed to delete the session.');
-  }
+  startNewChat();
 }
 
 async function startNewChat() {
@@ -1079,7 +1366,6 @@ async function startNewChat() {
   session_id = null;
   isNewSession = true;
   try {
-    // Ensure chatMessages element exists (fall back to querying DOM)
     const cm = chatMessages || document.getElementById('chat-messages');
     if (cm) {
       cm.innerHTML = '';
@@ -1144,11 +1430,29 @@ function safeTimestampToMs(value) {
 
 async function startTuringMode() {
   try {
-    const res = await fetch('/start-turing', { method: 'POST' });
-    const data = await res.json();
-    if (!data.success) { alert('Failed to start Turing Mode'); return; }
-    session_id = data.session_id;
-      isNewSession = true; __turingInitialMessageId = data.message_id || null;
+    let newSessId = null;
+    let newMsgId = null;
+    try {
+      const res = await fetch('/start-turing', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          newSessId = data.session_id;
+          newMsgId = data.message_id;
+        }
+      }
+    } catch (_) {}
+
+    if (!newSessId) {
+      const sess = LocalStore.createSession('Turing Mode', true);
+      newSessId = sess.id;
+      const blankMsg = LocalStore.addMessage(newSessId, { role: 'assistant', content: '', scale_level: 1, collapsed: 0 });
+      newMsgId = blankMsg.id;
+    }
+
+    session_id = newSessId;
+    isNewSession = true;
+    __turingInitialMessageId = newMsgId || null;
     await loadSessions();
     highlightCurrentSession(session_id);
     await loadSessionHistory(session_id);
@@ -1163,17 +1467,19 @@ async function startTuringMode() {
 }
 
 function renameSessionOnServer(id, name) {
+  LocalStore.renameSession(id, name);
   fetch('/rename-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: id, session_name: name }) })
-    .then(r => r.json()).then(d => { if (!d.success) console.error('Failed to rename session:', d.message); })
-    .catch(err => console.error('Rename session error:', err));
+    .catch(() => {});
 }
 
 window.addEventListener('beforeunload', () => { if (session_id) hideAndStoreFeedback(session_id); });
 
 function saveFeedbackToServer(feedbackContent, message_id = null) {
+  if (session_id) {
+    LocalStore.saveFeedback(session_id, { messageId: message_id || 'stream', feedbackContent });
+  }
   fetch('/save-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id, feedbackContent, message_id }) })
-    .then(r => r.json()).then(data => { if (!data.success) console.error('Failed to save feedback:', data.message); })
-    .catch(err => console.error('Error saving feedback:', err));
+    .catch(() => {});
 }
 
 function hideAndStoreFeedback(sessionId) {
@@ -1258,11 +1564,11 @@ function createNewGroup() {
     const groupNameInput = document.getElementById('group-name-input');
     const groupName = groupNameInput.value.trim();
     if (groupName) {
+      const localGrp = LocalStore.createGroup(groupName);
+      createGroupInUI(localGrp.id, groupName);
+      try { document.body.removeChild(popupContainer); } catch(_) {}
       fetch('/create-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_name: groupName }) })
-        .then(response => response.json()).then(data => {
-          if (data.success) { createGroupInUI(data.group_id, groupName); document.body.removeChild(popupContainer); }
-          else { const p = document.createElement('p'); p.textContent = 'Error: ' + data.message; p.classList.add('error-text'); form.appendChild(p); }
-        }).catch(error => { console.error('Error creating group:', error); const p = document.createElement('p'); p.textContent = 'Error creating group. Please try again.'; p.classList.add('error-text'); form.appendChild(p); });
+        .catch(() => {});
     } else { const p = document.createElement('p'); p.textContent = 'Please enter a group name.'; p.style.color = 'red'; form.appendChild(p); }
   };
   const inputDiv = document.createElement('div'); inputDiv.classList.add('form-row');
@@ -1280,13 +1586,16 @@ function createNewGroup() {
 function createGroup() {
   const groupName = prompt('Enter name for new group:', `Group ${document.querySelectorAll('.session-group').length + 1}`);
   if (groupName && groupName.trim()) {
-    fetch('/create-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_name: groupName }) })
-      .then(response => response.json()).then(data => { if (data.success) createGroupInUI(data.group_id, groupName); else alert('Failed to create group: ' + data.message); })
-      .catch(error => { console.error('Error creating group:', error); alert('Error creating group'); });
+    const localGrp = LocalStore.createGroup(groupName.trim());
+    createGroupInUI(localGrp.id, groupName.trim());
+    fetch('/create-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_name: groupName.trim() }) })
+      .catch(() => {});
   }
 }
 
 function createGroupInUI(groupId, groupName) {
+  const existing = document.getElementById(`group-${groupId}`);
+  if (existing) return;
   const groupDiv = document.createElement('div'); groupDiv.className = 'session-group'; groupDiv.id = `group-${groupId}`; groupDiv.ondrop = drop; groupDiv.ondragover = allowDrop;
   const groupHeader = document.createElement('div'); groupHeader.className = 'group-header';
   const groupTitle = document.createElement('h4'); groupTitle.contentEditable = true; groupTitle.onblur = () => renameGroup(groupTitle, groupId); groupTitle.textContent = groupName; groupTitle.onclick = () => toggleGroup(groupTitle);
@@ -1299,28 +1608,25 @@ function createGroupInUI(groupId, groupName) {
 
 function deleteGroupHandler(groupId) {
   if (confirm('Are you sure you want to delete this group? Sessions will be preserved but ungrouped.')) {
+    LocalStore.deleteGroup(groupId);
+    const groupElement = document.getElementById(`group-${groupId}`);
+    if (groupElement) {
+      const sessions = groupElement.querySelectorAll('.session-button');
+      const newChats = document.getElementById('new-chats');
+      sessions.forEach(session => { newChats.appendChild(session); });
+      groupElement.remove();
+    }
     fetch(`/delete-group?group_id=${groupId}`, { method: 'DELETE' })
-      .then(response => response.json()).then(data => {
-        if (data.success) {
-          const groupElement = document.getElementById(`group-${groupId}`);
-          if (groupElement) {
-            const sessions = groupElement.querySelectorAll('.session-button');
-            const newChats = document.getElementById('new-chats');
-            sessions.forEach(session => { newChats.appendChild(session); });
-            groupElement.remove();
-          }
-        } else { alert('Failed to delete group: ' + data.message); }
-      }).catch(error => { console.error('Error deleting group:', error); alert('Error deleting group'); });
+      .catch(() => {});
   }
 }
 
 function renameGroup(element, groupId) {
-  const newName = element.textContent.trim();
-  if (!newName) element.textContent = 'Unnamed Group';
-  fetch('/rename-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_id: groupId, group_name: newName || 'Unnamed Group' }) })
-    .then(response => { if (!response.ok) throw new Error(`Server returned ${response.status}: ${response.statusText}`); return response.json(); })
-    .then(data => { if (!data.success) console.error('Failed to rename group:', data.message); })
-    .catch(error => { console.error('Error renaming group:', error); alert('Failed to save group name. Please try again.'); });
+  const newName = element.textContent.trim() || 'Unnamed Group';
+  element.textContent = newName;
+  LocalStore.renameGroup(groupId, newName);
+  fetch('/rename-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_id: groupId, group_name: newName }) })
+    .catch(() => {});
 }
 
 function toggleGroup(element) {
@@ -1348,21 +1654,33 @@ function drop(event) {
   if (!targetGroup) return;
   const groupId = targetGroup.id.replace('session-list-group-', '');
   targetGroup.appendChild(sessionButton);
+  LocalStore.updateSessionGroup(sessionId, groupId === 'new-chats' ? null : groupId);
   fetch('/update-session-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sessionId, group_id: groupId === 'new-chats' ? null : groupId }) })
-    .then(response => response.json()).then(data => { if (!data.success) console.error('Failed to update session group:', data.message); })
-    .catch(error => { console.error('Error updating session group:', error); });
+    .catch(() => {});
 }
 
 async function loadGroups() {
   try {
-    const response = await fetch('/groups');
-    const data = await response.json();
-    if (data.success) {
-      document.getElementById('session-groups').innerHTML = '';
-      data.groups.forEach(group => { createGroupInUI(group.id, group.group_name); });
-      await loadSessions();
-    } else { console.error('Failed to load groups:', data.message); }
-  } catch (error) { console.error('Error fetching groups:', error); }
+    let groups = [];
+    try {
+      const response = await fetch('/groups');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.groups)) {
+          groups = data.groups;
+        }
+      }
+    } catch (_) {}
+
+    if (groups.length === 0) {
+      groups = LocalStore.getGroups();
+    }
+
+    const groupsEl = document.getElementById('session-groups');
+    if (groupsEl) groupsEl.innerHTML = '';
+    groups.forEach(group => { createGroupInUI(group.id, group.group_name); });
+    await loadSessions();
+  } catch (error) { console.debug('Error fetching groups:', error); }
 }
 
 function setMessageInput(text) {
@@ -2037,15 +2355,29 @@ function enterAssistantEditMode(targetAssistant) {
         html = html.slice(0, refIdx);
       }
       const cleaned = sanitizeHtml(html);
-      // Send to server via websocket to generate feedback/assessment
+      // Send to server via websocket or HTTP endpoint to generate feedback/assessment
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ action: 'generateFeedback', content: cleaned, session_id }));
         showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
       } else {
-        console.warn('WebSocket not open; cannot send decipher request');
-        // Clear in-flight state and loading if we fail to send
-        setCriteriaLoading(false, wrapper);
-        window.__decipherInFlight = false;
+        showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
+        fetch('/api/decipher', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: cleaned, session_id })
+        }).then(r => r.json()).then(data => {
+          if (data.success && data.feedback) {
+            handleWebSocketMessage({ type: 'feedback', content: data.feedback });
+          } else {
+            console.error('Decipher failed:', data);
+            setCriteriaLoading(false, wrapper);
+            window.__decipherInFlight = false;
+          }
+        }).catch(err => {
+          console.error('Decipher fetch failed:', err);
+          setCriteriaLoading(false, wrapper);
+          window.__decipherInFlight = false;
+        });
       }
     } catch (e) {
       console.error('Decipher click failed:', e);
@@ -2353,6 +2685,7 @@ function enterAssistantEditMode(targetAssistant) {
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
       try {
+        LocalStore.updateMessageContent(messageId, payload.content, payload.references, payload.prompts);
         await fetch('/update-message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2360,7 +2693,7 @@ function enterAssistantEditMode(targetAssistant) {
         });
         // Update sticky Turing message header counts after save
         try { if (targetAssistant.classList.contains('turing-message')) updateTuringBarCounts(targetAssistant); } catch(_) {}
-      } catch (err) { console.warn('Failed to persist edited message:', err); }
+      } catch (err) { console.warn('Failed to persist edited message to server:', err); }
     } finally {
       exitAssistantEditMode(wrapper, true, targetAssistant);
     }
