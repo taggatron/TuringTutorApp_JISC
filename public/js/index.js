@@ -3458,13 +3458,543 @@ function updateTuringBarCounts(assistantEl) {
     }).join('');
   }
 
+  /* ── Current View State ('overview' | 'advanced') ─────────────────────── */
+  let activeView = 'overview';
+
+  function toggleAnalyticsView() {
+    activeView = (activeView === 'overview') ? 'advanced' : 'overview';
+    const overviewEl = document.getElementById('analytics-overview-view');
+    const advancedEl = document.getElementById('analytics-advanced-view');
+    const toggleBtn  = document.getElementById('analytics-view-toggle-btn');
+    const toggleText = document.getElementById('analytics-view-toggle-text');
+
+    if (activeView === 'advanced') {
+      if (overviewEl) overviewEl.style.display = 'none';
+      if (advancedEl) advancedEl.style.display = 'flex';
+      if (toggleBtn) toggleBtn.classList.add('active');
+      if (toggleText) toggleText.textContent = 'Overview';
+    } else {
+      if (overviewEl) overviewEl.style.display = 'flex';
+      if (advancedEl) advancedEl.style.display = 'none';
+      if (toggleBtn) toggleBtn.classList.remove('active');
+      if (toggleText) toggleText.textContent = 'Advanced Stats';
+    }
+    renderAnalytics();
+  }
+
+  /* ── Mathematical & Statistical Functions ──────────────────────────────── */
+  function erf(x) {
+    const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+    const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    const sign = x < 0 ? -1 : 1;
+    x = Math.abs(x);
+    const t = 1.0 / (1.0 + p * x);
+    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    return sign * y;
+  }
+
+  function normalCdf(z) {
+    return 0.5 * (1 + erf(z / Math.SQRT2));
+  }
+
+  function normalTwoTailedP(z) {
+    if (isNaN(z) || !isFinite(z)) return 1;
+    return Math.max(0.0001, Math.min(1, 2 * (1 - normalCdf(Math.abs(z)))));
+  }
+
+  function tDistributionTwoTailedP(t, df) {
+    if (isNaN(t) || isNaN(df) || df <= 0 || !isFinite(t)) return 1;
+    t = Math.abs(t);
+    if (df > 30) return normalTwoTailedP(t);
+    // Regularized incomplete beta approximation for small df
+    const x = df / (df + t * t);
+    const a = df / 2;
+    const b = 0.5;
+    function logGamma(z) {
+      const c = [57.1562356658629235, -59.5979603554754912, 14.1360979747417471,
+                 -0.4919089676901978, 0.339946499848118887e-4, 0.465236289270485756e-4,
+                 -0.983744753048795646e-4, 0.158088703224370015e-3, -0.210264441724104883e-3,
+                 0.217439618115212643e-3, -0.164318106536763890e-3, 0.844182239838527433e-4,
+                 -0.261908384015814087e-4, 0.368991826595316234e-5];
+      let y = z, x0 = 0.99999999999999709182;
+      for (let j = 0; j < 14; j++) x0 += c[j] / (++y);
+      const t0 = z + 14 - 0.5;
+      return 0.5 * Math.log(2 * Math.PI) + (z - 0.5) * Math.log(t0) - t0 + Math.log(x0);
+    }
+    function incBeta(xVal, aVal, bVal) {
+      if (xVal <= 0) return 0;
+      if (xVal >= 1) return 1;
+      const lbeta = logGamma(aVal) + logGamma(bVal) - logGamma(aVal + bVal);
+      const front = Math.exp(Math.log(xVal) * aVal + Math.log(1 - xVal) * bVal - lbeta) / aVal;
+      let f = 1, cVal = 1, dVal = 0;
+      for (let i = 1; i <= 40; i++) {
+        const m = i / 2;
+        const num = (i % 2 === 0)
+          ? (m * (bVal - m) * xVal) / ((aVal + 2 * m - 1) * (aVal + 2 * m))
+          : -((aVal + m) * (aVal + bVal + m) * xVal) / ((aVal + 2 * m) * (aVal + 2 * m + 1));
+        dVal = 1 + num * dVal;
+        if (Math.abs(dVal) < 1e-30) dVal = 1e-30;
+        dVal = 1 / dVal;
+        cVal = 1 + num / cVal;
+        if (Math.abs(cVal) < 1e-30) cVal = 1e-30;
+        const delta = cVal * dVal;
+        f *= delta;
+        if (Math.abs(delta - 1) < 1e-10) break;
+      }
+      return front * (f - 1);
+    }
+    const p = incBeta(x, a, b);
+    return Math.max(0.0001, Math.min(1, isNaN(p) ? normalTwoTailedP(t) : p));
+  }
+
+  function formatPValue(p) {
+    if (isNaN(p) || p === null) return '—';
+    if (p < 0.001) return '< 0.001';
+    return `= ${p.toFixed(3)}`;
+  }
+
+  /* ── 1. Linear Regression (OLS) Test ── */
+  function computeLinearRegression(records) {
+    const n = records.length;
+    if (n < 3) return null;
+    const sorted = [...records].sort((a, b) => a.ts - b.ts);
+    const t0 = sorted[0].ts;
+    const xs = sorted.map(r => (r.ts - t0) / 86400000); // Days from first point
+    const ys = sorted.map(r => r.level);
+
+    const xMean = xs.reduce((s, v) => s + v, 0) / n;
+    const yMean = ys.reduce((s, v) => s + v, 0) / n;
+
+    let ssXX = 0, ssYY = 0, ssXY = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = xs[i] - xMean;
+      const dy = ys[i] - yMean;
+      ssXX += dx * dx;
+      ssYY += dy * dy;
+      ssXY += dx * dy;
+    }
+
+    if (ssXX === 0) {
+      return { n, slope: 0, intercept: yMean, r: 0, r2: 0, t: 0, p: 1, se: 0, isSig: false, direction: 'stable' };
+    }
+
+    const slope = ssXY / ssXX;
+    const intercept = yMean - slope * xMean;
+    const r = ssYY === 0 ? 0 : ssXY / Math.sqrt(ssXX * ssYY);
+    const r2 = Math.max(0, Math.min(1, r * r));
+
+    // Residual standard error
+    let ssRes = 0;
+    for (let i = 0; i < n; i++) {
+      const pred = intercept + slope * xs[i];
+      const res = ys[i] - pred;
+      ssRes += res * res;
+    }
+    const df = Math.max(1, n - 2);
+    const sRes = Math.sqrt(ssRes / df);
+    const seSlope = sRes / Math.sqrt(ssXX);
+    const t = seSlope === 0 ? 0 : slope / seSlope;
+    const p = tDistributionTwoTailedP(t, df);
+
+    return {
+      n,
+      slope,
+      intercept,
+      r,
+      r2,
+      t,
+      df,
+      p,
+      seSlope,
+      isSig: p < 0.05,
+      direction: slope > 0.005 ? 'increasing' : (slope < -0.005 ? 'decreasing' : 'stable')
+    };
+  }
+
+  /* ── 2. Welch's t-Test (Two-Period Split) ── */
+  function computeWelchTTest(records) {
+    const n = records.length;
+    if (n < 4) return null;
+    const sorted = [...records].sort((a, b) => a.ts - b.ts);
+    const mid = Math.floor(n / 2);
+    const g1 = sorted.slice(0, mid).map(r => r.level);
+    const g2 = sorted.slice(mid).map(r => r.level);
+
+    const n1 = g1.length, n2 = g2.length;
+    const m1 = g1.reduce((s, v) => s + v, 0) / n1;
+    const m2 = g2.reduce((s, v) => s + v, 0) / n2;
+
+    const var1 = g1.reduce((s, v) => s + (v - m1) ** 2, 0) / Math.max(1, n1 - 1);
+    const var2 = g2.reduce((s, v) => s + (v - m2) ** 2, 0) / Math.max(1, n2 - 1);
+
+    const se1 = var1 / n1;
+    const se2 = var2 / n2;
+    const seDiff = Math.sqrt(se1 + se2);
+
+    if (seDiff === 0) {
+      return { n1, n2, m1, m2, sd1: Math.sqrt(var1), sd2: Math.sqrt(var2), diff: m2 - m1, d: 0, t: 0, df: n - 2, p: 1, isSig: false };
+    }
+
+    const t = (m2 - m1) / seDiff;
+    const dfNum = (se1 + se2) ** 2;
+    const dfDen = ((se1 ** 2) / Math.max(1, n1 - 1)) + ((se2 ** 2) / Math.max(1, n2 - 1));
+    const df = dfDen === 0 ? (n1 + n2 - 2) : Math.max(1, dfNum / dfDen);
+
+    // Pooled SD for Cohen's d
+    const sPool = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / Math.max(1, n1 + n2 - 2));
+    const d = sPool === 0 ? 0 : (m2 - m1) / sPool;
+    const p = tDistributionTwoTailedP(t, df);
+
+    return {
+      n1, n2,
+      m1, m2,
+      sd1: Math.sqrt(var1),
+      sd2: Math.sqrt(var2),
+      diff: m2 - m1,
+      d,
+      t,
+      df,
+      p,
+      isSig: p < 0.05
+    };
+  }
+
+  /* ── 3. Mann-Kendall Monotonic Trend Test ── */
+  function computeMannKendallTest(records) {
+    const n = records.length;
+    if (n < 3) return null;
+    const sorted = [...records].sort((a, b) => a.ts - b.ts);
+    const ys = sorted.map(r => r.level);
+
+    let S = 0;
+    const slopes = [];
+    for (let k = 0; k < n - 1; k++) {
+      for (let j = k + 1; j < n; j++) {
+        const dy = ys[j] - ys[k];
+        if (dy > 0) S += 1;
+        else if (dy < 0) S -= 1;
+
+        const dt = (sorted[j].ts - sorted[k].ts) / 86400000;
+        if (dt > 0.001) slopes.push(dy / dt);
+      }
+    }
+
+    // Tie counts for levels 1..5
+    const tieCounts = {};
+    ys.forEach(y => { tieCounts[y] = (tieCounts[y] || 0) + 1; });
+    let tieSum = 0;
+    Object.values(tieCounts).forEach(tp => {
+      if (tp > 1) tieSum += tp * (tp - 1) * (2 * tp + 5);
+    });
+
+    const varS = (n * (n - 1) * (2 * n + 5) - tieSum) / 18;
+    let Z = 0;
+    if (varS > 0) {
+      if (S > 0) Z = (S - 1) / Math.sqrt(varS);
+      else if (S < 0) Z = (S + 1) / Math.sqrt(varS);
+    }
+
+    const p = normalTwoTailedP(Z);
+    const tau = (2 * S) / (n * (n - 1));
+
+    // Sen's slope (median of slopes)
+    slopes.sort((a, b) => a - b);
+    const sensSlope = slopes.length ? slopes[Math.floor(slopes.length / 2)] : 0;
+
+    return {
+      n,
+      S,
+      tau,
+      Z,
+      p,
+      sensSlope,
+      isSig: p < 0.05
+    };
+  }
+
+  /* ── Render Advanced Stats View ────────────────────────────────────────── */
+  function renderAdvancedStats(records, period) {
+    const bannerEl = document.getElementById('advanced-stats-banner');
+    const testsGridEl = document.getElementById('advanced-tests-grid');
+    const canvas = document.getElementById('analytics-regression-chart');
+    const emptyEl = document.getElementById('analytics-regression-empty');
+
+    if (!bannerEl || !testsGridEl || !canvas || !emptyEl) return;
+
+    if (records.length < 3) {
+      canvas.style.display = 'none';
+      emptyEl.style.display = 'flex';
+      bannerEl.className = 'advanced-stats-banner';
+      bannerEl.innerHTML = `
+        <div class="advanced-stats-banner-icon">ℹ️</div>
+        <div class="advanced-stats-banner-content">
+          <div class="advanced-stats-banner-title">More Data Needed for Significance Tests</div>
+          <div class="advanced-stats-banner-desc">You currently have ${records.length} prompt(s) recorded in this period. At least 3–4 prompts are required to compute regression slopes, Welch's t-tests, and Mann-Kendall trend metrics.</div>
+        </div>`;
+      testsGridEl.innerHTML = `
+        <div class="stat-test-card" style="grid-column: 1 / -1; text-align: center; color: var(--color-text-muted);">
+          <p style="margin: 8px 0; font-size: 0.8rem;">Send a few more prompts to unlock real-time statistical significance testing.</p>
+        </div>`;
+      return;
+    }
+
+    canvas.style.display = 'block';
+    emptyEl.style.display = 'none';
+
+    // Compute tests
+    const ols = computeLinearRegression(records);
+    const welch = computeWelchTTest(records);
+    const mk = computeMannKendallTest(records);
+
+    const isAnySig = (ols && ols.isSig) || (welch && welch.isSig) || (mk && mk.isSig);
+
+    // 1. Summary Banner
+    if (isAnySig) {
+      bannerEl.className = 'advanced-stats-banner significant';
+      const dirText = (ols && ols.slope > 0) ? 'an increase in AI autonomy' : 'a shift toward lower AI dependence / more human editing';
+      bannerEl.innerHTML = `
+        <div class="advanced-stats-banner-icon">📈</div>
+        <div class="advanced-stats-banner-content">
+          <div class="advanced-stats-banner-title" style="color: #15803d;">Statistically Significant Change Detected (p < 0.05)</div>
+          <div class="advanced-stats-banner-desc">Your prompt patterns show ${dirText} over time with statistical significance (${ols ? `OLS slope = ${(ols.slope > 0 ? '+' : '') + ols.slope.toFixed(2)}/day, p ${formatPValue(ols.p)}` : ''}).</div>
+        </div>`;
+    } else {
+      bannerEl.className = 'advanced-stats-banner';
+      bannerEl.innerHTML = `
+        <div class="advanced-stats-banner-icon">⚖️</div>
+        <div class="advanced-stats-banner-content">
+          <div class="advanced-stats-banner-title">No Statistically Significant Trend (p ≥ 0.05)</div>
+          <div class="advanced-stats-banner-desc">Your AI interaction levels have remained statistically stable across this timeframe (${ols ? `OLS slope = ${(ols.slope > 0 ? '+' : '') + ols.slope.toFixed(2)}/day, p ${formatPValue(ols.p)}` : ''}). Variations are consistent with standard fluctuations.</div>
+        </div>`;
+    }
+
+    // 2. Render Regression Time Series Canvas Chart
+    const DPR = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth || 700;
+    const H = 160;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(DPR, DPR);
+
+    const PAD = { top: 20, right: 24, bottom: 30, left: 45 };
+    const chartW = W - PAD.left - PAD.right;
+    const chartH = H - PAD.top - PAD.bottom;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Y Axis levels 1 to 5
+    ctx.strokeStyle = 'rgba(90,60,180,0.08)';
+    ctx.lineWidth = 1;
+    for (let lvl = 1; lvl <= 5; lvl++) {
+      const y = PAD.top + chartH - ((lvl - 1) / 4) * chartH;
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, y);
+      ctx.lineTo(PAD.left + chartW, y);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(90,80,130,0.6)';
+      ctx.font = '10px Inter, system-ui';
+      ctx.textAlign = 'right';
+      ctx.fillText(`L${lvl}`, PAD.left - 6, y + 3);
+    }
+
+    // Sorted points
+    const sorted = [...records].sort((a, b) => a.ts - b.ts);
+    const minT = sorted[0].ts;
+    const maxT = Math.max(minT + 86400000, sorted[sorted.length - 1].ts);
+    const tSpan = Math.max(1, maxT - minT);
+
+    function getX(ts) {
+      return PAD.left + ((ts - minT) / tSpan) * chartW;
+    }
+    function getY(level) {
+      return PAD.top + chartH - ((level - 1) / 4) * chartH;
+    }
+
+    // Draw individual prompt points
+    sorted.forEach(r => {
+      const px = getX(r.ts);
+      const py = getY(r.level);
+
+      ctx.beginPath();
+      ctx.arc(px, py, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = LEVEL_META[r.level].color;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    });
+
+    // Draw OLS Regression Fit Line
+    if (ols) {
+      const x0 = PAD.left;
+      const x1 = PAD.left + chartW;
+      const daysTotal = tSpan / 86400000;
+      const yStartLevel = ols.intercept;
+      const yEndLevel = ols.intercept + ols.slope * daysTotal;
+
+      const y0 = getY(Math.max(1, Math.min(5, yStartLevel)));
+      const y1 = getY(Math.max(1, Math.min(5, yEndLevel)));
+
+      // Glowing regression line
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.strokeStyle = ols.isSig ? '#10b981' : '#7c3aed';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Regression Equation & p-value label on canvas
+      ctx.fillStyle = ols.isSig ? '#047857' : '#5b21b6';
+      ctx.font = 'bold 10px Inter, system-ui';
+      ctx.textAlign = 'right';
+      const slopeStr = (ols.slope >= 0 ? '+' : '') + ols.slope.toFixed(2);
+      ctx.fillText(`OLS Trend: ${slopeStr}/day (R² = ${ols.r2.toFixed(2)}, p ${formatPValue(ols.p)})`, PAD.left + chartW, PAD.top - 6);
+    }
+
+    // X Axis Labels
+    const startStr = new Date(minT).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const endStr = new Date(maxT).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    ctx.fillStyle = 'rgba(90,80,130,0.6)';
+    ctx.font = '10px Inter, system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText(startStr, PAD.left, PAD.top + chartH + 18);
+    ctx.textAlign = 'right';
+    ctx.fillText(endStr, PAD.left + chartW, PAD.top + chartH + 18);
+
+    // 3. Render 3 Statistical Test Cards
+    const sigBadge = (isSig, p) => isSig
+      ? `<span class="stat-badge stat-badge-sig">p < 0.05 • Sig</span>`
+      : `<span class="stat-badge stat-badge-insig">p ≥ 0.05 • Not Sig</span>`;
+
+    let html = '';
+
+    // Card 1: Linear Regression
+    if (ols) {
+      html += `
+        <div class="stat-test-card">
+          <div class="stat-test-header">
+            <span class="stat-test-name">1. Linear Regression (OLS)</span>
+            ${sigBadge(ols.isSig, ols.p)}
+          </div>
+          <div class="stat-test-metrics">
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">R² Variance</span>
+              <span class="stat-metric-val">${(ols.r2 * 100).toFixed(1)}%</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">p-value</span>
+              <span class="stat-metric-val p-val">${formatPValue(ols.p)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">Slope (Δ/day)</span>
+              <span class="stat-metric-val">${(ols.slope >= 0 ? '+' : '') + ols.slope.toFixed(2)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">t-statistic</span>
+              <span class="stat-metric-val">${ols.t.toFixed(2)}</span>
+            </div>
+          </div>
+          <div class="stat-test-desc">
+            ${ols.isSig
+              ? `Significant ${ols.direction} trajectory (${ols.slope > 0 ? 'higher' : 'lower'} AI level over time, t(${ols.df}) = ${ols.t.toFixed(2)}).`
+              : `Slope is not significantly different from zero (p = ${ols.p.toFixed(3)}). Usage is statistically flat.`}
+          </div>
+        </div>`;
+    }
+
+    // Card 2: Welch's t-Test
+    if (welch) {
+      html += `
+        <div class="stat-test-card">
+          <div class="stat-test-header">
+            <span class="stat-test-name">2. Welch's t-Test (Split)</span>
+            ${sigBadge(welch.isSig, welch.p)}
+          </div>
+          <div class="stat-test-metrics">
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">Early vs Recent Mean</span>
+              <span class="stat-metric-val">${welch.m1.toFixed(1)} → ${welch.m2.toFixed(1)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">p-value</span>
+              <span class="stat-metric-val p-val">${formatPValue(welch.p)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">Mean Shift (Δμ)</span>
+              <span class="stat-metric-val">${(welch.diff >= 0 ? '+' : '') + welch.diff.toFixed(2)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">Cohen's d</span>
+              <span class="stat-metric-val">${welch.d.toFixed(2)}</span>
+            </div>
+          </div>
+          <div class="stat-test-desc">
+            ${welch.isSig
+              ? `Statistically significant difference between earlier (μ=${welch.m1.toFixed(1)}) and recent (μ=${welch.m2.toFixed(1)}) prompts (d = ${welch.d.toFixed(2)}).`
+              : `No significant difference between early (μ=${welch.m1.toFixed(1)}) and recent (μ=${welch.m2.toFixed(1)}) prompts.`}
+          </div>
+        </div>`;
+    } else {
+      html += `
+        <div class="stat-test-card">
+          <div class="stat-test-header">
+            <span class="stat-test-name">2. Welch's t-Test (Split)</span>
+            <span class="stat-badge stat-badge-insig">N < 4</span>
+          </div>
+          <div class="stat-test-desc">Requires at least 4 prompts to split into earlier vs. recent groups.</div>
+        </div>`;
+    }
+
+    // Card 3: Mann-Kendall Trend Test
+    if (mk) {
+      html += `
+        <div class="stat-test-card">
+          <div class="stat-test-header">
+            <span class="stat-test-name">3. Mann-Kendall Trend</span>
+            ${sigBadge(mk.isSig, mk.p)}
+          </div>
+          <div class="stat-test-metrics">
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">Kendall's τ</span>
+              <span class="stat-metric-val">${(mk.tau >= 0 ? '+' : '') + mk.tau.toFixed(2)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">p-value</span>
+              <span class="stat-metric-val p-val">${formatPValue(mk.p)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">Z-Score</span>
+              <span class="stat-metric-val">${mk.Z.toFixed(2)}</span>
+            </div>
+            <div class="stat-test-metric">
+              <span class="stat-metric-key">Sen's Slope</span>
+              <span class="stat-metric-val">${(mk.sensSlope >= 0 ? '+' : '') + mk.sensSlope.toFixed(2)}</span>
+            </div>
+          </div>
+          <div class="stat-test-desc">
+            ${mk.isSig
+              ? `Non-parametric test confirms a monotonic trend across ordinal prompt levels (Z = ${mk.Z.toFixed(2)}, p < 0.05).`
+              : `Non-parametric rank test indicates monotonic stability over time (Z = ${mk.Z.toFixed(2)}, p = ${mk.p.toFixed(3)}).`}
+          </div>
+        </div>`;
+    }
+
+    testsGridEl.innerHTML = html;
+  }
+
   /* ── Full render ──────────────────────────────────────────────────────── */
   function renderAnalytics() {
     const all     = loadRecords();
     const records = filterByPeriod(all, activePeriod);
-    renderStatCards(records);
-    renderBarChart(records, activePeriod);
-    renderDonut(records);
+    if (activeView === 'advanced') {
+      renderAdvancedStats(records, activePeriod);
+    } else {
+      renderStatCards(records);
+      renderBarChart(records, activePeriod);
+      renderDonut(records);
+    }
   }
 
   /* ── Open / Close ─────────────────────────────────────────────────────── */
@@ -3487,6 +4017,10 @@ function updateTuringBarCounts(assistantEl) {
     // Open button in sidebar
     const navBtn = document.getElementById('analytics-nav-btn');
     if (navBtn) navBtn.addEventListener('click', openAnalytics);
+
+    // Advanced Stats View toggle button in header
+    const viewToggleBtn = document.getElementById('analytics-view-toggle-btn');
+    if (viewToggleBtn) viewToggleBtn.addEventListener('click', toggleAnalyticsView);
 
     // Close button
     const closeBtn = document.getElementById('analytics-modal-close');
@@ -3532,22 +4066,6 @@ function updateTuringBarCounts(assistantEl) {
       const modal = document.getElementById('analytics-modal');
       if (modal && modal.classList.contains('visible')) renderAnalytics();
     });
-
-    // Also seed a demo record if storage is empty so there's something to see
-    // Remove this if you don't want demo data
-    /* DEMO SEED – comment out for production
-    if (loadRecords().length === 0) {
-      const levels = [1,2,2,2,3,3,4,5];
-      for (let d = 13; d >= 0; d--) {
-        const count = Math.floor(Math.random()*4)+1;
-        for (let i=0;i<count;i++) {
-          const ts = Date.now() - d*86400000 - Math.random()*3600000*8;
-          const level = levels[Math.floor(Math.random()*levels.length)];
-          const r = loadRecords(); r.push({level,ts}); saveRecords(r);
-        }
-      }
-    }
-    */
   }, 50);
 
   // Expose recordAssessment globally so other code can call it if needed

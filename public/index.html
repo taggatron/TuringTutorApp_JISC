@@ -606,6 +606,12 @@
                         <line x1="2" y1="20" x2="22" y2="20"></line>
                     </svg>
                     <h2 id="analytics-modal-title">My AI Use Analytics</h2>
+                    <button id="analytics-view-toggle-btn" class="analytics-view-toggle-btn" type="button" title="Toggle between overview and statistical significance tests">
+                        <svg class="toggle-icon-chart" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span id="analytics-view-toggle-text">Advanced Stats</span>
+                    </button>
                 </div>
                 <div class="analytics-modal-controls">
                     <div class="analytics-period-tabs" role="group" aria-label="Time period">
@@ -619,25 +625,51 @@
                 </div>
             </div>
 
-            <!-- Stat cards -->
-            <div class="analytics-stat-cards" id="analytics-stat-cards"></div>
+            <!-- Standard Overview View -->
+            <div id="analytics-overview-view" class="analytics-view-pane">
+                <!-- Stat cards -->
+                <div class="analytics-stat-cards" id="analytics-stat-cards"></div>
 
-            <!-- Main chart -->
-            <div class="analytics-chart-wrapper">
-                <div class="analytics-chart-label">AI Use Level — frequency over time</div>
-                <canvas id="analytics-chart" class="analytics-canvas"></canvas>
-                <div class="analytics-chart-empty" id="analytics-chart-empty">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                    <p>No data yet — start chatting and your AI use will be tracked here.</p>
+                <!-- Main chart -->
+                <div class="analytics-chart-wrapper">
+                    <div class="analytics-chart-label">AI Use Level — frequency over time</div>
+                    <canvas id="analytics-chart" class="analytics-canvas"></canvas>
+                    <div class="analytics-chart-empty" id="analytics-chart-empty">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        <p>No data yet — start chatting and your AI use will be tracked here.</p>
+                    </div>
+                </div>
+
+                <!-- Donut breakdown -->
+                <div class="analytics-breakdown-row">
+                    <div class="analytics-donut-wrap">
+                        <canvas id="analytics-donut" width="140" height="140"></canvas>
+                    </div>
+                    <div class="analytics-legend" id="analytics-legend"></div>
                 </div>
             </div>
 
-            <!-- Donut breakdown -->
-            <div class="analytics-breakdown-row">
-                <div class="analytics-donut-wrap">
-                    <canvas id="analytics-donut" width="140" height="140"></canvas>
+            <!-- Advanced Statistical Significance View -->
+            <div id="analytics-advanced-view" class="analytics-view-pane" style="display: none;">
+                <!-- Summary Significance Banner -->
+                <div class="advanced-stats-banner" id="advanced-stats-banner"></div>
+
+                <!-- Regression & Trend Time Series Chart -->
+                <div class="advanced-chart-section">
+                    <div class="advanced-section-header">
+                        <span class="advanced-section-title">TIME SERIES REGRESSION &amp; TRENDLINE</span>
+                        <span class="advanced-section-subtitle">Ordinary Least Squares (OLS) fit on AI prompt levels over time</span>
+                    </div>
+                    <div class="advanced-chart-wrapper">
+                        <canvas id="analytics-regression-chart" class="analytics-canvas"></canvas>
+                        <div class="analytics-chart-empty" id="analytics-regression-empty">
+                            <p>Need at least 3 prompts to compute statistical regression.</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="analytics-legend" id="analytics-legend"></div>
+
+                <!-- 3 Statistical Significance Tests Cards -->
+                <div class="advanced-tests-grid" id="advanced-tests-grid"></div>
             </div>
 
             <!-- Clear data -->
