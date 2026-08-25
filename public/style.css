@@ -1897,46 +1897,88 @@ body {
 /* Prompt list */
 .nav-accordion-prompts {
     list-style: none;
-    padding: 0;
+    padding: 4px 10px 8px 18px;
     margin: 0;
     overflow: hidden;
     max-height: 0;
-    transition: max-height 0.25s cubic-bezier(.4,0,.2,1);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: max-height 0.28s cubic-bezier(.4,0,.2,1), opacity 0.2s ease;
+    opacity: 0;
 }
 
 .nav-accordion-prompts.open {
-    max-height: 300px;
+    max-height: 400px;
+    opacity: 1;
+    padding-top: 4px;
+    padding-bottom: 8px;
 }
 
 .nav-accordion-prompts li {
     padding: 0;
+    margin: 0;
+    width: 100%;
 }
 
 .nav-prompt-btn {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     width: 100%;
-    background: none;
-    border: none;
+    box-sizing: border-box;
+    background: #ffffff;
+    border: 1px solid rgba(88, 44, 131, 0.16);
     cursor: pointer;
     font-family: inherit;
-    font-size: 0.73rem;
-    font-weight: 400;
-    color: var(--color-text-main, #1a1a2e);
-    padding: 5px 14px 5px 40px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: #2e1065;
+    padding: 8px 12px;
     text-align: left;
-    border-radius: 5px;
-    transition: background 0.15s ease, color 0.15s ease;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(88, 44, 131, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
     line-height: 1.35;
     white-space: normal;
+    word-break: break-word;
+    position: relative;
+}
+
+.nav-prompt-btn::after {
+    content: "↗";
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: rgba(88, 44, 131, 0.4);
+    flex-shrink: 0;
+    margin-left: auto;
+    transition: transform 0.18s ease, color 0.18s ease;
 }
 
 .nav-prompt-btn:hover {
-    background: var(--lavender-100, rgba(138,43,226,0.08));
+    background: linear-gradient(135deg, #ffffff 0%, #f7f2fe 100%);
+    border-color: rgba(88, 44, 131, 0.4);
     color: var(--sdc-purple, #582c83);
+    box-shadow: 0 4px 12px rgba(88, 44, 131, 0.14), 0 2px 4px rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+}
+
+.nav-prompt-btn:hover::after {
+    color: var(--sdc-purple, #582c83);
+    transform: translate(1px, -1px);
 }
 
 .nav-prompt-btn:active {
-    background: var(--lavender-200, rgba(138,43,226,0.14));
+    background: #ede9fe;
+    border-color: var(--sdc-purple, #582c83);
+    box-shadow: 0 1px 2px rgba(88, 44, 131, 0.1);
+    transform: translateY(0) scale(0.99);
+}
+
+.nav-prompt-btn:focus-visible {
+    outline: 2px solid var(--sdc-purple, #582c83);
+    outline-offset: 1px;
 }
 /* ── End Sidebar Examples Accordion ─────────────────────────────────────── */
 
