@@ -22,6 +22,18 @@ function hideWelcomeState() {
   if (welcome) welcome.remove();
 }
 
+function createAssistantHeader() {
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'message-assistant-header';
+  headerDiv.innerHTML = `
+    <div class="assistant-avatar">
+      <img src="Alanbotlogo.svg" alt="Turing Tutor Logo" class="assistant-avatar-img">
+    </div>
+    <span class="assistant-name">Turing Tutor</span>
+  `;
+  return headerDiv;
+}
+
 function syncTuringMessageEmptyState(messageElement) {
   if (!messageElement?.classList.contains('turing-message')) return;
 
@@ -423,6 +435,8 @@ function handleWebSocketMessage(message) {
         botMessageDiv = document.createElement('div');
         botMessageDiv.className = 'message assistant with-feedback';
         botMessageDiv.dataset.messageId = 'streaming';
+        const headerDiv = createAssistantHeader();
+        botMessageDiv.appendChild(headerDiv);
         // create content and overlay without inline style attributes to satisfy CSP
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
@@ -1038,6 +1052,8 @@ async function loadChatHistory(messages) {
       messageElement.dataset.messageId = msg.message_id;
       const showOverlay = feedbackByMessageId.has(String(msg.message_id));
       if (showOverlay) messageElement.classList.add('overlay-active');
+      const headerDiv = createAssistantHeader();
+      messageElement.appendChild(headerDiv);
       // build content and overlay nodes without inline style attributes (CSP-safe)
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
@@ -1280,6 +1296,8 @@ async function loadSessionHistory(sessionId) {
         assistantMessageDiv.dataset.messageId = msg.message_id;
         const showOverlay = isTuring ? false : messagesWithFeedback.has(String(msg.message_id));
         if (showOverlay) assistantMessageDiv.classList.add('overlay-active');
+        const headerDiv = createAssistantHeader();
+        assistantMessageDiv.appendChild(headerDiv);
         // Detect true HTML either directly or when stored HTML-escaped in DB
         const decodedCandidate = decodeHtmlEntities(msg.content || '');
         const __isHtml = /<\w+[^>]*>/.test(decodedCandidate);
