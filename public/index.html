@@ -88,10 +88,30 @@
                         </div>
                     </div>
                 </div>
-                <a href="#" class="nav-item">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                    Resources
-                </a>
+                <!-- Resources & Web Search accordion -->
+                <div class="nav-item-accordion" id="resources-accordion">
+                    <button class="nav-item nav-item-accordion-trigger" id="resources-accordion-btn" aria-expanded="false" aria-controls="resources-dropdown">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        <span>Resources &amp; Web Search</span>
+                        <svg class="accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="nav-accordion-panel" id="resources-dropdown" role="region" aria-labelledby="resources-accordion-btn">
+                        <ul class="nav-submenu-list">
+                            <li>
+                                <button class="nav-subitem-btn" id="my-resources-btn" type="button">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                                    <span>My Resources</span>
+                                </button>
+                            </li>
+                            <li>
+                                <button class="nav-subitem-btn" id="web-research-btn" type="button">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                    <span>Web Research</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
                 <a href="#" class="nav-item">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     Settings
@@ -277,6 +297,9 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Attached Resource Chips Container -->
+                <div id="attached-resources-container" class="attached-resources-container" style="display: none;" aria-label="Attached resources"></div>
 
                 <div class="chat-input">
                     <button class="tools-toggle" id="tools-toggle" title="Tools" aria-label="Tools"
@@ -680,6 +703,124 @@
         </div>
     </div>
     <!-- ── End AI Analytics Modal ────────────────────────────────────────── -->
+
+    <!-- ── My Resources Modal ────────────────────────────────────────────── -->
+    <div id="my-resources-modal" class="resources-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="my-resources-title" style="display: none;">
+        <div class="resources-modal-panel">
+            <div class="resources-modal-header">
+                <div class="resources-modal-title-row">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                    <h2 id="my-resources-title">My Resources</h2>
+                </div>
+                <button id="my-resources-close" class="resources-close-btn" aria-label="Close My Resources">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="resources-modal-toolbar">
+                <div class="resources-search-wrap">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="resources-search-input" placeholder="Search resources..." aria-label="Search resources">
+                </div>
+                <div class="resources-filter-tabs" role="tablist" aria-label="Resource Types">
+                    <button class="resource-filter-tab active" data-type="all" role="tab" aria-selected="true">All</button>
+                    <button class="resource-filter-tab" data-type="web_page" role="tab" aria-selected="false">Web</button>
+                    <button class="resource-filter-tab" data-type="document" role="tab" aria-selected="false">Documents</button>
+                </div>
+                <button id="resources-add-quick-btn" class="resources-add-btn" type="button" title="Add a new resource">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>+ Add</span>
+                </button>
+            </div>
+            <div class="resources-cards-container" id="resources-cards-container">
+                <!-- Dynamically loaded resource cards -->
+            </div>
+        </div>
+    </div>
+    <!-- ── End My Resources Modal ────────────────────────────────────────── -->
+
+    <!-- ── Web Research Modal ────────────────────────────────────────────── -->
+    <div id="web-research-modal" class="web-research-overlay" role="dialog" aria-modal="true" aria-labelledby="web-research-title" style="display: none;">
+        <div class="web-research-panel">
+            <div class="web-research-header">
+                <div class="web-research-header-left">
+                    <div class="web-research-title-wrap">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                        <h2 id="web-research-title">Web Research</h2>
+                    </div>
+                </div>
+                <button id="web-research-close" class="web-research-close-btn" aria-label="Close Web Research">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="web-research-toolbar">
+                <div class="web-nav-controls">
+                    <button id="web-nav-back" class="web-nav-btn" title="Back" aria-label="Back" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                    <button id="web-nav-forward" class="web-nav-btn" title="Forward" aria-label="Forward" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                    <button id="web-nav-refresh" class="web-nav-btn" title="Refresh" aria-label="Refresh">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    </button>
+                </div>
+                <div class="web-address-bar">
+                    <svg class="web-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="web-address-input" placeholder="Search the web or enter a URL" aria-label="Search the web or enter a URL">
+                    <button id="web-address-submit" class="web-address-go-btn" title="Go / Search" aria-label="Search">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="web-research-loading" class="web-research-loading-bar" style="display: none;"></div>
+            <div class="web-research-body" id="web-research-body">
+                <!-- Populated dynamically: Home/search view or reader preview -->
+            </div>
+            <div class="web-research-footer" id="web-research-footer">
+                <div class="web-current-page-info">
+                    <span class="web-current-label">Current page:</span>
+                    <span id="web-current-url" class="web-current-url-text">None selected</span>
+                </div>
+                <button id="web-add-resource-btn" class="web-add-resource-btn" type="button" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>+ Add as Resource</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- ── End Web Research Modal ────────────────────────────────────────── -->
+
+    <!-- ── Quick Add Resource Modal ──────────────────────────────────────── -->
+    <div id="quick-add-modal" class="quick-add-overlay" role="dialog" aria-modal="true" aria-labelledby="quick-add-title" style="display: none;">
+        <div class="quick-add-panel">
+            <div class="quick-add-header">
+                <h3 id="quick-add-title">Add Resource</h3>
+                <button id="quick-add-close" class="quick-add-close-btn" aria-label="Close">&times;</button>
+            </div>
+            <form id="quick-add-form" class="quick-add-form">
+                <div class="quick-add-field">
+                    <label for="quick-add-url">Web Page URL</label>
+                    <input type="url" id="quick-add-url" placeholder="https://www.nhs.uk/..." required>
+                </div>
+                <div class="quick-add-field">
+                    <label for="quick-add-title-input">Title (Optional)</label>
+                    <input type="text" id="quick-add-title-input" placeholder="Will be fetched automatically if blank">
+                </div>
+                <div class="quick-add-field">
+                    <label for="quick-add-desc">Notes / Description (Optional)</label>
+                    <textarea id="quick-add-desc" rows="2" placeholder="Key evidence or diagnostic notes..."></textarea>
+                </div>
+                <div class="quick-add-actions">
+                    <button type="button" id="quick-add-cancel" class="quick-add-cancel-btn">Cancel</button>
+                    <button type="submit" id="quick-add-submit" class="quick-add-submit-btn">Save Resource</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- ── End Quick Add Resource Modal ──────────────────────────────────── -->
+
+    <!-- ── Global Toast Notification ─────────────────────────────────────── -->
+    <div id="tt-toast" class="tt-toast" role="status" aria-live="polite" style="display: none;"></div>
 
 </body>
 

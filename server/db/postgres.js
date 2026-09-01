@@ -377,24 +377,209 @@ function attachDbUser(req, res, next) {
   // more reliable than enterWith in some server frameworks where the
   // continuation may run in a different async scope.
   als.run({ userId: uid }, () => next());
+// Ensure resource table and RLS policies exist
+async function ensureResourceTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS resource (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'web_page',
+        title TEXT,
+        url TEXT,
+        domain TEXT,
+        description TEXT,
+        content TEXT,
+        origin TEXT DEFAULT 'student_web',
+        metadata_json JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query('CREATE INDEX IF NOT EXISTS idx_resource_user_id ON resource(user_id)');
+    await query('CREATE INDEX IF NOT EXISTS idx_resource_type ON resource(type)');
+    await query('CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_user_url ON resource(user_id, url) WHERE url IS NOT NULL');
+
+    // Ensure RLS enabled
+    try {
+      await query('ALTER TABLE resource ENABLE ROW LEVEL SECURITY');
+      await query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'resource' AND policyname = 'resource_select_policy') THEN
+            CREATE POLICY resource_select_policy ON resource FOR SELECT USING (
+              current_role = 'app_admin' OR user_id = COALESCE(current_setting('app.current_user_id', true), '0')::int
+            );
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'resource' AND policyname = 'resource_insert_policy') THEN
+            CREATE POLICY resource_insert_policy ON resource FOR INSERT WITH CHECK (
+              current_role = 'app_admin' OR user_id = COALESCE(current_setting('app.current_user_id', true), '0')::int
+            );
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'resource' AND policyname = 'resource_modify_policy') THEN
+            CREATE POLICY resource_modify_policy ON resource FOR UPDATE USING (
+              current_role = 'app_admin' OR user_id = COALESCE(current_setting('app.current_user_id', true), '0')::int
+            );
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'resource' AND policyname = 'resource_delete_policy') THEN
+            CREATE POLICY resource_delete_policy ON resource FOR DELETE USING (
+              current_role = 'app_admin' OR user_id = COALESCE(current_setting('app.current_user_id', true), '0')::int
+            );
+          END IF;
+        END $$;
+      `);
+    } catch (rlsErr) {
+      console.warn('[DB] Resource RLS policy setup warning:', rlsErr && rlsErr.message ? rlsErr.message : rlsErr);
+    }
+
+    console.log('[DB] resource table and policies ensured');
+  } catch (e) {
+    console.error('[DB] Failed to ensure resource table:', e && e.message ? e.message : e);
+  }
 }
 
-// Helper to set current user id programmatically for the current execution
-// context (useful immediately after login within the same request)
-function setCurrentUserId(userId) {
-  // enterWith is appropriate for programmatic calls that want to
-  // establish the store for the current async context (for example,
-  // immediately after login within the same request handler).
-  // Use null when clearing the current user so the query() helper
-  // doesn't set the session GUC to '0' which would interfere with
-  // RLS policies that expect the GUC to be absent for anonymous users.
-  als.enterWith({ userId: userId ? String(userId) : null });
+// Resources CRUD
+async function createResource(userId, resourceData) {
+  const {
+    type = 'web_page',
+    title = '',
+    url = '',
+    domain = '',
+    description = '',
+    content = '',
+    origin = 'student_web',
+    metadata_json = {}
+  } = resourceData;
+
+  const metaStr = typeof metadata_json === 'string' ? metadata_json : JSON.stringify(metadata_json || {});
+
+  // Check if resource already exists for this user and URL to prevent duplicates
+  if (url) {
+    const existing = await getResourceByUrl(userId, url);
+    if (existing) {
+      // Update with any fresh content/title/metadata if provided
+      const updateSql = `
+        UPDATE resource 
+        SET title = COALESCE(NULLIF($1, ''), title),
+            domain = COALESCE(NULLIF($2, ''), domain),
+            description = COALESCE(NULLIF($3, ''), description),
+            content = COALESCE(NULLIF($4, ''), content),
+            metadata_json = $5::jsonb,
+            updated_at = NOW()
+        WHERE id = $6 AND user_id = $7
+        RETURNING *
+      `;
+      const res = await query(updateSql, [title, domain, description, content, metaStr, existing.id, userId]);
+      return { resource: normalizeResourceRow(res.rows[0] || existing), alreadyExisted: true };
+    }
+  }
+
+  const insertSql = `
+    INSERT INTO resource (user_id, type, title, url, domain, description, content, origin, metadata_json, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW(), NOW())
+    RETURNING *
+  `;
+  const res = await query(insertSql, [userId, type, title, url, domain, description, content, origin, metaStr]);
+  return { resource: normalizeResourceRow(res.rows[0]), alreadyExisted: false };
 }
 
-// Helper to reliably scope an entire async context to a given user id.
-// Ideal for long-lived WebSocket handlers or background tasks.
-function runWithUserId(userId, cb) {
-  return als.run({ userId: userId ? String(userId) : null }, cb);
+async function getResources(userId, typeFilter = null) {
+  let sql = 'SELECT * FROM resource WHERE user_id = $1';
+  const params = [userId];
+  if (typeFilter && typeFilter !== 'all') {
+    sql += ' AND type = $2';
+    params.push(typeFilter);
+  }
+  sql += ' ORDER BY created_at DESC';
+  const res = await query(sql, params);
+  return res.rows.map(normalizeResourceRow);
+}
+
+async function getResourceById(resourceId, userId) {
+  const res = await query('SELECT * FROM resource WHERE id = $1 AND user_id = $2 LIMIT 1', [resourceId, userId]);
+  return res.rows[0] ? normalizeResourceRow(res.rows[0]) : null;
+}
+
+async function getResourceByUrl(userId, url) {
+  if (!url) return null;
+  const res = await query('SELECT * FROM resource WHERE user_id = $1 AND url = $2 LIMIT 1', [userId, url]);
+  return res.rows[0] ? normalizeResourceRow(res.rows[0]) : null;
+}
+
+async function getResourcesByIds(resourceIds, userId) {
+  if (!Array.isArray(resourceIds) || resourceIds.length === 0) return [];
+  const cleanIds = resourceIds.map(id => parseInt(id, 10)).filter(id => !Number.isNaN(id));
+  if (cleanIds.length === 0) return [];
+  const res = await query(
+    'SELECT * FROM resource WHERE id = ANY($1::int[]) AND user_id = $2 ORDER BY created_at DESC',
+    [cleanIds, userId]
+  );
+  return res.rows.map(normalizeResourceRow);
+}
+
+async function deleteResource(resourceId, userId) {
+  const res = await query('DELETE FROM resource WHERE id = $1 AND user_id = $2 RETURNING id', [resourceId, userId]);
+  return (res.rowCount || 0) > 0;
+}
+
+async function updateResource(resourceId, userId, updateData) {
+  const { title, description, metadata_json } = updateData;
+  const parts = [];
+  const params = [];
+  let idx = 1;
+
+  if (title !== undefined) {
+    parts.push(`title = $${idx++}`);
+    params.push(title);
+  }
+  if (description !== undefined) {
+    parts.push(`description = $${idx++}`);
+    params.push(description);
+  }
+  if (metadata_json !== undefined) {
+    parts.push(`metadata_json = $${idx++}::jsonb`);
+    params.push(typeof metadata_json === 'string' ? metadata_json : JSON.stringify(metadata_json));
+  }
+  parts.push('updated_at = NOW()');
+
+  if (parts.length === 1) {
+    return await getResourceById(resourceId, userId);
+  }
+
+  params.push(resourceId, userId);
+  const sql = `UPDATE resource SET ${parts.join(', ')} WHERE id = $${idx++} AND user_id = $${idx++} RETURNING *`;
+  const res = await query(sql, params);
+  return res.rows[0] ? normalizeResourceRow(res.rows[0]) : null;
+}
+
+function normalizeResourceRow(row) {
+  if (!row) return null;
+  let meta = row.metadata_json;
+  if (typeof meta === 'string') {
+    try { meta = JSON.parse(meta); } catch (_) { meta = {}; }
+  }
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    type: row.type || 'web_page',
+    title: row.title || 'Untitled Resource',
+    url: row.url || '',
+    domain: row.domain || (row.url ? safeExtractDomain(row.url) : ''),
+    description: row.description || '',
+    content: row.content || '',
+    origin: row.origin || 'student_web',
+    metadata_json: meta || {},
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function safeExtractDomain(u) {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '');
+  } catch (_) {
+    return '';
+  }
 }
 
 export {
@@ -428,6 +613,17 @@ export {
   query,
   pool,
   attachDbUser,
-  setCurrentUserId, runWithUserId, ensureMessageMetadataColumns
+  setCurrentUserId,
+  runWithUserId,
+  ensureMessageMetadataColumns,
+  ensureResourceTable,
+  createResource,
+  getResources,
+  getResourceById,
+  getResourceByUrl,
+  getResourcesByIds,
+  deleteResource,
+  updateResource
 };
+
 

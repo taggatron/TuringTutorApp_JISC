@@ -72,6 +72,23 @@ db.serialize(() => {
     FOREIGN KEY(user_id) REFERENCES users(id)
   )`);
 
+  // Create resources table
+  db.run(`CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    type TEXT DEFAULT 'web_page',
+    title TEXT,
+    url TEXT,
+    domain TEXT,
+    description TEXT,
+    content TEXT,
+    origin TEXT DEFAULT 'student_web',
+    metadata_json TEXT DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`);
+
   // Add group_id column to sessions table if it doesn't exist
   db.run(`ALTER TABLE sessions ADD COLUMN group_id INTEGER DEFAULT NULL`, (err) => {
     if (err && !err.message.includes('duplicate column')) {

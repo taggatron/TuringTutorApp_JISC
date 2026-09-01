@@ -9,12 +9,13 @@ import csrf from 'csurf';
 import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import authRouter from './server/routes/auth.js';
+import resourcesRouter from './server/routes/resources.js';
 import { attachDbUser, setCurrentUserId } from './server/db/postgres.js';
 import bcrypt from 'bcrypt';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
-import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel, getEmptyAssistantMessage, ensureMessageMetadataColumns, runWithUserId } from './server/db/postgres.js';
+import { registerUser, getUser, updateUserPassword, createSession, createTuringSession, saveMessage, getSessions, getMessages, deleteSession, getNextSessionId, saveFeedback, getFeedback, getMessageByContent, saveScaleLevel, getScaleLevels, updateMessageCollapsedState, createGroup, deleteGroup, getUserGroups, updateSessionGroup, renameGroup, renameSession, updateMessageContent, getSessionById, getSessionByMessageId, saveMessageWithScaleLevel, getEmptyAssistantMessage, ensureMessageMetadataColumns, ensureResourceTable, getResourcesByIds, runWithUserId } from './server/db/postgres.js';
 import { checkAuth } from './server/middleware/auth.js';
 
 dotenv.config({ path: './APIkey.env' });
@@ -114,10 +115,13 @@ app.use(cookieParser());
 // Basic security headers (CSP disabled to avoid breaking inline scripts/styles)
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// Ensure DB has metadata columns for durable Turing screenshots/refs
+// Ensure DB has metadata columns & resource table
 try {
     if (typeof ensureMessageMetadataColumns === 'function') {
         await ensureMessageMetadataColumns();
+    }
+    if (typeof ensureResourceTable === 'function') {
+        await ensureResourceTable();
     }
 } catch (e) {
     console.warn('Startup DB ensure failed (continuing):', e && e.message ? e.message : e);
@@ -226,6 +230,9 @@ app.get('/index.html', cspIndex, (req, res) => {
 
 // Mount auth routes (register, login, logout, csrf-token)
 app.use('/', authRouter);
+
+// Mount resource & web research routes
+app.use('/api', resourcesRouter);
 
 // Rename a session
 app.post('/rename-session', async (req, res) => {
@@ -844,12 +851,13 @@ async function generateSessionTitle(promptContent) {
 }
 
 class ChatGPTProcessor {
-    constructor(openai, ws, session_id, conversationHistory, username) {
+    constructor(openai, ws, session_id, conversationHistory, username, attachedResources = []) {
         this.openai = openai;
         this.ws = ws;
         this.session_id = session_id;
         this.conversationHistory = conversationHistory || [];
         this.username = username;
+        this.attachedResources = Array.isArray(attachedResources) ? attachedResources : [];
     }
 
     // Sanitize content before sending to the model: remove data: URIs, strip HTML/JSX tags,
@@ -886,6 +894,7 @@ RENDERING RULES (strict):
 - Use inline Unicode emojis if helpful (⚡, 🧠, 💡).
 - Avoid inline <style> tags, scripts, or event attributes. Keep markup simple and semantic.
 - Do not emit horizontal rules of repeated hyphens ("---"); use <hr/> if a separator is needed.
+- If attached student research resources are provided, ground your explanations in those referenced sources and accurately acknowledge them.
 
 Return only the HTML fragment for the requested response — nothing else (no commentary, no surrounding text).`;
 
@@ -896,6 +905,17 @@ Return only the HTML fragment for the requested response — nothing else (no co
             const MAX_HISTORY_CHARS = 15000; // total chars of included history (approx)
 
             const cleanUserContent = this.sanitizeContent(userContent, MAX_MESSAGE_CHARS);
+
+            // Format verified attached student research resources as grounding context
+            let attachedResourcePrompt = '';
+            if (this.attachedResources && this.attachedResources.length > 0) {
+                attachedResourcePrompt = '\n\n[Attached Student Research Resources]:\n' +
+                    this.attachedResources.map((r, i) => {
+                        const excerpt = this.sanitizeContent(r.content || r.description || '', 2000);
+                        return `Source ${i + 1}: ${r.title}\nDomain: ${r.domain || r.url}\nURL: ${r.url}\nContent Excerpt:\n${excerpt}`;
+                    }).join('\n\n') +
+                    '\n[End of Attached Student Research Resources]\n';
+            }
 
             // Build a trimmed, sanitized conversation history (keep most recent messages until MAX_HISTORY_CHARS)
             const sanitizedHistory = [];
@@ -922,8 +942,8 @@ Return only the HTML fragment for the requested response — nothing else (no co
                     { role: 'system', content: styleSystemPrompt },
                     // retain previous sanitized conversation context (most recent first)
                     ...sanitizedHistory,
-                    // add the user's latest cleaned message into the streaming request
-                    { role: 'user', content: cleanUserContent }
+                    // add the user's latest cleaned message + attached resource grounding into the streaming request
+                    { role: 'user', content: cleanUserContent + attachedResourcePrompt }
                 ],
                 stream: true,
             });
@@ -1033,12 +1053,21 @@ Return only the HTML fragment for the requested response — nothing else (no co
     }
 
     async addUserMessage(userMessage) {
-            if (userMessage.content) {
+        if (userMessage.content) {
             this.conversationHistory.push({ role: "user", content: userMessage.content });
             try {
+                // Prepare attached references metadata for durable persistence
+                const references = (this.attachedResources || []).map(r => ({
+                    id: r.id,
+                    title: r.title,
+                    url: r.url,
+                    domain: r.domain,
+                    type: r.type || 'web_page',
+                    description: r.description || ''
+                }));
                 // Store raw user content; model-safe cleanup will be applied when building history
-                const id = await saveMessageWithScaleLevel(this.session_id, this.username, 'user', userMessage.content, 0, 1);
-                console.log(`User message saved to session ID: ${this.session_id} id=${id}`);
+                const id = await saveMessageWithScaleLevel(this.session_id, this.username, 'user', userMessage.content, 0, 1, references.length > 0 ? references : null);
+                console.log(`User message saved to session ID: ${this.session_id} id=${id}${references.length > 0 ? ` with ${references.length} attached resources` : ''}`);
             } catch (err) {
                 console.error('Error saving user message:', err);
             }
@@ -1268,12 +1297,22 @@ wss.on('connection', async (ws, req) => {
                     ws.send(JSON.stringify({ type: 'feedback', content: feedback }));
                 }
             } else {
+                // Resolve and verify ownership of any attached resource IDs
+                let attachedResources = [];
+                if (Array.isArray(userMessage.resource_ids) && userMessage.resource_ids.length > 0 && wsUser) {
+                    try {
+                        attachedResources = await getResourcesByIds(userMessage.resource_ids, wsUser.id);
+                    } catch (resErr) {
+                        console.error('Error resolving attached resources:', resErr);
+                    }
+                }
+
                 // Ensure session ID and message processing logic
                 if (userMessage.session_id) {
                     session_id = userMessage.session_id;
                     conversationHistory = await loadSessionHistory(session_id);
                     if (userMessage.content) {
-                        const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
+                        const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username, attachedResources);
                         await processor.addUserMessage(userMessage);
                         await processor.processUserMessage(userMessage);
                     } else {
@@ -1316,7 +1355,7 @@ wss.on('connection', async (ws, req) => {
                     }
 
                     if (userMessage.content) {
-                        const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username);
+                        const processor = new ChatGPTProcessor(openai, ws, session_id, conversationHistory, username, attachedResources);
                         await processor.addUserMessage(userMessage);
                         await processor.processUserMessage(userMessage);
                     }
