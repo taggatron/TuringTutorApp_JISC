@@ -212,10 +212,8 @@ const cspIndex = helmet.contentSecurityPolicy({
     directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        // Allow inline styles for now to support html2canvas and some UI
-        // behaviors. Consider removing this later and implementing a
-        // narrower solution (nonce/hash or dedicated capture endpoint).
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         imgSrc: ["'self'", 'data:'],
         connectSrc: ["'self'", 'ws:', 'wss:'],
         objectSrc: ["'none'"],

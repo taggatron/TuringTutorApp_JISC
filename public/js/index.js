@@ -583,6 +583,7 @@ function handleWebSocketMessage(message) {
           const activeEditor = document.querySelector('.assistant-edit-mode');
           activeEditor?.querySelector('.decipher-wait-overlay')?.classList.remove('visible', 'cogs-ready');
           activeEditor?.classList.remove('decipher-active');
+          activeEditor?.__handleDecipherDone?.(true);
         } catch(_) {}
         // Clear loading state and debounce flag when feedback arrives
         try { setCriteriaLoading(false); } catch(_) {}
@@ -599,6 +600,10 @@ function handleWebSocketMessage(message) {
       } else {
         console.error('Feedback content is empty');
         window.__decipherInFlight = false;
+        try {
+          const activeEditor = document.querySelector('.assistant-edit-mode');
+          activeEditor?.__handleDecipherDone?.(false);
+        } catch(_) {}
       }
     }
     else if (message.type === 'message-saved') {
@@ -2378,115 +2383,185 @@ function enterAssistantEditMode(targetAssistant) {
   const existing = document.querySelector('.assistant-edit-mode');
   if (existing) existing.remove();
 
-  // Build overlay
+  // Root dialog overlay
   const wrapper = document.createElement('div');
   wrapper.className = 'assistant-edit-mode';
   wrapper.setAttribute('role', 'dialog');
+  wrapper.setAttribute('aria-label', 'Turing Tutor Assessment Workspace');
+
+  // Inner app container
+  const app = document.createElement('div');
+  app.className = 'app';
+
+  // 1. Topbar
+  const topbar = document.createElement('header');
+  topbar.className = 'topbar';
+
+  const brand = document.createElement('div');
+  brand.className = 'brand';
+
+  const brandMark = document.createElement('div');
+  brandMark.className = 'brand-mark';
+  const brandImg = document.createElement('img');
+  brandImg.src = '/Alanbotlogo_green.svg';
+  brandImg.alt = 'Alan Turing icon';
+  brandMark.appendChild(brandImg);
+
+  const brandCopy = document.createElement('div');
+  brandCopy.className = 'brand-copy';
+  const brandH1 = document.createElement('h1');
+  brandH1.innerHTML = 'Turing Tutor <span class="brand-tag">Assessment response</span>';
+  const brandSub = document.createElement('p');
+  brandSub.textContent = 'Write, refine and review your work in a focused Turing Tutor workspace.';
+  brandCopy.appendChild(brandH1);
+  brandCopy.appendChild(brandSub);
+
+  brand.appendChild(brandMark);
+  brand.appendChild(brandCopy);
+
+  const headerActions = document.createElement('div');
+  headerActions.className = 'header-actions';
+
+  const savedDiv = document.createElement('div');
+  savedDiv.className = 'saved';
+  const savedDot = document.createElement('span');
+  savedDot.className = 'dot';
+  const saveLabel = document.createElement('span');
+  saveLabel.id = 'saveLabel';
+  saveLabel.textContent = 'Saved';
+  savedDiv.appendChild(savedDot);
+  savedDiv.appendChild(saveLabel);
+
+  const modeBtn = document.createElement('button');
+  modeBtn.type = 'button';
+  modeBtn.className = 'mode';
+  modeBtn.innerHTML = '<span class="mode-icon"><img src="/Turing%20Tutor%20Enigma.svg" alt="Enigma Machine"></span> Turing Mode <span class="chevron">⌄</span>';
+  modeBtn.addEventListener('click', () => {
+    if (typeof startTuringMode === 'function') startTuringMode();
+  });
 
   const closeBtn = document.createElement('button');
-  closeBtn.className = 'assistant-edit-close';
   closeBtn.type = 'button';
+  closeBtn.className = 'close assistant-edit-close';
+  closeBtn.setAttribute('title', 'Close');
   closeBtn.setAttribute('aria-label', 'Close editor');
-  closeBtn.innerHTML = '×';
-  // Auto-save on close to preserve prompt screenshots and references
-  closeBtn.addEventListener('click', () => saveEdit());
+  closeBtn.textContent = '×';
+  closeBtn.addEventListener('click', () => saveEdit(true));
 
-  const toolbar = document.createElement('div');
-  toolbar.className = 'assistant-edit-toolbar';
-  // Simple toolbar: Save / Close
+  headerActions.appendChild(savedDiv);
+  headerActions.appendChild(modeBtn);
+  headerActions.appendChild(closeBtn);
+
+  topbar.appendChild(brand);
+  topbar.appendChild(headerActions);
+  app.appendChild(topbar);
+
+  // 2. Main Workspace
+  const workspace = document.createElement('main');
+  workspace.className = 'workspace';
+
+  // Toast container
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.id = 'toast';
+  toast.textContent = 'Saved successfully';
+  wrapper.appendChild(toast);
+
+  let toastTimer = null;
+  function showToast(msg, duration = 1400) {
+    if (toastTimer) clearTimeout(toastTimer);
+    toast.textContent = msg;
+    toast.classList.add('show');
+    toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, duration);
+  }
+
+  // Toolbar
+  const toolbar = document.createElement('section');
+  toolbar.className = 'toolbar assistant-edit-toolbar';
+  toolbar.setAttribute('aria-label', 'Editor toolbar');
+
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.className = 'save-btn';
-  saveBtn.textContent = '💾 Save';
-  saveBtn.addEventListener('click', () => saveEdit());
-  // Decipher button: assess content up to References using server feedback
+  saveBtn.className = 'btn primary save-btn';
+  saveBtn.id = 'saveBtn';
+  saveBtn.textContent = '▣ Save';
+  saveBtn.addEventListener('click', () => {
+    saveEdit(false);
+  });
+
   const decipherBtn = document.createElement('button');
   decipherBtn.type = 'button';
-  decipherBtn.className = 'decipher-btn';
-  decipherBtn.title = 'Decipher and assess (🔍)';
-  decipherBtn.textContent = '🔍 Decipher';
-  decipherBtn.addEventListener('click', () => {
-    try {
-      // Debounce: prevent overlapping decipher requests
-      if (window.__decipherInFlight) return;
-      window.__decipherInFlight = true;
-      showDecipherWait();
-      // Show loading state on criteria chips while awaiting feedback
-      setCriteriaLoading(true, wrapper);
-      // Get current editable HTML and trim at References section
-      const editableEl = wrapper.querySelector('.assistant-editable-content');
-      let html = editableEl ? editableEl.innerHTML || '' : '';
-      const lower = html.toLowerCase();
-      const refIdx = lower.indexOf('>references<');
-      if (refIdx > -1) {
-        // Roughly trim content before the heading tag that contains 'References'
-        html = html.slice(0, refIdx);
-      }
-      const cleaned = sanitizeHtml(html);
-      // Send to server via websocket or HTTP endpoint to generate feedback/assessment
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ action: 'generateFeedback', content: cleaned, session_id }));
-        showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
-      } else {
-        showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
-        fetch('/api/decipher', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: cleaned, session_id })
-        }).then(r => r.json()).then(data => {
-          if (data.success && data.feedback) {
-            handleWebSocketMessage({ type: 'feedback', content: data.feedback });
-          } else {
-            console.error('Decipher failed:', data);
-            setCriteriaLoading(false, wrapper);
-            window.__decipherInFlight = false;
-          }
-        }).catch(err => {
-          console.error('Decipher fetch failed:', err);
-          setCriteriaLoading(false, wrapper);
-          window.__decipherInFlight = false;
-        });
-      }
-    } catch (e) {
-      console.error('Decipher click failed:', e);
-      setCriteriaLoading(false, wrapper);
-      window.__decipherInFlight = false;
-    }
+  decipherBtn.className = 'btn decipher decipher-btn';
+  decipherBtn.id = 'decipherBtn';
+  decipherBtn.innerHTML = '<span class="sparkle">✦</span><span id="decipherLabel">Decipher</span>';
+  const decipherLabel = decipherBtn.querySelector('#decipherLabel');
+
+  const styleSelect = document.createElement('select');
+  styleSelect.className = 'select';
+  styleSelect.id = 'styleSelect';
+  styleSelect.setAttribute('aria-label', 'Text style');
+  styleSelect.innerHTML = [
+    '<option value="">Text Style</option>',
+    '<option value="Body">Body</option>',
+    '<option value="Heading 1">Heading 1</option>',
+    '<option value="Heading 2">Heading 2</option>',
+    '<option value="Quote">Quote</option>'
+  ].join('');
+
+  styleSelect.addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (val === 'Heading 1') document.execCommand('formatBlock', false, 'h1');
+    else if (val === 'Heading 2') document.execCommand('formatBlock', false, 'h2');
+    else if (val === 'Body') document.execCommand('formatBlock', false, 'p');
+    else if (val === 'Quote') document.execCommand('formatBlock', false, 'blockquote');
+    editable.focus();
   });
-  const cancelBtn = document.createElement('button');
-  cancelBtn.type = 'button';
-  cancelBtn.textContent = '✖ Close';
-  cancelBtn.title = 'Close editor';
-  cancelBtn.addEventListener('click', () => exitAssistantEditMode(wrapper, false, targetAssistant));
-  // Left-grouped actions
+
+  const divider = document.createElement('div');
+  divider.className = 'divider';
+
+  const unitChip = document.createElement('div');
+  unitChip.className = 'unit-chip unit-title-btn';
+  unitChip.id = 'unitChip';
+  unitChip.textContent = 'F217: Biomedical Techniques';
+
+  // Criteria chips
+  const criteriaContainer = document.createElement('div');
+  criteriaContainer.className = 'criteria assistant-edit-criteria-rail';
+  const items = [
+    { key: 'P1', tip: 'Use research to identify a range of potential diseases for each patient (≥4 per patient).' },
+    { key: 'P2', tip: 'Create a detailed method: tests, techniques, equipment (sizes/quantities/PPE) informed by suspected diseases.' },
+    { key: 'M2', tip: 'Explain the rationale for tests and techniques chosen based on suspected diseases (builds on P2/M1).' },
+    { key: 'D1', tip: 'Justify the choice and settings of appropriate equipment for chosen tests and techniques.' }
+  ];
+  const criterionLabel = document.createElement('span');
+  criterionLabel.className = 'tiny-purple';
+  criterionLabel.id = 'criterionLabel';
+  criterionLabel.textContent = 'F217 · P1';
+
+  items.forEach((it, idx) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'criterion criteria-chip' + (idx === 0 ? ' active' : '');
+    b.textContent = it.key;
+    b.setAttribute('data-tip', it.tip);
+    b.addEventListener('click', () => {
+      b.classList.toggle('active');
+      const activeKeys = Array.from(criteriaContainer.querySelectorAll('.criterion.active, .criteria-chip.active')).map(c => c.textContent.trim());
+      criterionLabel.textContent = 'F217' + (activeKeys.length ? ' · ' + activeKeys.join(' · ') : '');
+    });
+    criteriaContainer.appendChild(b);
+  });
+
   toolbar.appendChild(saveBtn);
   toolbar.appendChild(decipherBtn);
-
-  // Spacer to push unit title to the far right
-  const spacer = document.createElement('div');
-  spacer.className = 'spacer';
-  toolbar.appendChild(spacer);
-
-  // Unit title button on far right (non-interactive)
-  const unitTitleBtn = document.createElement('button');
-  unitTitleBtn.type = 'button';
-  unitTitleBtn.className = 'unit-title-btn';
-  unitTitleBtn.textContent = 'F217: Biomedical Techniques';
-  toolbar.appendChild(unitTitleBtn);
-
-  // Animate ONLY P1 chip when hovering the unit-title button
-  unitTitleBtn.addEventListener('mouseenter', () => {
-    const rail = wrapper.querySelector('.assistant-edit-criteria-rail');
-    if (!rail) return;
-    rail.classList.remove('rail-animate');
-    void rail.offsetWidth; // restart
-    rail.classList.add('rail-animate');
-  });
-  unitTitleBtn.addEventListener('mouseleave', () => {
-    const rail = wrapper.querySelector('.assistant-edit-criteria-rail');
-    if (!rail) return;
-    rail.classList.remove('rail-animate');
-  });
+  toolbar.appendChild(styleSelect);
+  toolbar.appendChild(divider);
+  toolbar.appendChild(unitChip);
+  toolbar.appendChild(criteriaContainer);
+  workspace.appendChild(toolbar);
 
   // PDF modal for unit specification
   const pdfModal = document.createElement('div');
@@ -2499,7 +2574,7 @@ function enterAssistantEditMode(targetAssistant) {
   pdfHeader.className = 'unit-pdf-header';
   const pdfTitle = document.createElement('div');
   pdfTitle.className = 'unit-pdf-title';
-  pdfTitle.textContent = 'F217: Biomediial Techniques — Specification';
+  pdfTitle.textContent = 'F217: Biomedical Techniques — Specification';
   const pdfClose = document.createElement('button');
   pdfClose.type = 'button';
   pdfClose.className = 'unit-pdf-close';
@@ -2523,7 +2598,6 @@ function enterAssistantEditMode(targetAssistant) {
 
   function openPdfModal() {
     pdfModal.classList.add('visible');
-    // prevent underlying scroll
     document.body.style.overflow = 'hidden';
   }
   function closePdfModal() {
@@ -2532,117 +2606,79 @@ function enterAssistantEditMode(targetAssistant) {
   }
   pdfClose.addEventListener('click', closePdfModal);
   pdfBackdrop.addEventListener('click', closePdfModal);
-  unitTitleBtn.addEventListener('click', openPdfModal);
+  unitChip.addEventListener('click', openPdfModal);
 
-  // Text styling dropdown (Heading, Bold, Italic, Underline, Color)
-  const styleMenuWrap = document.createElement('div');
-  styleMenuWrap.className = 'style-menu-wrap';
-  const styleBtn = document.createElement('button');
-  styleBtn.type = 'button';
-  styleBtn.className = 'style-menu-button';
-  styleBtn.textContent = 'Text Style ▾';
-  const styleMenu = document.createElement('div');
-  styleMenu.className = 'style-menu';
-  styleMenu.innerHTML = [
-    '<button data-action="heading">Heading</button>',
-    '<button data-action="bold">Bold</button>',
-    '<button data-action="italic">Italic</button>',
-    '<button data-action="underline">Underline</button>',
-    '<div class="color-row">',
-      '<span class="label">Colour:</span>',
-      '<button data-action="color" data-color="#000000" title="Black" class="color-swatch" style="background:#000"></button>',
-      '<button data-action="color" data-color="#0b3b8c" title="Navy" class="color-swatch" style="background:#0b3b8c"></button>',
-      '<button data-action="color" data-color="#ff0000" title="Red" class="color-swatch" style="background:#ff0000"></button>',
-    '</div>'
-  ].join('');
-  styleMenuWrap.appendChild(styleBtn);
-  styleMenuWrap.appendChild(styleMenu);
-  toolbar.insertBefore(styleMenuWrap, spacer); // place before spacer on left cluster
+  // Decipher logic
+  let decipherResetTimer = null;
+  function handleDecipherDone(success = true) {
+    if (decipherResetTimer) clearTimeout(decipherResetTimer);
+    if (decipherLabel) decipherLabel.textContent = 'Deciphered ✓';
+    showToast(success ? 'Decipher complete' : 'Decipher finished', 1400);
+    decipherResetTimer = setTimeout(() => {
+      decipherBtn.classList.remove('decoding');
+      if (decipherLabel) decipherLabel.textContent = 'Decipher';
+    }, 1250);
+  }
+  wrapper.__handleDecipherDone = handleDecipherDone;
 
-  function applyStyleAction(action, value) {
-    const editableEl = wrapper.querySelector('.assistant-editable-content');
-    if (!editableEl) return;
-    editableEl.focus();
+  decipherBtn.addEventListener('click', () => {
     try {
-      if (action === 'heading') {
-        document.execCommand('formatBlock', false, 'h2');
-      } else if (action === 'bold') {
-        document.execCommand('bold');
-      } else if (action === 'italic') {
-        document.execCommand('italic');
-      } else if (action === 'underline') {
-        document.execCommand('underline');
-      } else if (action === 'color' && value) {
-        document.execCommand('foreColor', false, value);
+      if (window.__decipherInFlight || decipherBtn.classList.contains('decoding')) return;
+      window.__decipherInFlight = true;
+
+      decipherBtn.classList.add('decoding');
+      if (decipherLabel) decipherLabel.textContent = 'Deciphering…';
+      showToast('Analysing your text…', 2000);
+
+      showDecipherWait();
+      setCriteriaLoading(true, wrapper);
+
+      const editableEl = wrapper.querySelector('.assistant-editable-content, .editor');
+      let html = editableEl ? editableEl.innerHTML || '' : '';
+      const lower = html.toLowerCase();
+      const refIdx = lower.indexOf('>references<');
+      if (refIdx > -1) {
+        html = html.slice(0, refIdx);
+      }
+      const cleaned = sanitizeHtml(html);
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'generateFeedback', content: cleaned, session_id }));
+        showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
+      } else {
+        showPopup(document.getElementById('scale-popup'), 'Assessing content against rubric…');
+        fetch('/api/decipher', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: cleaned, session_id })
+        }).then(r => r.json()).then(data => {
+          if (data.success && data.feedback) {
+            handleWebSocketMessage({ type: 'feedback', content: data.feedback });
+          } else {
+            console.error('Decipher failed:', data);
+            setCriteriaLoading(false, wrapper);
+            window.__decipherInFlight = false;
+            handleDecipherDone(false);
+          }
+        }).catch(err => {
+          console.error('Decipher fetch failed:', err);
+          setCriteriaLoading(false, wrapper);
+          window.__decipherInFlight = false;
+          handleDecipherDone(false);
+        });
       }
     } catch (e) {
-      console.warn('Style action failed:', action, e);
+      console.error('Decipher click failed:', e);
+      setCriteriaLoading(false, wrapper);
+      window.__decipherInFlight = false;
+      handleDecipherDone(false);
     }
-  }
-  styleBtn.addEventListener('click', () => {
-    styleMenu.classList.toggle('open');
-  });
-  styleMenu.addEventListener('click', (e) => {
-    const t = e.target;
-    if (!(t instanceof HTMLElement)) return;
-    const action = t.getAttribute('data-action');
-    const color = t.getAttribute('data-color');
-    if (!action) return;
-    e.stopPropagation();
-    applyStyleAction(action, color);
   });
 
-  const editable = document.createElement('div');
-  editable.className = 'assistant-editable-content';
-  editable.contentEditable = 'true';
-  const removeGeneratedAssessmentPanels = (root) => {
-    if (!root || typeof root.querySelectorAll !== 'function') return;
-    root.querySelectorAll('.assistant-edit-feedback-popup').forEach((panel) => panel.remove());
-  };
-  // Populate with the message content (preserve basic markup)
-  const contentEl = targetAssistant.querySelector('.message-content');
-  // Remove UI panels accidentally persisted by older edit sessions before copying message content.
-  removeGeneratedAssessmentPanels(contentEl);
-  // sanitize the content before allowing editing to avoid executing scripts
-  editable.innerHTML = sanitizeHtml(contentEl ? contentEl.innerHTML : '');
-  removeGeneratedAssessmentPanels(editable);
+  // Paper card
+  const paper = document.createElement('section');
+  paper.className = 'paper';
 
-  // Also include any existing References/Prompts footer in the editor so it
-  // remains visible and is preserved on save. We clone it into the editable
-  // area and let the save flow re-extract metadata from this copy.
-  try {
-    const existingFooter = targetAssistant.querySelector('[data-section="turing-footer"], .turing-footer');
-    const footerRemoved = targetAssistant.dataset.footerRemoved === '1';
-    if (existingFooter && !footerRemoved) {
-      const cloned = existingFooter.cloneNode(true);
-      editable.appendChild(document.createElement('br'));
-      editable.appendChild(cloned);
-    }
-  } catch (_) { /* non-fatal */ }
-
-  wrapper.appendChild(closeBtn);
-  wrapper.appendChild(toolbar);
-  // Criteria rail on the right side of the toolbar
-  (function addCriteriaRail() {
-    const rail = document.createElement('aside');
-    rail.className = 'assistant-edit-criteria-rail';
-    const items = [
-      { key: 'P1', tip: 'Use research to identify a range of potential diseases for each patient (≥4 per patient).' },
-      { key: 'P2', tip: 'Create a detailed method: tests, techniques, equipment (sizes/quantities/PPE) informed by suspected diseases.' },
-      { key: 'M2', tip: 'Explain the rationale for tests and techniques chosen based on suspected diseases (builds on P2/M1).' },
-      { key: 'D1', tip: 'Justify the choice and settings of appropriate equipment for chosen tests and techniques.' }
-    ];
-    items.forEach(it => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'criteria-chip';
-      b.textContent = it.key;
-      b.setAttribute('data-tip', it.tip);
-      rail.appendChild(b);
-    });
-    // Append to toolbar at the end
-    toolbar.appendChild(rail);
-  })();
   // Feedback popup container inside edit mode
   const fbPopup = document.createElement('div');
   fbPopup.className = 'assistant-edit-feedback-popup';
@@ -2657,7 +2693,8 @@ function enterAssistantEditMode(targetAssistant) {
   fbClose.addEventListener('click', () => hideEditFeedbackPopup(wrapper));
   fbPopup.appendChild(fbClose);
   fbPopup.appendChild(fbInner);
-  wrapper.appendChild(fbPopup);
+  paper.appendChild(fbPopup);
+
   // Decipher waiting overlay (loads and animates the Enigma SVG)
   const waitOverlay = document.createElement('div');
   waitOverlay.className = 'decipher-wait-overlay';
@@ -2692,9 +2729,79 @@ function enterAssistantEditMode(targetAssistant) {
   waitPanel.appendChild(waitVisual);
   waitPanel.appendChild(waitCopy);
   waitOverlay.appendChild(waitPanel);
-  wrapper.appendChild(waitOverlay);
-  wrapper.appendChild(editable);
+  paper.appendChild(waitOverlay);
+
+  // Contenteditable
+  const editable = document.createElement('div');
+  editable.id = 'editor';
+  editable.className = 'editor assistant-editable-content';
+  editable.contentEditable = 'true';
+  editable.setAttribute('spellcheck', 'true');
+
+  const removeGeneratedAssessmentPanels = (root) => {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    root.querySelectorAll('.assistant-edit-feedback-popup').forEach((panel) => panel.remove());
+  };
+  const contentEl = targetAssistant.querySelector('.message-content');
+  removeGeneratedAssessmentPanels(contentEl);
+  editable.innerHTML = sanitizeHtml(contentEl ? contentEl.innerHTML : '');
+  removeGeneratedAssessmentPanels(editable);
+
+  try {
+    const existingFooter = targetAssistant.querySelector('[data-section="turing-footer"], .turing-footer');
+    const footerRemoved = targetAssistant.dataset.footerRemoved === '1';
+    if (existingFooter && !footerRemoved) {
+      const cloned = existingFooter.cloneNode(true);
+      editable.appendChild(document.createElement('br'));
+      editable.appendChild(cloned);
+    }
+  } catch (_) { /* non-fatal */ }
+
+  paper.appendChild(editable);
+
+  // Paper footer
+  const paperFooter = document.createElement('footer');
+  paperFooter.className = 'paper-footer';
+
+  const footerLeft = document.createElement('div');
+  footerLeft.className = 'footer-left';
+  const footerStatusPill = document.createElement('span');
+  footerStatusPill.className = 'status-pill';
+  footerStatusPill.innerHTML = '<span class="dot"></span> Saved';
+  const wordCountWrap = document.createElement('span');
+  const wordCountSpan = document.createElement('span');
+  wordCountSpan.id = 'wordCount';
+  wordCountSpan.textContent = '0';
+  wordCountWrap.appendChild(wordCountSpan);
+  wordCountWrap.appendChild(document.createTextNode(' words'));
+  footerLeft.appendChild(footerStatusPill);
+  footerLeft.appendChild(wordCountWrap);
+
+  const footerRight = document.createElement('div');
+  footerRight.className = 'footer-right';
+  const focusEditorSpan = document.createElement('span');
+  focusEditorSpan.textContent = 'Focus editor';
+  footerRight.appendChild(criterionLabel);
+  footerRight.appendChild(focusEditorSpan);
+
+  paperFooter.appendChild(footerLeft);
+  paperFooter.appendChild(footerRight);
+  paper.appendChild(paperFooter);
+
+  workspace.appendChild(paper);
+  app.appendChild(workspace);
+  wrapper.appendChild(app);
   document.body.appendChild(wrapper);
+
+  // Word count & input change tracking
+  function updateWords() {
+    const text = (editable.innerText || '').trim();
+    const count = text ? text.split(/\s+/).length : 0;
+    wordCountSpan.textContent = count;
+    saveLabel.textContent = 'Unsaved changes';
+  }
+  editable.addEventListener('input', updateWords);
+  updateWords();
 
   // Apply layout helpers to expand chat and hide sidebar while editing
   document.querySelector('.sidebar')?.classList.add('hide-sidebar');
@@ -2705,50 +2812,46 @@ function enterAssistantEditMode(targetAssistant) {
   setTimeout(() => { editable.focus(); }, 10);
 
   // Save handler
-  async function saveEdit() {
-    // Copy edited HTML back into the target assistant element
+  async function saveEdit(shouldExit = true) {
     try {
-  // Sanitize edited HTML before writing back and sending to server
-  const cleaned = sanitizeHtml(editable.innerHTML || '');
-  // Strip any embedded Turing footer from the body we save back
-  const tmp = document.createElement('div');
-  tmp.innerHTML = cleaned;
-  removeGeneratedAssessmentPanels(tmp);
-  removeEmbeddedTuringFooters(tmp);
-  if (contentEl) contentEl.innerHTML = tmp.innerHTML;
+      saveLabel.textContent = 'Saved just now';
+      showToast('Saved successfully');
+
+      const cleaned = sanitizeHtml(editable.innerHTML || '');
+      const tmp = document.createElement('div');
+      tmp.innerHTML = cleaned;
+      removeGeneratedAssessmentPanels(tmp);
+      removeEmbeddedTuringFooters(tmp);
+      if (contentEl) contentEl.innerHTML = tmp.innerHTML;
       targetAssistant.dataset.edited = '1';
-      // Attempt to persist change to the server if message_id present
+
       let messageId = targetAssistant.dataset.messageId;
-      // Fallback: try to locate a numeric assistant id if the seed has a placeholder id
       if (!messageId || Number.isNaN(parseInt(messageId, 10))) {
         const firstAssistant = document.querySelector('#chat-messages .message.assistant');
         if (firstAssistant && firstAssistant.dataset && !Number.isNaN(parseInt(firstAssistant.dataset.messageId, 10))) {
           messageId = firstAssistant.dataset.messageId;
         }
       }
-      // Always include session_id for server-side fallback; only send message_id when it's a valid integer
-  const payload = { content: tmp.innerHTML, session_id };
-      // extract any references/prompts the user added in the editor and include them with the save
+
+      const payload = { content: tmp.innerHTML, session_id };
       try {
         const rawMeta = extractFooterFromEditable(editable);
-        // Upload any data URL screenshots first, replace with canonical URL-based prompts
         const meta = await uploadDataUrlPrompts(rawMeta);
         const hasRefs = meta && Array.isArray(meta.references) && meta.references.length > 0;
         const hasPrompts = meta && Array.isArray(meta.prompts) && meta.prompts.length > 0;
         if (hasRefs) payload.references = meta.references;
         if (hasPrompts) payload.prompts = meta.prompts;
-        // If user removed both sections, ensure footer is removed and remembered
         if (!hasRefs && !hasPrompts) {
           try { removeEmbeddedTuringFooters(targetAssistant); } catch(_) {}
           targetAssistant.dataset.footerRemoved = '1';
           payload.footer_removed = true;
         } else {
-          // Apply or refresh footer in the UI using canonical URLs
           try { applyFooterToAssistant(targetAssistant, meta); } catch (_) {}
           targetAssistant.dataset.footerRemoved = '0';
           payload.footer_removed = false;
         }
       } catch (e) { console.warn('Could not extract/upload editor metadata:', e); }
+
       syncTuringMessageEmptyState(targetAssistant);
       const parsed = parseInt(messageId, 10);
       if (!Number.isNaN(parsed)) payload.message_id = parsed;
@@ -2759,11 +2862,12 @@ function enterAssistantEditMode(targetAssistant) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        // Update sticky Turing message header counts after save
         try { if (targetAssistant.classList.contains('turing-message')) updateTuringBarCounts(targetAssistant); } catch(_) {}
       } catch (err) { console.warn('Failed to persist edited message to server:', err); }
     } finally {
-      exitAssistantEditMode(wrapper, true, targetAssistant);
+      if (shouldExit) {
+        exitAssistantEditMode(wrapper, true, targetAssistant);
+      }
     }
   }
 

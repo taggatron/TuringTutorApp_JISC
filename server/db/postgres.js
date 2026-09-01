@@ -317,10 +317,12 @@ async function updateMessageCollapsedState(message_id, collapsed) {
 }
 
 async function deleteSession(session_id) {
-  await query('DELETE FROM scale_level WHERE session_id = $1', [session_id]);
-  await query('DELETE FROM feedback WHERE session_id = $1', [session_id]);
-  await query('DELETE FROM message WHERE session_id = $1', [session_id]);
-  await query('DELETE FROM session WHERE id = $1', [session_id]);
+  const numId = parseInt(session_id, 10);
+  if (isNaN(numId) || numId <= 0 || numId > 2147483647) return;
+  await query('DELETE FROM scale_level WHERE session_id = $1', [numId]);
+  await query('DELETE FROM feedback WHERE session_id = $1', [numId]);
+  await query('DELETE FROM message WHERE session_id = $1', [numId]);
+  await query('DELETE FROM session WHERE id = $1', [numId]);
 }
 
 async function getNextSessionId() {
@@ -345,7 +347,9 @@ async function getUserGroups(user_id) {
 }
 
 async function updateSessionGroup(session_id, group_id) {
-  await query('UPDATE session SET group_id = $1 WHERE id = $2', [group_id, session_id]);
+  const numId = parseInt(session_id, 10);
+  if (isNaN(numId) || numId <= 0 || numId > 2147483647) return;
+  await query('UPDATE session SET group_id = $1 WHERE id = $2', [group_id, numId]);
 }
 
 async function renameGroup(group_id, group_name) {
@@ -354,20 +358,22 @@ async function renameGroup(group_id, group_name) {
 
 async function renameSession(session_id, session_name) {
   try {
+    const numId = parseInt(session_id, 10);
+    if (isNaN(numId) || numId <= 0 || numId > 2147483647) return;
     const store = als.getStore();
     const uid = store && store.userId ? String(store.userId) : null;
     if (uid) {
-      await query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
+      await query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, numId]);
       return;
     }
     // If called without ALS user context, lookup owner user_id and set app.current_user_id
-    const ownerRes = await pool.query('SELECT user_id FROM session WHERE id = $1', [session_id]);
+    const ownerRes = await pool.query('SELECT user_id FROM session WHERE id = $1', [numId]);
     const ownerUid = ownerRes.rows[0]?.user_id;
     if (ownerUid) {
       await pool.query("SELECT set_config('app.current_user_id', $1, false)", [String(ownerUid)]);
-      await pool.query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
+      await pool.query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, numId]);
     } else {
-      await pool.query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, session_id]);
+      await pool.query('UPDATE session SET session_name = $1 WHERE id = $2', [session_name, numId]);
     }
   } catch (e) {
     console.error('Error in renameSession:', e);
