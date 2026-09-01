@@ -142,15 +142,14 @@ async function createTuringSession(user_id, username, session_name = 'Turing Mod
 }
 
 // Messages
-async function saveMessage(session_id, username, role, content, collapsed = 0, references = null, prompts = null) {
-  // keep backward compatible parameter order; references/prompts are optional jsonb
-  const params = [session_id, username, role, content, collapsed];
-  let sql = 'INSERT INTO message (session_id, username, role, content, collapsed';
-  let vals = ' VALUES ($1, $2, $3, $4, $5)';
-  let idx = 6;
-  if (references !== null) { sql += ', references_json'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
-  if (prompts !== null) { sql += ', prompts_json'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
-  sql += ')' + vals + ' RETURNING id';
+async function saveMessage(session_id, username, role, content, references = null, prompts = null) {
+  const params = [session_id, username, role, content];
+  const colList = ['session_id', 'username', 'role', 'content'];
+  const valList = ['$1', '$2', '$3', '$4'];
+  let idx = 5;
+  if (references !== null) { colList.push('references_json'); valList.push(`$${idx++}::jsonb`); params.push(typeof references === 'string' ? references : JSON.stringify(references)); }
+  if (prompts !== null) { colList.push('prompts_json'); valList.push(`$${idx++}::jsonb`); params.push(typeof prompts === 'string' ? prompts : JSON.stringify(prompts)); }
+  const sql = `INSERT INTO message (${colList.join(', ')}) VALUES (${valList.join(', ')}) RETURNING id`;
   const res = await query(sql, params);
   await touchSessionTimestamp(session_id);
   return res.rows[0].id;
@@ -158,12 +157,12 @@ async function saveMessage(session_id, username, role, content, collapsed = 0, r
 
 async function saveMessageWithScaleLevel(session_id, username, role, content, collapsed = 0, scale_level = 1, references = null, prompts = null) {
   const params = [session_id, username, role, content, collapsed, scale_level];
-  let sql = 'INSERT INTO message (session_id, username, role, content, collapsed, scale_level';
-  let vals = ' VALUES ($1, $2, $3, $4, $5, $6)';
+  const colList = ['session_id', 'username', 'role', 'content', 'collapsed', 'scale_level'];
+  const valList = ['$1', '$2', '$3', '$4', '$5', '$6'];
   let idx = 7;
-  if (references !== null) { sql += ', references_json'; vals += `, $${idx++}`; params.push(JSON.stringify(references)); }
-  if (prompts !== null) { sql += ', prompts_json'; vals += `, $${idx++}`; params.push(JSON.stringify(prompts)); }
-  sql += ')' + vals + ' RETURNING id';
+  if (references !== null) { colList.push('references_json'); valList.push(`$${idx++}::jsonb`); params.push(typeof references === 'string' ? references : JSON.stringify(references)); }
+  if (prompts !== null) { colList.push('prompts_json'); valList.push(`$${idx++}::jsonb`); params.push(typeof prompts === 'string' ? prompts : JSON.stringify(prompts)); }
+  const sql = `INSERT INTO message (${colList.join(', ')}) VALUES (${valList.join(', ')}) RETURNING id`;
   const res = await query(sql, params);
   await touchSessionTimestamp(session_id);
   return res.rows[0].id;
@@ -377,6 +376,16 @@ function attachDbUser(req, res, next) {
   // more reliable than enterWith in some server frameworks where the
   // continuation may run in a different async scope.
   als.run({ userId: uid }, () => next());
+}
+
+function runWithUserId(userId, callback) {
+  return als.run({ userId: userId ? String(userId) : null }, callback);
+}
+
+function setCurrentUserId(userId) {
+  return als.enterWith({ userId: userId ? String(userId) : null });
+}
+
 // Ensure resource table and RLS policies exist
 async function ensureResourceTable() {
   try {

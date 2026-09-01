@@ -897,12 +897,19 @@ async function sendMessage() {
       highlightCurrentSession(session_id);
     }
 
+    const resource_ids = (typeof ResourcesApp !== 'undefined') ? ResourcesApp.getAttachedResourceIds() : [];
+    const currentAttached = (typeof ResourcesApp !== 'undefined') ? ResourcesApp.getAttachedResources() : [];
+
     // Persist user message locally
-    LocalStore.addMessage(session_id, { role: 'user', content: message });
+    LocalStore.addMessage(session_id, { 
+      role: 'user', 
+      content: message,
+      references: currentAttached.map(r => ({ id: r.id, title: r.title, url: r.url, domain: r.domain, type: r.type }))
+    });
 
     try {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ content: message, session_id }));
+        ws.send(JSON.stringify({ content: message, session_id, resource_ids }));
       } else {
         sendViaHttpStream(message, session_id);
       }
@@ -944,6 +951,24 @@ async function sendMessage() {
     const previousMapping = feedbackMapping[feedbackMapping.length - 1];
     const hasFeedback = previousMapping && previousMapping.feedbackContainer && previousMapping.feedbackContainer.style.display !== 'none' && previousMapping.feedbackContainer.querySelector('.feedback-message') && previousMapping.feedbackContainer.querySelector('.feedback-message').textContent.trim() !== '';
     if (hasFeedback) setDynamicTopMargin(userMessage, previousMapping.feedbackContainer);
+
+    // Render attached resource badges if any were included
+    if (currentAttached.length > 0) {
+      const badgeContainer = document.createElement('div');
+      badgeContainer.className = 'msg-attached-resources';
+      currentAttached.forEach(r => {
+        const badge = document.createElement('a');
+        badge.className = 'msg-resource-badge';
+        badge.href = r.url || '#';
+        badge.target = '_blank';
+        badge.rel = 'noopener noreferrer';
+        const isDoc = r.type === 'document';
+        badge.innerHTML = `${isDoc ? '📄' : '🌐'} <span>${escapeHtml(r.title || r.url || 'Resource')}</span>`;
+        badgeContainer.appendChild(badge);
+      });
+      userMessage.appendChild(badgeContainer);
+    }
+
     const textSpan = document.createElement('span');
     textSpan.className = 'message-text';
     textSpan.textContent = message;
@@ -957,6 +982,12 @@ async function sendMessage() {
     if (oldPlaceholder) oldPlaceholder.remove();
     chatMessages.appendChild(userMessage);
     hideWelcomeState();
+
+    // Clear attached chips after sending
+    if (typeof ResourcesApp !== 'undefined') {
+      ResourcesApp.clearAttachedResources();
+    }
+
     const feedbackContainer = createFeedbackContainer('');
     feedbackMapping.push({ messageElement: userMessage, feedbackContainer });
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1264,6 +1295,25 @@ async function loadSessionHistory(sessionId) {
       if (msg.role === 'user') {
         const userMessageDiv = document.createElement('div');
         userMessageDiv.className = 'message user';
+
+        // Render any stored attached resource references
+        const refs = Array.isArray(msg.references) ? msg.references : (typeof msg.references === 'string' ? JSON.parse(msg.references || '[]') : []);
+        if (refs && refs.length > 0) {
+          const badgeContainer = document.createElement('div');
+          badgeContainer.className = 'msg-attached-resources';
+          refs.forEach(r => {
+            const badge = document.createElement('a');
+            badge.className = 'msg-resource-badge';
+            badge.href = r.url || '#';
+            badge.target = '_blank';
+            badge.rel = 'noopener noreferrer';
+            const isDoc = r.type === 'document';
+            badge.innerHTML = `${isDoc ? '📄' : '🌐'} <span>${escapeHtml(r.title || r.url || 'Resource')}</span>`;
+            badgeContainer.appendChild(badge);
+          });
+          userMessageDiv.appendChild(badgeContainer);
+        }
+
         const textSpan = document.createElement('span');
         textSpan.className = 'message-text';
         textSpan.textContent = msg.content;
@@ -4091,3 +4141,778 @@ function updateTuringBarCounts(assistantEl) {
 
 })();
 // ══ End AI Analytics System ═══════════════════════════════════════════════════
+
+
+// ══ Resources & Web Research System ═══════════════════════════════════════════
+const ResourcesApp = (() => {
+  let attachedResources = []; // Up to 5 items: { id, title, url, domain, type, description }
+  let userResources = []; // Cached array of user resources from DB
+  let currentFilter = 'all';
+  let searchQuery = '';
+
+  // Web Research modal state
+  let webHistory = [];
+  let webHistoryIndex = -1;
+  let currentPageData = null; // { url, title, domain, description, content, canEmbed, origin }
+
+  // Helpers
+  function getCsrfHeader() {
+    return {
+      'Content-Type': 'application/json',
+      'CSRF-Token': window.csrfToken || ''
+    };
+  }
+
+  function showToast(message, duration = 2800) {
+    const toast = document.getElementById('tt-toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.style.display = 'block';
+    if (toast._timer) clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.style.display = 'none';
+    }, duration);
+  }
+
+  // --- Attached Resources (Composer) ---
+  function renderAttachedChips() {
+    const container = document.getElementById('attached-resources-container');
+    if (!container) return;
+    if (attachedResources.length === 0) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+    container.style.display = 'flex';
+    container.innerHTML = '';
+    attachedResources.forEach(res => {
+      const chip = document.createElement('div');
+      chip.className = 'attached-resource-chip';
+      chip.title = `${res.title} (${res.domain || res.url})`;
+      
+      const icon = document.createElement('span');
+      icon.className = 'attached-chip-icon';
+      icon.textContent = res.type === 'document' ? '📄' : '🌐';
+      
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'attached-chip-title';
+      titleSpan.textContent = res.title || res.url;
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'attached-chip-remove';
+      removeBtn.type = 'button';
+      removeBtn.innerHTML = '&times;';
+      removeBtn.setAttribute('aria-label', `Remove attached resource ${res.title}`);
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        detachResource(res.id);
+      });
+      
+      chip.appendChild(icon);
+      chip.appendChild(titleSpan);
+      chip.appendChild(removeBtn);
+      container.appendChild(chip);
+    });
+  }
+
+  function attachResource(res) {
+    if (!res || !res.id) return;
+    if (attachedResources.some(r => String(r.id) === String(res.id))) {
+      showToast('Resource already attached to chat');
+      return;
+    }
+    if (attachedResources.length >= 5) {
+      showToast('Maximum 5 resources can be attached per message');
+      return;
+    }
+    attachedResources.push(res);
+    renderAttachedChips();
+    showToast(`Attached "${res.title || 'Resource'}" to chat`);
+  }
+
+  function detachResource(resourceId) {
+    attachedResources = attachedResources.filter(r => String(r.id) !== String(resourceId));
+    renderAttachedChips();
+  }
+
+  function getAttachedResourceIds() {
+    return attachedResources.map(r => r.id);
+  }
+
+  function getAttachedResources() {
+    return [...attachedResources];
+  }
+
+  function clearAttachedResources() {
+    attachedResources = [];
+    renderAttachedChips();
+  }
+
+  // --- My Resources Modal ---
+  async function loadUserResources() {
+    try {
+      const res = await fetch(`/api/resources?type=${currentFilter}`, {
+        headers: { 'CSRF-Token': window.csrfToken || '' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          userResources = data.resources || [];
+          renderResourceCards();
+        }
+      }
+    } catch (e) {
+      console.error('Error loading resources:', e);
+    }
+  }
+
+  function renderResourceCards() {
+    const container = document.getElementById('resources-cards-container');
+    if (!container) return;
+
+    let filtered = userResources;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(r => 
+        (r.title && r.title.toLowerCase().includes(q)) ||
+        (r.domain && r.domain.toLowerCase().includes(q)) ||
+        (r.description && r.description.toLowerCase().includes(q)) ||
+        (r.url && r.url.toLowerCase().includes(q))
+      );
+    }
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="resources-empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <h3>No resources found</h3>
+          <p>${searchQuery ? 'Try adjusting your search query.' : 'Use Web Research to discover and save verified articles, clinical guidelines, and research papers.'}</p>
+          <button class="resources-add-btn" id="empty-state-research-btn" type="button">
+            <span>Open Web Research</span>
+          </button>
+        </div>
+      `;
+      const btn = document.getElementById('empty-state-research-btn');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          closeMyResourcesModal();
+          openWebResearchModal();
+        });
+      }
+      return;
+    }
+
+    container.innerHTML = '';
+    filtered.forEach(res => {
+      const card = document.createElement('div');
+      card.className = 'resource-card';
+      
+      let domainDisplay = res.domain;
+      if (!domainDisplay && res.url) {
+        try { domainDisplay = new URL(res.url).hostname; } catch (_) { domainDisplay = 'web'; }
+      }
+      domainDisplay = domainDisplay || 'web';
+
+      const isDoc = res.type === 'document';
+      const formattedDate = res.created_at ? new Date(res.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently added';
+
+      card.innerHTML = `
+        <div>
+          <div class="resource-card-header">
+            <span class="resource-card-domain-badge">${isDoc ? '📄 doc' : `🌐 ${escapeHtml(domainDisplay)}`}</span>
+            <span class="resource-card-type-tag">${escapeHtml(res.type || 'web')}</span>
+          </div>
+          <h4 class="resource-card-title">${escapeHtml(res.title || 'Untitled Resource')}</h4>
+          ${res.url ? `<a href="${escapeHtml(res.url)}" target="_blank" rel="noopener noreferrer" class="resource-card-url">${escapeHtml(res.url)}</a>` : ''}
+          ${res.description ? `<p class="resource-card-desc">${escapeHtml(res.description)}</p>` : ''}
+        </div>
+        <div class="resource-card-footer">
+          <span class="resource-card-date">${formattedDate}</span>
+          <div class="resource-card-actions">
+            <button class="resource-card-btn-open" type="button" title="View in Web Research">Open</button>
+            <button class="resource-card-btn-chat" type="button" title="Attach to Chat Composer">Use in Chat</button>
+            <button class="resource-card-btn-delete" type="button" aria-label="Delete resource" title="Delete resource">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Open button
+      card.querySelector('.resource-card-btn-open').addEventListener('click', () => {
+        closeMyResourcesModal();
+        openWebResearchModal(res.url);
+      });
+
+      // Use in chat button
+      card.querySelector('.resource-card-btn-chat').addEventListener('click', () => {
+        attachResource(res);
+        closeMyResourcesModal();
+      });
+
+      // Delete button
+      card.querySelector('.resource-card-btn-delete').addEventListener('click', async () => {
+        if (!confirm(`Remove "${res.title}" from your resources?`)) return;
+        try {
+          const resp = await fetch(`/api/resources/${res.id}`, {
+            method: 'DELETE',
+            headers: getCsrfHeader()
+          });
+          if (resp.ok) {
+            userResources = userResources.filter(r => r.id !== res.id);
+            detachResource(res.id);
+            renderResourceCards();
+            showToast('Resource removed');
+          }
+        } catch (delErr) {
+          console.error('Delete resource error:', delErr);
+        }
+      });
+
+      container.appendChild(card);
+    });
+  }
+
+  function openMyResourcesModal() {
+    const modal = document.getElementById('my-resources-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    loadUserResources();
+  }
+
+  function closeMyResourcesModal() {
+    const modal = document.getElementById('my-resources-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+  }
+
+  // --- Web Research Modal ---
+  function openWebResearchModal(initialUrl = '') {
+    const modal = document.getElementById('web-research-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    if (initialUrl) {
+      navigateTo(initialUrl);
+    } else if (!currentPageData) {
+      renderDiscoveryHome();
+    }
+  }
+
+  function closeWebResearchModal() {
+    const modal = document.getElementById('web-research-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+  }
+
+  function renderDiscoveryHome() {
+    currentPageData = null;
+    updateWebResearchFooter();
+    const body = document.getElementById('web-research-body');
+    const input = document.getElementById('web-address-input');
+    if (input) input.value = '';
+
+    body.innerHTML = `
+      <div class="web-discovery-home">
+        <div class="web-discovery-hero">
+          <h3>Academic &amp; Clinical Web Research</h3>
+          <p>Search trusted educational databases or paste any article URL to preview reader mode and save key references to your project.</p>
+          <div class="web-quick-topics">
+            <button class="web-topic-btn" data-query="NICE guidelines asthma management">NICE Guidelines Asthma</button>
+            <button class="web-topic-btn" data-query="Turing test artificial intelligence Alan Turing 1950">Alan Turing 1950 Paper</button>
+            <button class="web-topic-btn" data-query="NHS blood test C-reactive protein CRP">NHS CRP Blood Tests</button>
+            <button class="web-topic-btn" data-query="Higher Education AI assessment academic integrity JISC">JISC AI in Higher Ed</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    body.querySelectorAll('.web-topic-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const query = btn.getAttribute('data-query');
+        if (input) input.value = query;
+        performSearch(query);
+      });
+    });
+  }
+
+  async function performSearch(query) {
+    if (!query || !query.trim()) return;
+    const body = document.getElementById('web-research-body');
+    const loading = document.getElementById('web-research-loading');
+    if (loading) loading.style.display = 'block';
+
+    try {
+      const res = await fetch(`/api/web-search?q=${encodeURIComponent(query.trim())}`, {
+        headers: { 'CSRF-Token': window.csrfToken || '' }
+      });
+      if (loading) loading.style.display = 'none';
+      if (!res.ok) {
+        body.innerHTML = `<div class="web-fallback-notice"><h4>Search failed</h4><p>Unable to retrieve search results. Please try again or enter a direct URL.</p></div>`;
+        return;
+      }
+      const data = await res.json();
+      const results = data.results || [];
+
+      if (results.length === 0) {
+        body.innerHTML = `
+          <div class="web-fallback-notice">
+            <h4>No search results found</h4>
+            <p>Try refining your search terms or entering a direct URL above.</p>
+          </div>
+        `;
+        return;
+      }
+
+      body.innerHTML = `
+        <div class="web-search-results-list">
+          <div style="font-size: 0.85rem; font-weight: 600; color: #4c1d95; margin-bottom: 4px;">
+            Search results for "${escapeHtml(query)}"
+          </div>
+          ${results.map((r, i) => {
+            let resDomain = r.domain;
+            if (!resDomain && r.url) {
+              try { resDomain = new URL(r.url).hostname; } catch (_) { resDomain = 'web'; }
+            }
+            return `
+              <div class="web-search-result-item" data-url="${escapeHtml(r.url)}">
+                <div class="web-search-result-domain">🌐 ${escapeHtml(resDomain || 'web')}</div>
+                <h3 class="web-search-result-title">${escapeHtml(r.title)}</h3>
+                <p class="web-search-result-snippet">${escapeHtml(r.snippet || r.description || '')}</p>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      body.querySelectorAll('.web-search-result-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const url = item.getAttribute('data-url');
+          navigateTo(url);
+        });
+      });
+
+    } catch (err) {
+      if (loading) loading.style.display = 'none';
+      body.innerHTML = `<div class="web-fallback-notice"><h4>Search Error</h4><p>${escapeHtml(err.message || 'Error executing search')}</p></div>`;
+    }
+  }
+
+  async function navigateTo(url, pushHistory = true) {
+    if (!url || !url.trim()) return;
+    const cleanUrl = url.trim();
+    const input = document.getElementById('web-address-input');
+    if (input) input.value = cleanUrl;
+
+    const body = document.getElementById('web-research-body');
+    const loading = document.getElementById('web-research-loading');
+    if (loading) loading.style.display = 'block';
+
+    if (pushHistory) {
+      if (webHistoryIndex < webHistory.length - 1) {
+        webHistory = webHistory.slice(0, webHistoryIndex + 1);
+      }
+      webHistory.push(cleanUrl);
+      webHistoryIndex = webHistory.length - 1;
+      updateNavButtons();
+    }
+
+    try {
+      const res = await fetch('/api/web-resource', {
+        method: 'POST',
+        headers: getCsrfHeader(),
+        body: JSON.stringify({ url: cleanUrl })
+      });
+
+      if (loading) loading.style.display = 'none';
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        renderFallbackView(cleanUrl, errData.error || 'This URL could not be loaded safely.');
+        return;
+      }
+
+      const data = await res.json();
+      const pageResource = data.resource || data;
+      currentPageData = pageResource;
+      updateWebResearchFooter();
+
+      if (!pageResource.canEmbed && !pageResource.content && !pageResource.sanitizedContent) {
+        renderFallbackView(cleanUrl, 'This website restricts embedded reading mode.');
+        return;
+      }
+
+      renderReaderView(pageResource);
+
+    } catch (err) {
+      if (loading) loading.style.display = 'none';
+      renderFallbackView(cleanUrl, err.message || 'Connection error.');
+    }
+  }
+
+  function renderReaderView(data) {
+    const body = document.getElementById('web-research-body');
+    body.innerHTML = `
+      <div class="web-reader-container">
+        <div class="web-reader-header">
+          <div class="web-reader-domain-row">
+            <span class="web-reader-domain-tag">🌐 ${escapeHtml(data.domain || '')}</span>
+            <a href="${escapeHtml(data.url)}" target="_blank" rel="noopener noreferrer" class="web-fallback-open-btn" style="padding: 4px 10px; font-size: 0.74rem;">
+              Open in new tab ↗
+            </a>
+          </div>
+          <h1 class="web-reader-title">${escapeHtml(data.title || 'Untitled Document')}</h1>
+          <div class="web-reader-meta">
+            <span>Verified Source</span>
+            <span>Accessed: ${new Date().toLocaleDateString('en-GB')}</span>
+          </div>
+        </div>
+        <div class="web-reader-content">
+          ${data.content || data.sanitizedContent || `<p>${escapeHtml(data.description || 'No readable text content extracted.')}</p>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderFallbackView(url, reason) {
+    const body = document.getElementById('web-research-body');
+    let dom = '';
+    try { dom = new URL(url).hostname; } catch (_) { dom = url; }
+    currentPageData = {
+      url: url,
+      title: url,
+      domain: dom,
+      description: reason,
+      content: '',
+      origin: 'web'
+    };
+    updateWebResearchFooter();
+
+    body.innerHTML = `
+      <div class="web-fallback-notice">
+        <h4>Embedded Viewing Restricted</h4>
+        <p>${escapeHtml(reason || 'This website does not allow embedded viewing in web research mode.')}</p>
+        <div class="web-fallback-actions">
+          <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="web-fallback-open-btn">
+            Open in new tab ↗
+          </a>
+        </div>
+      </div>
+    `;
+  }
+
+  function updateNavButtons() {
+    const backBtn = document.getElementById('web-nav-back');
+    const fwdBtn = document.getElementById('web-nav-forward');
+    if (backBtn) backBtn.disabled = webHistoryIndex <= 0;
+    if (fwdBtn) fwdBtn.disabled = webHistoryIndex >= webHistory.length - 1;
+  }
+
+  function updateWebResearchFooter() {
+    const urlLabel = document.getElementById('web-current-url');
+    const addBtn = document.getElementById('web-add-resource-btn');
+    if (!urlLabel || !addBtn) return;
+
+    if (!currentPageData || !currentPageData.url) {
+      urlLabel.textContent = 'None selected';
+      addBtn.disabled = true;
+      addBtn.className = 'web-add-resource-btn';
+      addBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>+ Add as Resource</span>
+      `;
+      return;
+    }
+
+    urlLabel.textContent = currentPageData.url;
+    addBtn.disabled = false;
+
+    // Check if URL is already in user resources
+    const isAlreadySaved = userResources.some(r => r.url === currentPageData.url);
+    if (isAlreadySaved) {
+      addBtn.className = 'web-add-resource-btn in-resources-state';
+      addBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>✓ In Resources</span>
+      `;
+    } else {
+      addBtn.className = 'web-add-resource-btn';
+      addBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>+ Add as Resource</span>
+      `;
+    }
+  }
+
+  async function saveCurrentPageAsResource() {
+    if (!currentPageData || !currentPageData.url) return;
+    const addBtn = document.getElementById('web-add-resource-btn');
+    if (addBtn) addBtn.disabled = true;
+
+    try {
+      const resp = await fetch('/api/resources', {
+        method: 'POST',
+        headers: getCsrfHeader(),
+        body: JSON.stringify({
+          title: currentPageData.title || currentPageData.url,
+          url: currentPageData.url,
+          domain: currentPageData.domain,
+          description: currentPageData.description || '',
+          content: currentPageData.content || currentPageData.sanitizedContent || '',
+          type: 'web_page',
+          origin: 'web_search'
+        })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.resource) {
+          if (!userResources.some(r => r.id === data.resource.id)) {
+            userResources.unshift(data.resource);
+          }
+        }
+        showToast('✓ Page added to your resources');
+
+        // State progression: + Add as Resource -> ✓ Added to Resources -> ✓ In Resources
+        if (addBtn) {
+          addBtn.className = 'web-add-resource-btn added-state';
+          addBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>✓ Added to Resources</span>
+          `;
+          setTimeout(() => {
+            addBtn.disabled = false;
+            addBtn.className = 'web-add-resource-btn in-resources-state';
+            addBtn.innerHTML = `
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>✓ In Resources</span>
+            `;
+          }, 2200);
+        }
+      } else {
+        showToast('Failed to save resource');
+        if (addBtn) addBtn.disabled = false;
+      }
+    } catch (err) {
+      console.error('Save resource error:', err);
+      showToast('Error saving resource');
+      if (addBtn) addBtn.disabled = false;
+    }
+  }
+
+  // --- Initialization ---
+  function init() {
+    // 1. Sidebar Accordion
+    const accordionBtn = document.getElementById('resources-accordion-btn');
+    const accordionPanel = document.getElementById('resources-dropdown');
+    if (accordionBtn && accordionPanel) {
+      accordionBtn.addEventListener('click', () => {
+        const isOpen = accordionBtn.getAttribute('aria-expanded') === 'true';
+        accordionBtn.setAttribute('aria-expanded', String(!isOpen));
+        accordionPanel.classList.toggle('open', !isOpen);
+      });
+    }
+
+    // 2. Submenu button clicks
+    const myResBtn = document.getElementById('my-resources-btn');
+    if (myResBtn) myResBtn.addEventListener('click', openMyResourcesModal);
+
+    const webResBtn = document.getElementById('web-research-btn');
+    if (webResBtn) webResBtn.addEventListener('click', () => openWebResearchModal());
+
+    // 3. Modal close buttons & backdrop clicks
+    const myResClose = document.getElementById('my-resources-close');
+    if (myResClose) myResClose.addEventListener('click', closeMyResourcesModal);
+
+    const myResModal = document.getElementById('my-resources-modal');
+    if (myResModal) {
+      myResModal.addEventListener('click', (e) => {
+        if (e.target === myResModal) closeMyResourcesModal();
+      });
+    }
+
+    const webResClose = document.getElementById('web-research-close');
+    if (webResClose) webResClose.addEventListener('click', closeWebResearchModal);
+
+    const webResModal = document.getElementById('web-research-modal');
+    if (webResModal) {
+      webResModal.addEventListener('click', (e) => {
+        if (e.target === webResModal) closeWebResearchModal();
+      });
+    }
+
+    // 4. Search & Filter in My Resources
+    const searchInput = document.getElementById('resources-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        renderResourceCards();
+      });
+    }
+
+    document.querySelectorAll('.resource-filter-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.resource-filter-tab').forEach(t => {
+          t.classList.remove('active');
+          t.setAttribute('aria-selected', 'false');
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        currentFilter = tab.getAttribute('data-type') || 'all';
+        loadUserResources();
+      });
+    });
+
+    // 5. Quick Add modal in My Resources
+    const quickAddBtn = document.getElementById('resources-add-quick-btn');
+    const quickAddModal = document.getElementById('quick-add-modal');
+    const quickAddClose = document.getElementById('quick-add-close');
+    const quickAddCancel = document.getElementById('quick-add-cancel');
+    const quickAddForm = document.getElementById('quick-add-form');
+
+    if (quickAddBtn && quickAddModal) {
+      quickAddBtn.addEventListener('click', () => {
+        quickAddModal.style.display = 'flex';
+      });
+    }
+    if (quickAddClose && quickAddModal) {
+      quickAddClose.addEventListener('click', () => {
+        quickAddModal.style.display = 'none';
+      });
+    }
+    if (quickAddCancel && quickAddModal) {
+      quickAddCancel.addEventListener('click', () => {
+        quickAddModal.style.display = 'none';
+      });
+    }
+    if (quickAddForm) {
+      quickAddForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const url = document.getElementById('quick-add-url').value.trim();
+        const title = document.getElementById('quick-add-title-input').value.trim();
+        const description = document.getElementById('quick-add-desc').value.trim();
+        if (!url) return;
+
+        try {
+          const resp = await fetch('/api/resources', {
+            method: 'POST',
+            headers: getCsrfHeader(),
+            body: JSON.stringify({ url, title: title || url, description, type: 'web_page' })
+          });
+          if (resp.ok) {
+            quickAddModal.style.display = 'none';
+            quickAddForm.reset();
+            showToast('Resource added successfully');
+            loadUserResources();
+          }
+        } catch (err) {
+          console.error('Quick add error:', err);
+        }
+      });
+    }
+
+    // 6. Web Research Navigation & Address Bar
+    const addressInput = document.getElementById('web-address-input');
+    const addressSubmit = document.getElementById('web-address-submit');
+
+    const handleAddressSubmit = () => {
+      if (!addressInput) return;
+      const val = addressInput.value.trim();
+      if (!val) return;
+      if (/^https?:\/\//i.test(val) || /^[\w-]+\.[\w.-]+(\/.*)?$/i.test(val)) {
+        const targetUrl = /^https?:\/\//i.test(val) ? val : `https://${val}`;
+        navigateTo(targetUrl);
+      } else {
+        performSearch(val);
+      }
+    };
+
+    if (addressSubmit) addressSubmit.addEventListener('click', handleAddressSubmit);
+    if (addressInput) {
+      addressInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAddressSubmit();
+        }
+      });
+    }
+
+    const backBtn = document.getElementById('web-nav-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        if (webHistoryIndex > 0) {
+          webHistoryIndex--;
+          updateNavButtons();
+          navigateTo(webHistory[webHistoryIndex], false);
+        }
+      });
+    }
+
+    const fwdBtn = document.getElementById('web-nav-forward');
+    if (fwdBtn) {
+      fwdBtn.addEventListener('click', () => {
+        if (webHistoryIndex < webHistory.length - 1) {
+          webHistoryIndex++;
+          updateNavButtons();
+          navigateTo(webHistory[webHistoryIndex], false);
+        }
+      });
+    }
+
+    const refreshBtn = document.getElementById('web-nav-refresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        if (currentPageData && currentPageData.url) {
+          navigateTo(currentPageData.url, false);
+        } else {
+          renderDiscoveryHome();
+        }
+      });
+    }
+
+    const addResourceBtn = document.getElementById('web-add-resource-btn');
+    if (addResourceBtn) {
+      addResourceBtn.addEventListener('click', saveCurrentPageAsResource);
+    }
+
+    // 7. Global Keyboard accessibility (ESC to close active modals)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (quickAddModal && quickAddModal.style.display !== 'none') {
+          quickAddModal.style.display = 'none';
+        } else if (webResModal && webResModal.style.display !== 'none') {
+          closeWebResearchModal();
+        } else if (myResModal && myResModal.style.display !== 'none') {
+          closeMyResourcesModal();
+        }
+      }
+    });
+
+    // Preload user resources
+    loadUserResources();
+  }
+
+  return {
+    init,
+    attachResource,
+    detachResource,
+    getAttachedResourceIds,
+    getAttachedResources,
+    clearAttachedResources,
+    openMyResourcesModal,
+    openWebResearchModal,
+    showToast
+  };
+})();
+
+// Initialize ResourcesApp on DOM readiness
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => ResourcesApp.init());
+} else {
+  setTimeout(() => ResourcesApp.init(), 50);
+}
+// ══ End Resources & Web Research System ═══════════════════════════════════════
