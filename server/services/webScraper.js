@@ -239,7 +239,7 @@ export async function fetchWebResource(targetUrl) {
 
   // Extract metadata and sanitized content
   const domain = new URL(currentUrl).hostname.replace(/^www\./, '');
-  const title = extractTitle(rawBody, domain);
+  const title = extractTitle(rawBody, domain, currentUrl);
   const description = extractDescription(rawBody);
   const favicon = extractFavicon(rawBody, currentUrl);
   const sanitizedReaderHtml = extractSanitizedArticle(rawBody, currentUrl);
@@ -260,9 +260,23 @@ export async function fetchWebResource(targetUrl) {
 }
 
 /**
- * Extracts page title from HTML.
+ * Extracts page title from HTML, with special handling for research engines.
  */
-function extractTitle(html, fallbackDomain) {
+function extractTitle(html, fallbackDomain, currentUrl = '') {
+  if (currentUrl) {
+    try {
+      const u = new URL(currentUrl);
+      if (u.hostname.includes('scholar.google')) {
+        const q = u.searchParams.get('q');
+        if (q) return `Google Scholar: "${decodeURIComponent(q)}"`;
+      }
+      if (u.hostname.includes('pubmed.ncbi.nlm.nih.gov')) {
+        const term = u.searchParams.get('term') || u.searchParams.get('q');
+        if (term) return `PubMed: "${decodeURIComponent(term)}"`;
+      }
+    } catch (_) {}
+  }
+
   const ogMatch = html.match(/<meta\s+[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
                   html.match(/<meta\s+[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
   if (ogMatch && ogMatch[1].trim()) return decodeHtmlEntities(ogMatch[1].trim());
@@ -315,10 +329,254 @@ function extractFavicon(html, baseUrl) {
 }
 
 /**
+ * Dedicated parser for Google Scholar research result pages.
+ */
+function parseScholarResults(html, scholarUrl) {
+  let queryTerm = '';
+  try {
+    const u = new URL(scholarUrl);
+    queryTerm = decodeURIComponent(u.searchParams.get('q') || '');
+  } catch (_) {}
+
+  const resultCards = [];
+  const cardRegex = /<div\b[^>]*class=["'][^"']*\bgs_r\b[^"']*["'][\s\S]*?(?=<div\b[^>]*class=["'][^"']*\bgs_r\b[^"']*["']|<div\b[^>]*id=["']gs_res_ccl_bot["']|$)/gi;
+  
+  let match;
+  while ((match = cardRegex.exec(html)) !== null) {
+    const cardHtml = match[0];
+
+    const titleMatch = cardHtml.match(/<h3\b[^>]*class=["'][^"']*\bgs_rt\b[^"']*["'][^>]*>([\s\S]*?)<\/h3>/i);
+    if (!titleMatch) continue;
+
+    let rawTitle = titleMatch[1];
+    const hrefMatch = rawTitle.match(/href=["']([^"']+)["']/i);
+    let paperUrl = hrefMatch ? hrefMatch[1] : '';
+    if (paperUrl.startsWith('/')) {
+      paperUrl = 'https://scholar.google.com' + paperUrl;
+    }
+
+    let cleanTitle = rawTitle.replace(/<span\b[^>]*class=["'][^"']*gs_ct[12]["'][^>]*>[\s\S]*?<\/span>/gi, '')
+                             .replace(/<(?!\/?(b|strong|em)\b)[^>]+>/gi, ' ');
+    cleanTitle = decodeHtmlEntities(cleanTitle).replace(/\s+/g, ' ').trim();
+
+    const authorMatch = cardHtml.match(/<div\b[^>]*class=["'][^"']*\bgs_a\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    let authorText = authorMatch ? decodeHtmlEntities(authorMatch[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim() : '';
+
+    const snippetMatch = cardHtml.match(/<div\b[^>]*class=["'][^"']*\bgs_rs\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    let snippetText = snippetMatch ? decodeHtmlEntities(snippetMatch[1].replace(/<(?!\/?(b|strong|em)\b)[^>]+>/gi, ' ')).replace(/\s+/g, ' ').trim() : '';
+
+    const pdfMatch = cardHtml.match(/<div\b[^>]*class=["'][^"']*\bgs_or_ggsm\b[^"']*["'][^>]*>[\s\S]*?<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    let pdfUrl = pdfMatch ? pdfMatch[1] : '';
+    let pdfLabel = pdfMatch ? decodeHtmlEntities(pdfMatch[2].replace(/<[^>]+>/g, '')).trim() : '';
+
+    const citedMatch = cardHtml.match(/<a\b[^>]*href=["'][^"']*cites=[^"']*["'][^>]*>([\s\S]*?)<\/a>/i);
+    let citedText = citedMatch ? decodeHtmlEntities(citedMatch[1].replace(/<[^>]+>/g, '')).trim() : '';
+
+    if (cleanTitle && cleanTitle.length > 3) {
+      resultCards.push({
+        title: cleanTitle,
+        url: paperUrl || scholarUrl,
+        authorText,
+        snippetText,
+        pdfUrl,
+        pdfLabel,
+        citedText
+      });
+    }
+  }
+
+  if (resultCards.length === 0) return null;
+
+  const headerHtml = `
+    <div class="scholar-header-banner">
+      <div class="scholar-header-tag">Google Scholar Research Index</div>
+      <div class="scholar-header-query">Showing peer-reviewed academic papers for: <em>"${escapeHtmlAttr(queryTerm || 'Search Query')}"</em></div>
+    </div>
+  `;
+
+  const itemsHtml = resultCards.map((card) => {
+    let domainStr = '';
+    try {
+      if (card.url && card.url.startsWith('http')) {
+        domainStr = new URL(card.url).hostname.replace(/^www\./, '');
+      }
+    } catch (_) {}
+
+    return `
+      <div class="scholar-paper-card">
+        <div class="scholar-card-top">
+          <span class="scholar-source-badge">
+            📄 Academic Paper ${domainStr ? `· ${escapeHtmlAttr(domainStr)}` : ''}
+          </span>
+          ${card.citedText ? `<span class="scholar-cited-badge">⭐ ${escapeHtmlAttr(card.citedText)}</span>` : ''}
+        </div>
+
+        <h3 class="scholar-card-title">
+          <a href="${escapeHtmlAttr(card.url)}" target="_blank" rel="noopener noreferrer">
+            ${card.title}
+          </a>
+        </h3>
+
+        ${card.authorText ? `<div class="scholar-card-authors">${escapeHtmlAttr(card.authorText)}</div>` : ''}
+
+        ${card.snippetText ? `<p class="scholar-card-snippet">${card.snippetText}</p>` : ''}
+
+        <div class="scholar-card-actions">
+          ${card.url && card.url !== scholarUrl ? `
+            <a href="${escapeHtmlAttr(card.url)}" target="_blank" rel="noopener noreferrer" class="scholar-btn-primary">
+              Read Full Paper ↗
+            </a>
+          ` : ''}
+          ${card.pdfUrl ? `
+            <a href="${escapeHtmlAttr(card.pdfUrl)}" target="_blank" rel="noopener noreferrer" class="scholar-btn-pdf">
+              📥 ${escapeHtmlAttr(card.pdfLabel || 'Download PDF')}
+            </a>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return headerHtml + itemsHtml;
+}
+
+/**
+ * Dedicated parser for PubMed clinical and biomedical search result pages.
+ */
+function parsePubMedResults(html, pubmedUrl) {
+  let queryTerm = '';
+  try {
+    const u = new URL(pubmedUrl);
+    queryTerm = decodeURIComponent(u.searchParams.get('term') || u.searchParams.get('q') || '');
+  } catch (_) {}
+
+  const resultCards = [];
+  const cardRegex = /<div\b[^>]*class=["'][^"']*\bdocsum-wrap\b[^"']*["'][\s\S]*?(?=<div\b[^>]*class=["'][^"']*\bdocsum-wrap\b[^"']*["']|<div\b[^>]*class=["'][^"']*\bpagination-bar\b[^"']*["']|$)/gi;
+
+  let match;
+  while ((match = cardRegex.exec(html)) !== null) {
+    const cardHtml = match[0];
+
+    const titleMatch = cardHtml.match(/<a\b[^>]*class=["'][^"']*\bdocsum-title\b[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    if (!titleMatch) continue;
+
+    let rawHref = titleMatch[1];
+    let paperUrl = rawHref;
+    if (paperUrl.startsWith('/')) {
+      paperUrl = 'https://pubmed.ncbi.nlm.nih.gov' + paperUrl;
+    }
+
+    let rawTitle = titleMatch[2];
+    let cleanTitle = rawTitle.replace(/<(?!\/?(b|strong|em)\b)[^>]+>/gi, ' ');
+    cleanTitle = decodeHtmlEntities(cleanTitle).replace(/\s+/g, ' ').trim();
+
+    const authorMatch = cardHtml.match(/<span\b[^>]*class=["'][^"']*\bfull-authors\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) ||
+                        cardHtml.match(/<span\b[^>]*class=["'][^"']*\bdocsum-authors\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
+    let authorText = authorMatch ? decodeHtmlEntities(authorMatch[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim() : '';
+
+    const journalMatch = cardHtml.match(/<span\b[^>]*class=["'][^"']*\bfull-journal-citation\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) ||
+                         cardHtml.match(/<span\b[^>]*class=["'][^"']*\bdocsum-journal-citation\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
+    let journalText = journalMatch ? decodeHtmlEntities(journalMatch[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim() : '';
+
+    const pmidMatch = cardHtml.match(/<span\b[^>]*class=["'][^"']*\bdocsum-pmid\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) ||
+                      cardHtml.match(/PMID:\s*<span[^>]*>(\d+)<\/span>/i) ||
+                      paperUrl.match(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/i);
+    let pmid = pmidMatch ? pmidMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+
+    const freeMatch = cardHtml.match(/<span\b[^>]*class=["'][^"']*\bfree-resources\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
+    let freeBadge = freeMatch ? decodeHtmlEntities(freeMatch[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim() : '';
+
+    const snippetMatch = cardHtml.match(/<div\b[^>]*class=["'][^"']*(?:full-view-snippet|docsum-snippet|short-view-snippet)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    let snippetText = snippetMatch ? decodeHtmlEntities(snippetMatch[1].replace(/<(?!\/?(b|strong|em)\b)[^>]+>/gi, ' ')).replace(/\s+/g, ' ').trim() : '';
+
+    if (cleanTitle && cleanTitle.length > 3) {
+      resultCards.push({
+        title: cleanTitle,
+        url: paperUrl,
+        authorText,
+        journalText,
+        pmid,
+        freeBadge,
+        snippetText
+      });
+    }
+  }
+
+  if (resultCards.length === 0) return null;
+
+  const headerHtml = `
+    <div class="pubmed-header-banner">
+      <div class="pubmed-header-tag">PubMed Biomedical & Clinical Index</div>
+      <div class="pubmed-header-query">Showing peer-reviewed clinical & life sciences literature for: <em>"${escapeHtmlAttr(queryTerm || 'Search Query')}"</em></div>
+    </div>
+  `;
+
+  const itemsHtml = resultCards.map((card) => {
+    return `
+      <div class="pubmed-paper-card">
+        <div class="pubmed-card-top">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="pubmed-source-badge">
+              🏥 PubMed · NIH / NLM
+            </span>
+            ${card.pmid ? `<span class="pubmed-pmid-badge">PMID: ${escapeHtmlAttr(card.pmid)}</span>` : ''}
+          </div>
+          ${card.freeBadge ? `<span class="pubmed-free-badge">✓ ${escapeHtmlAttr(card.freeBadge)}</span>` : ''}
+        </div>
+
+        <h3 class="pubmed-card-title">
+          <a href="${escapeHtmlAttr(card.url)}" target="_blank" rel="noopener noreferrer">
+            ${card.title}
+          </a>
+        </h3>
+
+        ${card.authorText ? `<div class="pubmed-card-authors">${escapeHtmlAttr(card.authorText)}</div>` : ''}
+        ${card.journalText ? `<div class="pubmed-card-journal">${escapeHtmlAttr(card.journalText)}</div>` : ''}
+
+        ${card.snippetText ? `<p class="pubmed-card-snippet">${card.snippetText}</p>` : ''}
+
+        <div class="pubmed-card-actions">
+          <a href="${escapeHtmlAttr(card.url)}" target="_blank" rel="noopener noreferrer" class="pubmed-btn-primary">
+            View on PubMed ↗
+          </a>
+          <a href="https://scholar.google.com/scholar?q=${encodeURIComponent(card.title.replace(/<[^>]+>/g, ''))}" target="_blank" rel="noopener noreferrer" class="pubmed-btn-secondary">
+            Search on Google Scholar ↗
+          </a>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return headerHtml + itemsHtml;
+}
+
+function escapeHtmlAttr(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
  * Extracts and sanitizes article / document content into a clean, distraction-free reader representation.
  */
 function extractSanitizedArticle(html, baseUrl = '') {
   if (!html) return '';
+
+  // 0. Check for specialized scholarly/biomedical search indexes
+  if (baseUrl) {
+    if (/scholar\.google\./i.test(baseUrl)) {
+      const scholarParsed = parseScholarResults(html, baseUrl);
+      if (scholarParsed) return scholarParsed;
+    }
+    if (/pubmed\.ncbi\.nlm\.nih\.gov/i.test(baseUrl) && (baseUrl.includes('term=') || baseUrl.includes('?q='))) {
+      const pubmedParsed = parsePubMedResults(html, baseUrl);
+      if (pubmedParsed) return pubmedParsed;
+    }
+  }
 
   let s = html;
 
@@ -446,11 +704,26 @@ function extractSanitizedArticle(html, baseUrl = '') {
 function decodeHtmlEntities(str) {
   if (!str) return '';
   return str
+    .replace(/&#(\d+);/g, (match, dec) => {
+      try { return String.fromCharCode(parseInt(dec, 10)); } catch (_) { return ''; }
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+      try { return String.fromCharCode(parseInt(hex, 16)); } catch (_) { return ''; }
+    })
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
     .replace(/&#x27;/g, "'")
-    .replace(/&nbsp;/g, ' ');
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&hellip;/g, '…')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&lsquo;/g, "'")
+    .replace(/&rsquo;/g, "'")
+    .replace(/&ldquo;/g, '"')
+    .replace(/&rdquo;/g, '"')
+    .replace(/[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 }

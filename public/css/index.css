@@ -3912,6 +3912,344 @@ body>.container {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+/* ── Google Scholar Specialized Academic Cards ────────────────────────────── */
+.scholar-header-banner {
+    margin-bottom: 22px;
+    padding: 14px 20px;
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    border-radius: 14px;
+}
+
+.scholar-header-tag {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--sdc-purple, #582c83);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.scholar-header-query {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1e1b4b;
+}
+
+.scholar-header-query em {
+    color: #6b21a8;
+    font-style: normal;
+}
+
+.scholar-paper-card {
+    background: #ffffff;
+    border: 1px solid #e9d5ff;
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 4px rgba(88, 44, 131, 0.04);
+    transition: all 160ms ease;
+}
+
+.scholar-paper-card:hover {
+    border-color: #c084fc;
+    box-shadow: 0 8px 20px -4px rgba(88, 44, 131, 0.12);
+    transform: translateY(-1px);
+}
+
+.scholar-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.scholar-source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #581c87;
+    background: #f3e8ff;
+    border: 1px solid #e9d5ff;
+    padding: 3px 10px;
+    border-radius: 9999px;
+}
+
+.scholar-cited-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #047857;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+.scholar-card-title {
+    margin: 0 0 8px 0;
+    font-size: 1.12rem;
+    font-weight: 600;
+    line-height: 1.38;
+}
+
+.scholar-card-title a {
+    color: #1e1b4b;
+    text-decoration: none;
+    transition: color 140ms ease;
+}
+
+.scholar-card-title a:hover {
+    color: var(--sdc-purple, #582c83);
+    text-decoration: underline;
+}
+
+.scholar-card-authors {
+    font-size: 0.82rem;
+    color: #6b21a8;
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+.scholar-card-snippet {
+    margin: 0 0 14px 0;
+    font-size: 0.88rem;
+    color: #475569;
+    line-height: 1.6;
+}
+
+.scholar-card-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-top: 4px;
+}
+
+.scholar-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ffffff !important;
+    background: var(--sdc-purple, #582c83);
+    padding: 6px 14px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    transition: background 140ms ease, transform 140ms ease;
+}
+
+.scholar-btn-primary:hover {
+    background: #4a2270;
+    transform: translateY(-1px);
+}
+
+.scholar-btn-pdf {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #0369a1 !important;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    padding: 6px 12px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    transition: background 140ms ease, transform 140ms ease;
+}
+
+.scholar-btn-pdf:hover {
+    background: #e0f2fe;
+    transform: translateY(-1px);
+}
+
+/* ── PubMed Specialized Clinical & Biomedical Cards ──────────────────────── */
+.pubmed-header-banner {
+    margin-bottom: 22px;
+    padding: 14px 20px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 14px;
+}
+
+.pubmed-header-tag {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #15803d;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.pubmed-header-query {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1e1b4b;
+}
+
+.pubmed-header-query em {
+    color: #15803d;
+    font-style: normal;
+}
+
+.pubmed-paper-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
+    transition: all 160ms ease;
+}
+
+.pubmed-paper-card:hover {
+    border-color: #86efac;
+    box-shadow: 0 8px 20px -4px rgba(21, 128, 61, 0.12);
+    transform: translateY(-1px);
+}
+
+.pubmed-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.pubmed-source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+    padding: 3px 10px;
+    border-radius: 9999px;
+}
+
+.pubmed-pmid-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+.pubmed-free-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #047857;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+.pubmed-card-title {
+    margin: 0 0 8px 0;
+    font-size: 1.12rem;
+    font-weight: 600;
+    line-height: 1.38;
+}
+
+.pubmed-card-title a {
+    color: #1e1b4b;
+    text-decoration: none;
+    transition: color 140ms ease;
+}
+
+.pubmed-card-title a:hover {
+    color: #15803d;
+    text-decoration: underline;
+}
+
+.pubmed-card-authors {
+    font-size: 0.82rem;
+    color: #475569;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.pubmed-card-journal {
+    font-size: 0.78rem;
+    color: #15803d;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.pubmed-card-snippet {
+    margin: 0 0 14px 0;
+    font-size: 0.88rem;
+    color: #334155;
+    line-height: 1.6;
+}
+
+.pubmed-card-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-top: 4px;
+}
+
+.pubmed-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ffffff !important;
+    background: #15803d;
+    padding: 6px 14px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    transition: background 140ms ease, transform 140ms ease;
+}
+
+.pubmed-btn-primary:hover {
+    background: #166534;
+    transform: translateY(-1px);
+}
+
+.pubmed-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--sdc-purple, #582c83) !important;
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    transition: background 140ms ease, transform 140ms ease;
+}
+
+.pubmed-btn-secondary:hover {
+    background: #f3e8ff;
+    border-color: #c084fc;
+    transform: translateY(-1px);
+}
+
 /* Fallback Notice */
 .web-fallback-notice {
     text-align: center;
