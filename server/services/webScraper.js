@@ -242,7 +242,7 @@ export async function fetchWebResource(targetUrl) {
   const title = extractTitle(rawBody, domain);
   const description = extractDescription(rawBody);
   const favicon = extractFavicon(rawBody, currentUrl);
-  const sanitizedReaderHtml = extractSanitizedArticle(rawBody);
+  const sanitizedReaderHtml = extractSanitizedArticle(rawBody, currentUrl);
 
   return {
     success: true,
@@ -315,80 +315,132 @@ function extractFavicon(html, baseUrl) {
 }
 
 /**
- * Extracts and sanitizes article / document content into a safe reader representation.
+ * Extracts and sanitizes article / document content into a clean, distraction-free reader representation.
  */
-function extractSanitizedArticle(html) {
+function extractSanitizedArticle(html, baseUrl = '') {
   if (!html) return '';
 
   let s = html;
 
-  // Strip entire tags including content: script, style, noscript, iframe, object, embed, svg, canvas, audio, video, form, header, footer, nav
-  s = s.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ');
-  s = s.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ');
-  s = s.replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, ' ');
-  s = s.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, ' ');
-  s = s.replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, ' ');
-  s = s.replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, ' ');
-  s = s.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, ' ');
-  s = s.replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, ' ');
-  s = s.replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, ' ');
-  s = s.replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, ' ');
-  s = s.replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, ' ');
+  // 1. Remove all HTML comments first (prevents premature tag matching or broken regex on comment arrows)
+  s = s.replace(/<!--[\s\S]*?-->/g, ' ');
 
-  // Focus on <article> or <main> if available
-  const articleMatch = s.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i) ||
-                       s.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i) ||
-                       s.match(/<div\b[^>]*class=["'][^"']*(?:article|content|body|post)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+  // 2. Strip non-content structural elements completely
+  const tagsToRemove = [
+    'script', 'style', 'noscript', 'iframe', 'object', 'embed', 'svg', 'canvas',
+    'audio', 'video', 'form', 'header', 'footer', 'nav', 'template', 'aside'
+  ];
+  for (const tag of tagsToRemove) {
+    const reg = new RegExp(`<${tag}\\b[\\s\\S]*?<\\/${tag}>`, 'gi');
+    s = s.replace(reg, ' ');
+  }
 
-  let targetContent = articleMatch ? articleMatch[1] : s;
+  // 3. Remove Wikipedia & CMS junk blocks (infoboxes, navboxes, sidebars, TOC, edit links, references)
+  s = s.replace(/<table\b[^>]*class=["'][^"']*(?:infobox|navbox|sidebar|vertical-navbox|metadata|vcard|nowraplinks)[^"']*["'][\s\S]*?<\/table>/gi, ' ');
+  s = s.replace(/<div\b[^>]*class=["'][^"']*(?:infobox|navbox|sidebar|shortdescription|mw-editsection|toc|catlinks|thumb|tright|tleft|noprint|searchaux|hatnote|dablink|reference-list|reflist|cookie-banner|ad-|banner)[^"']*["'][\s\S]*?<\/div>/gi, ' ');
+  s = s.replace(/<div\b[^>]*id=["'](?:toc|mw-navigation|siteSub|contentSub|jump-to-nav|cookie-banner)[^"']*["'][\s\S]*?<\/div>/gi, ' ');
+  s = s.replace(/<sup\b[^>]*class=["'](?:reference|noprint)[^"']*["'][\s\S]*?<\/sup>/gi, ' ');
+  s = s.replace(/<span\b[^>]*class=["']mw-editsection["'][\s\S]*?<\/span>/gi, ' ');
 
-  // Remove dangerous attributes (on*, style, data-, etc.)
-  targetContent = targetContent.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  targetContent = targetContent.replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  targetContent = targetContent.replace(/\s+(href|src)\s*=\s*(?:"|')?\s*(?:javascript:|data:|vbscript:)[^"'\s>]*(?:"|')?/gi, '');
-
-  // Keep only safe semantic tags: p, h1, h2, h3, h4, ul, ol, li, blockquote, strong, em, b, i, a, br, table, thead, tbody, tr, th, td
-  const allowedTags = /<\/?(p|h1|h2|h3|h4|ul|ol|li|blockquote|strong|em|b|i|a|br|table|thead|tbody|tr|th|td)(\s+[^>]*)?>/gi;
-  const tokens = [];
-  let lastIdx = 0;
-  let match;
-
-  while ((match = allowedTags.exec(targetContent)) !== null) {
-    // text before tag
-    const plainText = targetContent.substring(lastIdx, match.index);
-    if (plainText) {
-      tokens.push(plainText.replace(/<[^>]+>/g, ' '));
+  // 4. Extract main content container if available
+  let mainContent = s;
+  const mainContainers = [
+    /<article\b[\s\S]*?<\/article>/i,
+    /<div\b[^>]*id=["']mw-content-text["'][\s\S]*?<\/div>\s*<\/div>/i,
+    /<div\b[^>]*class=["'][^"']*(?:mw-parser-output|entry-content|post-content|article-content|article-body|story-body|prose|nhsuk-u-reading-width)[^"']*["'][\s\S]*?<\/div>/i,
+    /<main\b[\s\S]*?<\/main>/i
+  ];
+  for (const pattern of mainContainers) {
+    const m = s.match(pattern);
+    if (m && m[0].length > 300) {
+      mainContent = m[0];
+      break;
     }
-    // clean attributes of allowed tag
-    const tag = match[1].toLowerCase();
-    const isClosing = match[0].startsWith('</');
-    if (isClosing) {
-      tokens.push(`</${tag}>`);
-    } else if (tag === 'a') {
-      const hrefMatch = match[0].match(/href=["']([^"']+)["']/i);
-      const safeHref = (hrefMatch && !/^(?:javascript|data):/i.test(hrefMatch[1])) ? hrefMatch[1] : '#';
-      tokens.push(`<a href="${safeHref}" target="_blank" rel="noopener noreferrer">`);
-    } else if (tag === 'br') {
-      tokens.push('<br/>');
-    } else {
-      tokens.push(`<${tag}>`);
+  }
+
+  // 5. Clean out all complex attributes and data-* JSON attributes from tags, keeping safe clean hrefs
+  mainContent = mainContent.replace(/<([a-z1-6]+)\b([^>]*)>/gi, (match, tag, attrs) => {
+    tag = tag.toLowerCase();
+    if (tag === 'a') {
+      const hrefMatch = attrs.match(/href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      let rawHref = hrefMatch ? (hrefMatch[1] || hrefMatch[2] || hrefMatch[3]) : '';
+      if (rawHref && !/^(?:javascript|data):/i.test(rawHref)) {
+        if (baseUrl && !/^https?:\/\//i.test(rawHref) && !rawHref.startsWith('#')) {
+          try { rawHref = new URL(rawHref, baseUrl).toString(); } catch (_) {}
+        }
+        return `<a href="${rawHref}" target="_blank" rel="noopener noreferrer">`;
+      }
+      return '<a>';
     }
-    lastIdx = allowedTags.lastIndex;
-  }
-  const remaining = targetContent.substring(lastIdx);
-  if (remaining) {
-    tokens.push(remaining.replace(/<[^>]+>/g, ' '));
+    return `<${tag}>`;
+  });
+
+  // 6. Extract semantic blocks (headings, paragraphs, lists, quotes)
+  const blockRegex = /<(h[1-4]|p|ul|ol|blockquote)>([\s\S]*?)<\/\1>/gi;
+  const blocks = [];
+  let blockMatch;
+
+  while ((blockMatch = blockRegex.exec(mainContent)) !== null) {
+    const tag = blockMatch[1].toLowerCase();
+    let inner = blockMatch[2];
+
+    // Remove footnote/cite link elements
+    inner = inner.replace(/<a\b[^>]*href=["']#(?:cite_note|cite_ref|CITEREF)[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, '');
+    // Remove internal tags except inline formatting (a, strong, em, b, i, code)
+    inner = inner.replace(/<(?!\/?(a|strong|em|b|i|code)\b)[^>]+>/gi, ' ');
+    // Clean citation markers like [1], [2], [edit], [citation needed]
+    inner = inner.replace(/\[\s*\d+\s*\]/g, '');
+    inner = inner.replace(/\[\s*(?:edit|citation needed)\s*\]/gi, '');
+    // Clean remaining JSON / wikitext residue
+    inner = inner.replace(/\{\{[^}]*\}\}/g, '');
+    inner = inner.replace(/\{"[^}]*"\}/g, '');
+    inner = inner.replace(/&quot;\w+&quot;:\s*\{[^}]*\}/g, '');
+    // Normalize whitespace
+    inner = inner.replace(/\s+/g, ' ').trim();
+
+    if (!inner) continue;
+
+    if (tag.startsWith('h')) {
+      // Heading
+      if (inner.length > 2 && inner.length < 150 && !/^(References|See also|External links|Notes|Bibliography|Further reading|Navigation menu)$/i.test(inner)) {
+        blocks.push(`<${tag}>${inner}</${tag}>`);
+      }
+    } else if (tag === 'p') {
+      // Paragraph: ignore noise lines
+      if (inner.length >= 20 && !inner.startsWith('Coordinates:')) {
+        blocks.push(`<p>${inner}</p>`);
+      }
+    } else if (tag === 'blockquote') {
+      blocks.push(`<blockquote><p>${inner}</p></blockquote>`);
+    } else if (tag === 'ul' || tag === 'ol') {
+      // Extract list items
+      const items = [];
+      const liRegex = /<li>([\s\S]*?)<\/li>/gi;
+      let liMatch;
+      while ((liMatch = liRegex.exec(blockMatch[2])) !== null) {
+        let liText = liMatch[1].replace(/<(?!\/?(a|strong|em|b|i)\b)[^>]+>/gi, ' ').replace(/\s+/g, ' ').trim();
+        if (liText.length > 3 && liText.length < 300) items.push(`<li>${liText}</li>`);
+      }
+      if (items.length > 0 && items.length < 20) {
+        blocks.push(`<${tag}>${items.join('')}</${tag}>`);
+      }
+    }
   }
 
-  let cleaned = tokens.join('');
-  // Collapse excessive empty tags
-  cleaned = cleaned.replace(/<(p|h[1-4]|li)>\s*<\/\1>/gi, '');
-  // Limit length to ~12000 chars
-  if (cleaned.length > 12000) {
-    cleaned = cleaned.slice(0, 12000) + '... <p><em>[Content excerpt truncated for reader view]</em></p>';
+  let result = blocks.join('\n\n');
+
+  // Fallback if no structured blocks matched
+  if (!result || result.length < 100) {
+    let plain = mainContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    result = `<p>${plain.slice(0, 3000)}</p>`;
   }
 
-  return cleaned.trim();
+  // Length cap for reader mode (~12,000 chars)
+  if (result.length > 12000) {
+    result = result.slice(0, 12000) + '... <p><em>[Content excerpt truncated for reader view]</em></p>';
+  }
+
+  return result.trim();
 }
 
 function decodeHtmlEntities(str) {

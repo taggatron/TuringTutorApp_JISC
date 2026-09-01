@@ -169,24 +169,32 @@ async function saveMessageWithScaleLevel(session_id, username, role, content, co
 }
 
 async function getMessages(session_id) {
+  const numId = parseInt(session_id, 10);
+  if (isNaN(numId) || numId > 2147483647 || numId < 1) return [];
   // Explicitly select common columns including metadata jsonb columns if present.
   // Some deployments may not have the `footer_removed` column (older schema),
   // so fall back to a query that omits it when Postgres reports unknown column.
   let res;
   try {
-    res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts, footer_removed FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+    res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts, footer_removed FROM message WHERE session_id = $1 ORDER BY id ASC', [numId]);
   } catch (e) {
     if (e && e.code === '42703') {
       // Column does not exist: retry without footer_removed
-      res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [session_id]);
+      res = await query('SELECT id, session_id, username, role, content, collapsed, scale_level, references_json AS references, prompts_json AS prompts FROM message WHERE session_id = $1 ORDER BY id ASC', [numId]);
     } else throw e;
   }
   // Ensure references/prompts are parsed to native JS objects if stored as strings
-  return res.rows.map(r => ({
-    ...r,
-    references: r.references === null || r.references === undefined ? [] : (typeof r.references === 'string' ? JSON.parse(r.references) : r.references),
-    prompts: r.prompts === null || r.prompts === undefined ? [] : (typeof r.prompts === 'string' ? JSON.parse(r.prompts) : r.prompts)
-  }));
+  return (res.rows || []).map(r => {
+    let refs = r.references;
+    if (typeof refs === 'string') {
+      try { refs = JSON.parse(refs); } catch (_) { refs = null; }
+    }
+    let pms = r.prompts;
+    if (typeof pms === 'string') {
+      try { pms = JSON.parse(pms); } catch (_) { pms = null; }
+    }
+    return { ...r, references: refs, prompts: pms };
+  });
 }
 
 // Feedback
@@ -231,7 +239,9 @@ async function getSessions(user_id) {
 }
 
 async function getSessionById(session_id) {
-  const res = await query('SELECT * FROM session WHERE id = $1', [session_id]);
+  const numId = parseInt(session_id, 10);
+  if (isNaN(numId) || numId > 2147483647 || numId < 1) return null;
+  const res = await query('SELECT * FROM session WHERE id = $1', [numId]);
   return res.rows[0] || null;
 }
 
